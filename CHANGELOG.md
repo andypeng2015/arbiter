@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.0.0
+
+### Language Specification (Frozen Contract)
+
+- **SPEC.md** — formal language reference with two-tier freeze. Frozen: rule/strategy/flag/expert evaluation semantics, schema/type behavior, decimal/unit rules, governance algorithm, trace shape guarantees, `.test.arb` assertions, bytecode format, conformance matrix. Provisional: runtime surface beyond poll, worker transport breadth, LSP completeness, SDK ergonomics, packaging/module story.
+
+### Formatter
+
+- **`arbiter fmt`** — canonical formatter for `.arb` files. 4-space indentation, consistent brace placement, blank lines between declarations, trailing whitespace removal, trailing newline. `--check` for CI (exits 1 if unformatted). Wired into LSP as `textDocument/formatting`.
+
+### Bundle Signing
+
+- **Ed25519 bundle signatures** — `arbiter bundle --sign key.pem` signs the binary bundle. `arbiter bundle --verify file.arbb --pub key.pub` verifies. Signature trailer (64-byte Ed25519 + "ARBS" magic) appended to bundle. Optional metadata trailer with compiler version, conformance profile, and creation timestamp.
+
+### LSP Navigation
+
+- **Go-to-definition** — jump to any declaration (rule, fact, outcome, segment, strategy, flag, expert rule, worker, arbiter) using IR Span positions.
+- **Find references** — finds declaration site + all prereq/exclude/segment references.
+- **Rename** — whole-word rename across the current file with word-boundary checking.
+- **Document symbols** — outline of all declarations with kinds and positions.
+- **Formatting** — `textDocument/formatting` via the `format` package.
+
+---
+
 ## v0.14.0
 
 ### Language Server

@@ -10,14 +10,18 @@
 //	arbiter replay <rules.arb> --audit decisions.jsonl [--request-id id] [--limit N] [--json] — replay audited rule decisions
 //	arbiter expert <file.arb> --envelope '{...}' [--facts '[...]'] — run one expert session
 //	arbiter test [file.test.arb] [--verbose] — test rules, flags, and scenarios against expected outcomes
-//	arbiter bundle <file.arb> [-o output.arbb] [--risk-policy policy.arb] [--force] — export obfuscated binary bundle for edge/browser (policy-gated)
+//	arbiter fmt <file.arb> [--check]           — format .arb files (--check for CI, exits 1 if unformatted)
+//	arbiter bundle <file.arb> [-o output.arbb] [--risk-policy policy.arb] [--force] [--sign key.pem] — export obfuscated binary bundle for edge/browser (policy-gated)
+//	arbiter bundle --verify <file.arbb> --pub <public-key.pem> — verify a signed bundle
 //	arbiter import <file.json> [-o output.arb] — decompile Arishem JSON to .arb
 //	arbiter serve [--grpc :8081] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -30,6 +34,7 @@ import (
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/arbtest"
 	"github.com/odvcencio/arbiter/bundle"
+	"github.com/odvcencio/arbiter/format"
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/decompile"
 	"github.com/odvcencio/arbiter/expert"
@@ -41,7 +46,7 @@ import (
 )
 
 const (
-	commandList = "check, compile, eval, strategy, diff, replay, expert, test, explore, import, serve"
+	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, serve"
 	rootUsage   = "Usage: arbiter <command> <file>\nCommands: " + commandList
 )
 
@@ -52,6 +57,7 @@ func (e usageError) Error() string { return string(e) }
 var commandHandlers = map[string]func([]string) error{
 	"check":    runCheck,
 	"compile":  runCompile,
+	"fmt":      runFmt,
 	"bundle":   runBundle,
 	"eval":     runEval,
 	"strategy": runStrategy,
@@ -753,13 +759,78 @@ func importRules(rules []importRuleJSON, outPath string) error {
 	return nil
 }
 
+func runFmt(args []string) error {
+	check := false
+	var paths []string
+	for _, arg := range args {
+		switch arg {
+		case "--check":
+			check = true
+		case "--write":
+			// Default behavior — explicit flag accepted for clarity.
+		default:
+			paths = append(paths, arg)
+		}
+	}
+	if len(paths) == 0 {
+		return usageError("Usage: arbiter fmt [--check] [--write] <file.arb> [file2.arb ...]")
+	}
+	changed := false
+	for _, path := range paths {
+		source, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		formatted := format.Format(source)
+		if string(formatted) == string(source) {
+			continue
+		}
+		changed = true
+		if check {
+			fmt.Fprintf(os.Stderr, "%s: needs formatting\n", path)
+			continue
+		}
+		if err := os.WriteFile(path, formatted, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+		fmt.Fprintf(os.Stderr, "formatted %s\n", path)
+	}
+	if check && changed {
+		return fmt.Errorf("files need formatting")
+	}
+	return nil
+}
+
 func runBundle(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter bundle <file.arb> [-o output.arbb] [--risk-policy policy.arb] [--force]")
+		return usageError("Usage: arbiter bundle <file.arb> [-o output.arbb] [--risk-policy policy.arb] [--force] [--sign key.pem]\n       arbiter bundle --verify <file.arbb> --pub <public-key.pem>")
 	}
+
+	// Check for --verify mode first.
+	verifyPath := ""
+	pubKeyPath := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--verify":
+			if i+1 < len(args) {
+				verifyPath = args[i+1]
+				i++
+			}
+		case "--pub":
+			if i+1 < len(args) {
+				pubKeyPath = args[i+1]
+				i++
+			}
+		}
+	}
+	if verifyPath != "" {
+		return verifyBundle(verifyPath, pubKeyPath)
+	}
+
 	path := args[0]
 	outPath := ""
 	riskPolicyPath := ""
+	signKeyPath := ""
 	force := false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -771,6 +842,11 @@ func runBundle(args []string) error {
 		case "--risk-policy":
 			if i+1 < len(args) {
 				riskPolicyPath = args[i+1]
+				i++
+			}
+		case "--sign":
+			if i+1 < len(args) {
+				signKeyPath = args[i+1]
 				i++
 			}
 		case "--force":
@@ -820,6 +896,20 @@ func runBundle(args []string) error {
 	if err != nil {
 		return fmt.Errorf("bundle %s: %w", path, err)
 	}
+
+	// Sign the bundle if --sign was provided.
+	if signKeyPath != "" {
+		privKey, err := loadPrivateKey(signKeyPath)
+		if err != nil {
+			return fmt.Errorf("load signing key: %w", err)
+		}
+		blob, err = bundle.Sign(blob, privKey)
+		if err != nil {
+			return fmt.Errorf("sign bundle: %w", err)
+		}
+		fmt.Fprintln(os.Stderr, "[sign] bundle signed with Ed25519")
+	}
+
 	if outPath == "" {
 		outPath = strings.TrimSuffix(path, ".arb") + ".arbb"
 	}
@@ -828,4 +918,76 @@ func runBundle(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s (%d rules, %d bytes, obfuscated)\n", outPath, len(rs.Rules), len(blob))
 	return nil
+}
+
+// verifyBundle reads a signed .arbb file and verifies it against the given
+// public key. Prints the verification result to stderr.
+func verifyBundle(bundlePath, pubKeyPath string) error {
+	if pubKeyPath == "" {
+		return fmt.Errorf("--pub flag is required for --verify")
+	}
+	data, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return fmt.Errorf("read bundle %s: %w", bundlePath, err)
+	}
+	pubKey, err := loadPublicKey(pubKeyPath)
+	if err != nil {
+		return fmt.Errorf("load public key: %w", err)
+	}
+	payload, err := bundle.Verify(data, pubKey)
+	if err != nil {
+		return fmt.Errorf("verify %s: %w", bundlePath, err)
+	}
+	fmt.Fprintf(os.Stderr, "verified %s: signature valid (%d byte payload)\n", bundlePath, len(payload))
+	return nil
+}
+
+// loadPrivateKey reads a PEM-encoded Ed25519 private key from disk.
+// Accepts PEM files with type "PRIVATE KEY" or "ED25519 PRIVATE KEY"
+// containing the raw 64-byte seed+key, or a raw 64-byte file.
+func loadPrivateKey(path string) (ed25519.PrivateKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(data)
+	if block != nil {
+		if len(block.Bytes) == ed25519.PrivateKeySize {
+			return ed25519.PrivateKey(block.Bytes), nil
+		}
+		// Some PEM encodings wrap just the 32-byte seed.
+		if len(block.Bytes) == ed25519.SeedSize {
+			return ed25519.NewKeyFromSeed(block.Bytes), nil
+		}
+		return nil, fmt.Errorf("PEM block has unexpected size %d (want %d or %d)", len(block.Bytes), ed25519.PrivateKeySize, ed25519.SeedSize)
+	}
+	// Fall back to raw bytes.
+	if len(data) == ed25519.PrivateKeySize {
+		return ed25519.PrivateKey(data), nil
+	}
+	if len(data) == ed25519.SeedSize {
+		return ed25519.NewKeyFromSeed(data), nil
+	}
+	return nil, fmt.Errorf("file %s is not a valid Ed25519 private key (size %d)", path, len(data))
+}
+
+// loadPublicKey reads a PEM-encoded Ed25519 public key from disk.
+// Accepts PEM files with type "PUBLIC KEY" or "ED25519 PUBLIC KEY"
+// containing the raw 32-byte key, or a raw 32-byte file.
+func loadPublicKey(path string) (ed25519.PublicKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(data)
+	if block != nil {
+		if len(block.Bytes) == ed25519.PublicKeySize {
+			return ed25519.PublicKey(block.Bytes), nil
+		}
+		return nil, fmt.Errorf("PEM block has unexpected size %d (want %d)", len(block.Bytes), ed25519.PublicKeySize)
+	}
+	if len(data) == ed25519.PublicKeySize {
+		return ed25519.PublicKey(data), nil
+	}
+	return nil, fmt.Errorf("file %s is not a valid Ed25519 public key (size %d)", path, len(data))
 }
