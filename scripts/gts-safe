@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+  echo "usage: scripts/gts-safe <gts-subcommand> [args...]" >&2
+  exit 2
+fi
+
+repo_root="${GTS_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cache_path="${GTS_CACHE_PATH:-$repo_root/.gts/index.json}"
+lock_dir="${GTS_LOCK_DIR:-$repo_root/.gts}"
+lock_file="${GTS_LOCK_FILE:-$lock_dir/gts.lock}"
+lock_timeout="${GTS_LOCK_TIMEOUT_SECONDS:-15}"
+timeout_seconds="${GTS_TIMEOUT_SECONDS:-120}"
+gomaxprocs="${GTS_GOMAXPROCS:-2}"
+gomemlimit="${GTS_GOMEMLIMIT:-2GiB}"
+gogc="${GTS_GOGC:-50}"
+
+mkdir -p "$lock_dir"
+cd "$repo_root"
+
+subcommand="$1"
+shift
+args=("$@")
+
+has_flag() {
+  local want="$1"
+  shift || true
+  local arg
+  for arg in "$@"; do
+    if [[ "$arg" == "$want" || "$arg" == "$want="* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+long_running=0
+if [[ "$subcommand" == "mcp" ]]; then
+  long_running=1
+elif [[ "$subcommand" == "index" ]] && has_flag "--watch" "${args[@]}"; then
+  long_running=1
+fi
+
+if [[ "$long_running" -eq 1 && "${GTS_ALLOW_LONG_RUNNING:-0}" != "1" ]]; then
+  echo "refusing long-running gts mode: '$subcommand ${args[*]}'" >&2
+  echo "set GTS_ALLOW_LONG_RUNNING=1 if you really want an interactive/watch process" >&2
+  exit 64
+fi
+
+if [[ "$subcommand" == "refactor" ]] && has_flag "--write" "${args[@]}" && [[ "${GTS_ALLOW_WRITES:-0}" != "1" ]]; then
+  echo "refusing gts refactor --write without GTS_ALLOW_WRITES=1" >&2
+  exit 64
+fi
+
+if [[ "$subcommand" == "mcp" ]] && has_flag "--allow-writes" "${args[@]}" && [[ "${GTS_ALLOW_WRITES:-0}" != "1" ]]; then
+  echo "refusing gts mcp --allow-writes without GTS_ALLOW_WRITES=1" >&2
+  exit 64
+fi
+
+if [[ "$subcommand" == "index" ]] && ! has_flag "--out" "${args[@]}"; then
+  args+=("--out" "$cache_path")
+elif [[ "$subcommand" != "index" && "$subcommand" != "mcp" ]] \
+  && [[ -f "$cache_path" ]] \
+  && ! has_flag "--cache" "${args[@]}" \
+  && [[ "${GTS_NO_CACHE:-0}" != "1" ]]; then
+  args+=("--cache" "$cache_path")
+fi
+
+exec 9>"$lock_file"
+if ! flock -w "$lock_timeout" 9; then
+  echo "timed out waiting for gts lock at $lock_file" >&2
+  echo "only one gts command should run per repo at a time" >&2
+  exit 75
+fi
+
+runner=(env "GOMAXPROCS=$gomaxprocs" "GOMEMLIMIT=$gomemlimit" "GOGC=$gogc" gts "$subcommand" "${args[@]}")
+if command -v ionice >/dev/null 2>&1; then
+  runner=(ionice -c 3 "${runner[@]}")
+fi
+if command -v nice >/dev/null 2>&1; then
+  runner=(nice -n 10 "${runner[@]}")
+fi
+
+if [[ "$long_running" -eq 1 ]]; then
+  exec "${runner[@]}"
+fi
+
+exec timeout --foreground "${timeout_seconds}s" "${runner[@]}"

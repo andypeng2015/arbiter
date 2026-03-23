@@ -1,5 +1,6 @@
 # Compiled binary
 /arbiter
+/.gts/
 
 # SDK build artifacts
 sdks/node/node_modules/

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/odvcencio/arbiter/compiler"
+	dec "github.com/odvcencio/arbiter/decimal"
 	"github.com/odvcencio/arbiter/intern"
 	"github.com/odvcencio/arbiter/units"
 )
@@ -512,6 +513,22 @@ func TestEvalBetweenOpenClosed(t *testing.T) {
 	}
 	if !evalRule(t, src, map[string]any{"x": 20.0}) {
 		t.Error("upper boundary should match (closed)")
+	}
+}
+
+func TestEvalBetweenDecimalClosed(t *testing.T) {
+	src := `rule T { when { amount between [10.00 USD, 20.00 USD] } then A {} }`
+	if !evalRule(t, src, map[string]any{"amount": dec.MustParse("10.00", "USD")}) {
+		t.Error("lower decimal boundary should match (closed)")
+	}
+	if !evalRule(t, src, map[string]any{"amount": dec.MustParse("15.50", "USD")}) {
+		t.Error("middle decimal value should match")
+	}
+	if !evalRule(t, src, map[string]any{"amount": dec.MustParse("20.00", "USD")}) {
+		t.Error("upper decimal boundary should match (closed)")
+	}
+	if evalRule(t, src, map[string]any{"amount": dec.MustParse("9.99", "USD")}) {
+		t.Error("below decimal range should not match")
 	}
 }
 
