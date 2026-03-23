@@ -4,7 +4,63 @@ const vscode = require("vscode");
 
 const diagnosticPattern = /^(.*?):(\d+)(?::(\d+))?:\s+(.*)$/;
 
+let lspClient = null;
+
+function tryStartLSP(context) {
+	const lspPath = vscode.workspace.getConfiguration("arbiter").get("lspPath", "arbiter-lsp");
+	if (!lspPath) return false;
+
+	try {
+		// Test if the binary exists.
+		cp.execFileSync(lspPath, ["--help"], { timeout: 2000, stdio: "ignore" });
+	} catch {
+		// Binary not found or doesn't support --help — that's fine, the LSP
+		// runs on stdin/stdout and blocks, so just check it's executable.
+		try {
+			require("node:fs").accessSync(lspPath, require("node:fs").constants.X_OK);
+		} catch {
+			return false;
+		}
+	}
+
+	const serverOptions = {
+		command: lspPath,
+		args: [],
+		options: {},
+	};
+	const clientOptions = {
+		documentSelector: [{ scheme: "file", language: "arbiter" }],
+	};
+
+	try {
+		// vscode-languageclient may not be bundled — gracefully degrade.
+		const { LanguageClient } = require("vscode-languageclient/node");
+		lspClient = new LanguageClient("arbiter-lsp", "Arbiter Language Server", serverOptions, clientOptions);
+		lspClient.start();
+		context.subscriptions.push(lspClient);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function activate(context) {
+	// Try LSP first — if available, it handles diagnostics, completions, hover.
+	const lspActive = tryStartLSP(context);
+	if (lspActive) {
+		// Register manual check command that just triggers a save (LSP re-validates).
+		context.subscriptions.push(
+			vscode.commands.registerCommand("arbiter.checkCurrentFile", () => {
+				const editor = vscode.window.activeTextEditor;
+				if (editor && isArbiterDocument(editor.document)) {
+					editor.document.save();
+				}
+			})
+		);
+		return;
+	}
+
+	// Fallback: CLI-based diagnostics (existing behavior).
 	const collection = vscode.languages.createDiagnosticCollection("arbiter");
 	const ownedDiagnostics = new Map();
 	let warnedMissingCLI = false;
@@ -86,7 +142,11 @@ function activate(context) {
 	}
 }
 
-function deactivate() {}
+function deactivate() {
+	if (lspClient) {
+		return lspClient.stop();
+	}
+}
 
 function shouldAutoCheck(document) {
 	if (!isArbiterDocument(document)) {

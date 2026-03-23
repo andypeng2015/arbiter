@@ -31,6 +31,9 @@ jobs:
       - name: Build Runtime
         run: go build -tags grammar_blobs_external -o /dev/null ./cmd/arbiter-runtime
 
+      - name: Build LSP
+        run: go build -tags grammar_blobs_external -o /dev/null ./cmd/arbiter-lsp
+
       - name: Build WASM
         run: GOOS=js GOARCH=wasm go build -tags grammar_blobs_external -o /dev/null ./cmd/arbiter-wasm
 

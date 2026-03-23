@@ -64,10 +64,15 @@
           "default": "arbiter",
           "description": "Path to the Arbiter CLI used for diagnostics."
         },
+        "arbiter.lspPath": {
+          "type": "string",
+          "default": "arbiter-lsp",
+          "description": "Path to the Arbiter LSP server. Set to empty string to use CLI-based diagnostics instead."
+        },
         "arbiter.runCheckOnSave": {
           "type": "boolean",
           "default": true,
-          "description": "Run `arbiter check` automatically when an .arb file is opened or saved."
+          "description": "Run `arbiter check` automatically when an .arb file is opened or saved (only used when LSP is not available)."
         }
       }
     }
