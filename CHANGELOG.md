@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.14.0
+
+### Language Server
+
+- **`cmd/arbiter-lsp`** — LSP implementation over stdin/stdout with diagnostics (multi-error), completions (facts, outcomes, segments, strategies, rules, keywords), and hover (schema fields, rule summaries). VS Code extension updated to use LSP when available, falls back to CLI check.
+
+### Conformance Suite
+
+- **`conformance/`** — cross-platform parity matrix. Every test case produces identical results across native eval, governed eval, bundle round-trip, obfuscated bundle round-trip, JSON round-trip, strategy eval, and expert inference. 7 test cases × 5 surfaces + strategy + expert.
+
+### Policy-Gated Edge Export
+
+- **Arbiter governs its own export safety.** The bundle command now uses a static analyzer → Arbiter policy pipeline instead of heuristic lint. Analyzer extracts structured signals (`threshold_literal`, `money_literal`, `crypto_literal`, `risk_path`, `prereq_chain`, `rollout_usage`). Default `edge_export_policy.arb` blocks money/crypto/risk, warns on thresholds, allows config. `--risk-policy custom.arb` lets users swap the policy. `--force` overrides blocks.
+
+---
+
 ## v0.13.0
 
 ### Reference Runtime
