@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -11,6 +12,8 @@ import (
 	"syscall/js"
 
 	arbiter "github.com/odvcencio/arbiter"
+	"github.com/odvcencio/arbiter/bundle"
+	"github.com/odvcencio/arbiter/compiler"
 	"github.com/odvcencio/arbiter/expert"
 	"github.com/odvcencio/arbiter/strategy"
 	"github.com/odvcencio/arbiter/vm"
@@ -23,6 +26,9 @@ func main() {
 	js.Global().Set("arbiterEval", js.FuncOf(eval))
 	js.Global().Set("arbiterEvalGoverned", js.FuncOf(evalGoverned))
 	js.Global().Set("arbiterEvalStrategy", js.FuncOf(evalStrategy))
+
+	// Bundle loading (pre-compiled, no source needed)
+	js.Global().Set("arbiterLoadBundle", js.FuncOf(loadBundle))
 
 	// Expert sessions
 	js.Global().Set("arbiterStartSession", js.FuncOf(startSession))
@@ -42,9 +48,10 @@ func main() {
 // --- Compilation ---
 
 var (
-	compiled    *arbiter.CompileResult
-	expertProg  *expert.Program
-	lastSource  []byte
+	compiled      *arbiter.CompileResult
+	expertProg    *expert.Program
+	lastSource    []byte
+	bundleRuleset *compiler.CompiledRuleset // set by loadBundle
 )
 
 func compile(_ js.Value, args []js.Value) any {
@@ -71,20 +78,59 @@ func compile(_ js.Value, args []js.Value) any {
 	})
 }
 
+// --- Bundle Loading (pre-compiled, no source exposed) ---
+
+func loadBundle(_ js.Value, args []js.Value) any {
+	if len(args) < 1 {
+		return jsError("loadBundle requires a base64-encoded bundle string")
+	}
+	raw := args[0].String()
+	data, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return jsError(fmt.Sprintf("decode bundle: %v", err))
+	}
+	rs, err := bundle.Unmarshal(data)
+	if err != nil {
+		return jsError(err.Error())
+	}
+	bundleRuleset = rs
+	// Clear source-compiled state — we're in bundle mode now.
+	compiled = nil
+	expertProg = nil
+	lastSource = nil
+	return jsResult(map[string]any{
+		"rules": len(rs.Rules),
+	})
+}
+
+
+// activeRuleset returns whichever ruleset is loaded (bundle or compiled).
+func activeRuleset() *compiler.CompiledRuleset {
+	if bundleRuleset != nil {
+		return bundleRuleset
+	}
+	if compiled != nil {
+		return compiled.Ruleset
+	}
+	return nil
+}
+
 // --- Stateless Eval ---
 
 func eval(_ js.Value, args []js.Value) any {
-	if compiled == nil {
-		return jsError("no compiled bundle — call arbiterCompile first")
+	rs := activeRuleset()
+	if rs == nil {
+		return jsError("no compiled bundle — call arbiterCompile or arbiterLoadBundle first")
 	}
 	if len(args) < 1 {
 		return jsError("eval requires JSON context string")
 	}
-	dc, err := arbiter.DataFromJSON(args[0].String(), compiled.Ruleset)
+	sp := vm.NewStringPool(rs.Constants.Strings())
+	dc, err := vm.DataFromJSON(args[0].String(), sp)
 	if err != nil {
 		return jsError(err.Error())
 	}
-	matched, err := arbiter.Eval(compiled.Ruleset, dc)
+	matched, err := vm.EvalWithPool(rs, dc, sp)
 	if err != nil {
 		return jsError(err.Error())
 	}

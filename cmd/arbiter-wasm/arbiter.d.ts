@@ -14,6 +14,9 @@ export interface CompileResult {
 /** Compile .arb source. Must be called before eval/strategy/session functions. */
 export function compile(source: string): CompileResult;
 
+/** Load a pre-compiled binary bundle (base64-encoded). No source exposed to the client. */
+export function loadBundle(base64Bundle: string): { rules: number; error?: string };
+
 // --- Stateless Evaluation ---
 
 export interface MatchedRule {

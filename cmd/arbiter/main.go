@@ -10,6 +10,7 @@
 //	arbiter replay <rules.arb> --audit decisions.jsonl [--request-id id] [--limit N] [--json] — replay audited rule decisions
 //	arbiter expert <file.arb> --envelope '{...}' [--facts '[...]'] — run one expert session
 //	arbiter test [file.test.arb] [--verbose] — test rules, flags, and scenarios against expected outcomes
+//	arbiter bundle <file.arb> [-o output.arbb] [--obfuscate] — export pre-compiled binary bundle for edge/browser
 //	arbiter import <file.json> [-o output.arb] — decompile Arishem JSON to .arb
 //	arbiter serve [--grpc :8081] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
@@ -28,6 +29,7 @@ import (
 	"github.com/odvcencio/arbiter"
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/arbtest"
+	"github.com/odvcencio/arbiter/bundle"
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/decompile"
 	"github.com/odvcencio/arbiter/expert"
@@ -50,6 +52,7 @@ func (e usageError) Error() string { return string(e) }
 var commandHandlers = map[string]func([]string) error{
 	"check":    runCheck,
 	"compile":  runCompile,
+	"bundle":   runBundle,
 	"eval":     runEval,
 	"strategy": runStrategy,
 	"diff":     runDiff,
@@ -747,5 +750,54 @@ func importRules(rules []importRuleJSON, outPath string) error {
 	}
 
 	fmt.Print(arb)
+	return nil
+}
+
+func runBundle(args []string) error {
+	if len(args) < 1 {
+		return usageError("Usage: arbiter bundle <file.arb> [-o output.arbb] [--obfuscate]")
+	}
+	path := args[0]
+	outPath := ""
+	obfuscate := false
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "-o":
+			if i+1 < len(args) {
+				outPath = args[i+1]
+				i++
+			}
+		case "--obfuscate":
+			obfuscate = true
+		}
+	}
+	rs, err := arbiter.CompileFile(path)
+	if err != nil {
+		return fmt.Errorf("bundle %s: %w", path, err)
+	}
+	opts := bundle.ObfuscateOptions{}
+	if obfuscate {
+		opts = bundle.ObfuscateOptions{
+			HashRuleNames:       true,
+			HashSegmentNames:    true,
+			StripRolloutDetails: true,
+			StripPrereqs:        true,
+		}
+	}
+	blob, err := bundle.MarshalObfuscated(rs, opts)
+	if err != nil {
+		return fmt.Errorf("bundle %s: %w", path, err)
+	}
+	if outPath == "" {
+		outPath = strings.TrimSuffix(path, ".arb") + ".arbb"
+	}
+	if err := os.WriteFile(outPath, blob, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", outPath, err)
+	}
+	fmt.Fprintf(os.Stderr, "wrote %s (%d rules, %d bytes", outPath, len(rs.Rules), len(blob))
+	if obfuscate {
+		fmt.Fprint(os.Stderr, ", obfuscated")
+	}
+	fmt.Fprintln(os.Stderr, ")")
 	return nil
 }

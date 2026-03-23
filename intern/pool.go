@@ -139,3 +139,6 @@ func (p *Pool) Lists() []PoolValue { return p.lists }
 
 // Decimals returns all interned decimals.
 func (p *Pool) Decimals() []dec.Value { return p.decimals }
+
+// RestoreLists replaces the internal list storage (for deserialization).
+func (p *Pool) RestoreLists(items []PoolValue) { p.lists = items }

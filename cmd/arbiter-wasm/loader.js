@@ -62,6 +62,12 @@
     return globalThis.arbiterCompile(source);
   };
 
+  /** Load a pre-compiled bundle (base64 string). No .arb source needed. */
+  exports.loadBundle = function (base64Bundle) {
+    check();
+    return globalThis.arbiterLoadBundle(base64Bundle);
+  };
+
   // --- Stateless Evaluation ---
 
   exports.eval = function (jsonContext) {
