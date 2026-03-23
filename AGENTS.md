@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Arbiter is a Go rule engine and decision service. It compiles `.arb` rule files to bytecode and evaluates them via a VM. Four evaluation modes: stateless eval, feature flags, expert inference (forward-chaining), and continuous arbiters (always-on workflows). Module path: `github.com/odvcencio/arbiter`.
+Arbiter is a compact language for governed outcomes. The compiler (this repo) is written in Go. It compiles `.arb` files to bytecode and evaluates them via a VM. Four evaluation modes: stateless eval, feature flags, expert inference (forward-chaining), and continuous arbiters (always-on workflows). Module path: `github.com/odvcencio/arbiter`.
 
 ## Build & Test
 

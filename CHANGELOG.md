@@ -76,7 +76,7 @@
 
 ### Tooling
 
-- **`arbiter test` / `arbtest`** — executable `.test.arb` suites now cover stateless rules, flags, timed expert scenarios, and streamed arbiter scenarios from the CLI or package API.
+- **`arbiter test` / `arbtest`** — write `.test.arb` files next to your bundles to test rules, flags, expert scenarios, and streamed arbiter scenarios. Run from the CLI or the `arbtest` Go package.
 - **`arbiter explore` / `explore`** — bundles can now be summarized as JSON with schemas, constants, rule metadata, expert timing controls, and the unit dimensions they depend on.
 - **Coverage across the new surface** — parser, lowering, compiler, VM, expert runtime, workflow, CLI, and package tests now lock in the schema-aware and temporal feature set end to end.
 

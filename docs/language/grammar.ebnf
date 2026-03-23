@@ -23,16 +23,63 @@ top_level_declaration
                    | strategy_declaration
                    | rule_declaration
                    | flag_declaration
+                   | fact_declaration
+                   | outcome_declaration
+                   | feature_declaration
                    | expert_rule_declaration
+                   | worker_declaration
                    | arbiter_declaration
                    | include_declaration ;
 
 include_declaration = "include" string_literal ;
 
-const_declaration  = "const" identifier "=" literal ;
+const_declaration  = "const" identifier "=" expression ;
 
 segment_declaration
-                   = "segment" identifier block_expr ;
+                   = "segment" identifier "{" expression "}" ;
+```
+
+## Schemas
+
+```ebnf
+fact_declaration   = "fact" identifier "{"
+                       { schema_field_declaration }
+                     "}" ;
+
+outcome_declaration
+                   = "outcome" identifier "{"
+                       { schema_field_declaration }
+                     "}" ;
+
+feature_declaration
+                   = "feature" identifier "from" string_literal "{"
+                       { field_declaration }
+                     "}" ;
+
+schema_field_declaration
+                   = identifier [ "?" ] ":" schema_type_name ;
+
+field_declaration  = identifier ":" type_name ;
+
+schema_type_name   = parameterized_number_type
+                   | parameterized_decimal_type
+                   | "number"
+                   | "decimal"
+                   | "string"
+                   | "bool"
+                   | "boolean"
+                   | "timestamp" ;
+
+parameterized_number_type
+                   = "number" "<" identifier ">" ;
+
+parameterized_decimal_type
+                   = "decimal" "<" identifier ">" ;
+
+type_name          = "number"
+                   | "string"
+                   | "bool"
+                   | "list" "<" type_name ">" ;
 ```
 
 ## Strategies
@@ -41,10 +88,12 @@ segment_declaration
 strategy_declaration
                    = "strategy" identifier "returns" identifier
                      "{"
-                       strategy_when_candidate
-                       { strategy_when_candidate }
-                       strategy_else_candidate
+                       strategy_candidate
+                       { strategy_candidate }
                      "}" ;
+
+strategy_candidate = strategy_when_candidate
+                   | strategy_else_candidate ;
 
 strategy_when_candidate
                    = when_clause
@@ -62,7 +111,8 @@ strategy_else_candidate
 rule_declaration   = "rule" identifier [ priority_clause ] rule_block ;
 
 rule_block         = "{"
-                       { rule_governance_clause }
+                       [ kill_switch_clause ]
+                       { requires_clause | excludes_clause }
                        when_clause
                        then_clause
                        [ otherwise_clause ]
@@ -71,42 +121,50 @@ rule_block         = "{"
 
 priority_clause    = "priority" integer_literal ;
 
-rule_governance_clause
-                   = kill_switch_clause
-                   | requires_clause
-                   | excludes_clause ;
-
 kill_switch_clause = "kill_switch" ;
 requires_clause    = "requires" identifier ;
 excludes_clause    = "excludes" identifier ;
 
-when_clause        = "when" ( segment_condition | block_expr ) ;
-segment_condition  = "segment" identifier block_expr ;
+when_clause        = "when" [ "segment" identifier ] "{" { let_binding } expression "}" ;
 
 then_clause        = "then" action_block ;
 otherwise_clause   = "otherwise" action_block ;
 
 action_block       = identifier "{" { param_assignment } "}" ;
-param_assignment   = identifier ":" expression "," ;
+param_assignment   = identifier ":" expression [ "," ] ;
 ```
 
 ## Feature Flags
 
 ```ebnf
-flag_declaration   = "flag" identifier "type" identifier "default" string_literal
+flag_declaration   = "flag" identifier
+                     [ "type" ( "boolean" | "multivariate" ) ]
+                     [ "default" primary_expr ]
+                     [ kill_switch_clause ]
                      "{"
-                       { metadata_assignment | variant_declaration | flag_rule }
+                       { flag_metadata | flag_requires | variant_declaration | defaults_block | flag_rule }
                      "}" ;
 
-metadata_assignment = identifier ":" literal "," ;
+flag_metadata      = identifier ":" string_literal ;
+
+flag_requires      = "requires" identifier ;
 
 variant_declaration = "variant" string_literal "{" { param_assignment } "}" ;
 
-flag_rule          = "when" ( segment_reference | block_expr )
-                     [ rollout_clause ]
-                     "then" string_literal ;
+defaults_block     = "defaults" "{" { param_assignment } "}" ;
 
-segment_reference  = identifier ;
+flag_rule          = [ "else" ] "when" flag_condition
+                     [ rollout_clause ]
+                     ( "then" primary_expr | flag_split_block ) ;
+
+flag_condition     = identifier "{" expression "}"
+                   | identifier
+                   | "{" expression "}" ;
+
+flag_split_block   = "split"
+                     [ "by" ( member_expression | identifier ) ]
+                     [ "namespace" string_literal ]
+                     "{" { string_literal ":" number_literal [ "," ] } "}" ;
 ```
 
 ## Expert Rules
@@ -114,43 +172,52 @@ segment_reference  = identifier ;
 ```ebnf
 expert_rule_declaration
                    = "expert" "rule" identifier
-                     [ priority_clause ]
                      { expert_modifier }
                      expert_rule_block ;
 
-expert_modifier    = "per_fact"
-                   | "no_loop"
-                   | "kill_switch"
-                   | requires_clause
-                   | excludes_clause
-                   | activation_group_clause ;
-
-activation_group_clause
-                   = "activation_group" identifier ;
+expert_modifier    = "priority" number_literal
+                   | "per_fact"
+                   | "cooldown" temporal_duration_literal
+                   | "debounce" temporal_duration_literal ;
 
 expert_rule_block  = "{"
-                       when_clause
+                       [ kill_switch_clause ]
+                       [ "no_loop" ]
+                       [ "stable" ]
+                       { requires_clause | excludes_clause }
+                       [ activation_group_clause ]
+                       { requires_clause | excludes_clause }
+                       expert_when_clause
                        expert_then_clause
                        [ rollout_clause ]
                      "}" ;
 
+activation_group_clause
+                   = "activation_group" identifier ;
+
+expert_when_clause = "when" [ "segment" identifier ]
+                     "{"
+                       { let_binding }
+                       ( expression | expert_binding_clause )
+                     "}"
+                     [ "for" temporal_duration_literal
+                     | "within" temporal_duration_literal
+                     | "stable_for" number_literal "cycles" ] ;
+
+expert_binding_clause
+                   = { "bind" identifier "in" value_expression }
+                     "where" "{" expression "}" ;
+
 expert_then_clause = "then" expert_action ;
 
-expert_action      = assert_action
-                   | emit_action
-                   | retract_action
-                   | modify_action ;
-
-assert_action      = "assert" identifier "{" { param_assignment } "}" ;
-emit_action        = "emit" identifier "{" { param_assignment } "}" ;
-retract_action     = "retract" identifier "{" "key" ":" expression "," "}" ;
-modify_action      = "modify" identifier "{"
-                       "key" ":" expression ","
-                       "set" "{" { param_assignment } "}"
+expert_action      = ( "assert" | "emit" | "retract" | "modify" )
+                     identifier "{"
+                       { param_assignment }
+                       [ "set" "{" { param_assignment } "}" ]
                      "}" ;
 ```
 
-## Continuous Arbiters
+## Workers
 
 ```ebnf
 worker_declaration  = "worker" identifier "{"
@@ -164,12 +231,7 @@ worker_output_clause
                    = "output" identifier ;
 
 worker_runtime_clause
-                   = "webhook" uri_literal
-                   | "slack" slack_channel
-                   | "exec" string_literal
-                   | "grpc" uri_literal
-                   | "audit" string_literal
-                   | "stdout" ;
+                   = handler_kind [ handler_target ] ;
 ```
 
 ## Continuous Arbiters
@@ -188,26 +250,31 @@ arbiter_clause     = poll_clause
                    | handler_clause ;
 
 poll_clause        = "poll" duration_literal ;
-stream_clause      = "stream" uri_literal ;
-source_clause      = "source" uri_literal ;
-checkpoint_clause  = "checkpoint" string_literal ;
+stream_clause      = "stream" handler_target ;
+source_clause      = "source" handler_target ;
+checkpoint_clause  = "checkpoint" handler_target ;
 
-schedule_clause    = "schedule" string_literal "source" uri_literal ;
+schedule_clause    = "schedule" string_literal [ "source" handler_target ] ;
 
 handler_clause     = "on" outcome_selector
                      [ "where" expression ]
-                     handler_target ;
+                     handler_kind [ handler_target ] ;
 
 outcome_selector   = "*" | identifier ;
 
-handler_target     = "chain" identifier
-                   | "worker" identifier
-                   | "webhook" uri_literal
-                   | "slack" slack_channel
-                   | "exec" string_literal
-                   | "grpc" uri_literal
-                   | "audit" string_literal
+handler_kind       = "webhook"
+                   | "slack"
+                   | "chain"
+                   | "exec"
+                   | "worker"
+                   | "grpc"
+                   | "audit"
                    | "stdout" ;
+
+handler_target     = identifier
+                   | slack_channel
+                   | resource_literal
+                   | string_literal ;
 
 slack_channel      = "#" identifier ;
 ```
@@ -215,84 +282,131 @@ slack_channel      = "#" identifier ;
 ## Rollouts
 
 ```ebnf
-rollout_clause     = "rollout" ( rollout_legacy | rollout_percent ) ;
-
-rollout_legacy     = percent_literal ;
-
-rollout_percent    = "percent" percent_literal
-                     [ "by" member_expression ]
+rollout_clause     = "rollout" [ "percent" ] number_literal
+                     [ "by" ( member_expression | identifier ) ]
                      [ "namespace" string_literal ] ;
 ```
 
 ## Expressions
 
 ```ebnf
-block_expr         = "{" { let_binding } expression "}" ;
-let_binding        = "let" identifier "=" expression ;
-
 expression         = or_expr ;
 or_expr            = and_expr { "or" and_expr } ;
 and_expr           = unary_expr { "and" unary_expr } ;
-unary_expr         = [ "not" ] comparison_expr ;
+unary_expr         = [ "not" ] conditional_expr ;
 
-comparison_expr    = additive_expr
-                     [ comparison_operator additive_expr ] ;
+conditional_expr   = value_expression
+                     [ comparison_operator value_expression ] ;
 
 comparison_operator = "==" | "!=" | ">" | ">=" | "<" | "<="
-                    | "in" | "not in"
-                    | "contains" | "not contains"
-                    | "retains" | "not retains"
+                    | "in" | "not" "in"
+                    | "contains" | "not" "contains"
+                    | "retains" | "not" "retains"
+                    | "vague_contains"
                     | "subset_of" | "superset_of"
                     | "starts_with" | "ends_with"
                     | "matches"
-                    | "is null" | "is not null"
+                    | "is" "null" | "is" "not" "null"
                     | "between" ;
 
-additive_expr      = multiplicative_expr
-                     { ( "+" | "-" ) multiplicative_expr } ;
+between_expr       = value_expression "between"
+                     ( "[" | "(" ) value_expression "," value_expression ( "]" | ")" ) ;
 
-multiplicative_expr = primary_expr
-                      { ( "*" | "/" | "%" ) primary_expr } ;
-
-primary_expr       = literal
-                   | identifier
-                   | member_expression
-                   | list_literal
+value_expression   = math_expr
                    | aggregate_expression
-                   | quantifier_expression
-                   | "(" expression ")" ;
+                   | primary_expr ;
 
-member_expression  = identifier "." identifier { "." identifier } ;
+math_expr          = value_expression ( "+" | "-" | "*" | "/" | "%" ) value_expression ;
 
-aggregate_expression
-                   = ( "sum" | "count" | "avg" ) "(" expression ")" ;
+let_binding        = "let" identifier "=" expression ;
+
+primary_expr       = call_expr
+                   | member_expression
+                   | timestamp_literal
+                   | temporal_duration_literal
+                   | decimal_literal
+                   | quantity_literal
+                   | number_literal
+                   | string_literal
+                   | bool_literal
+                   | list_literal
+                   | secret_ref
+                   | paren_expr
+                   | identifier ;
+
+member_expression  = ( member_expression | identifier ) "." identifier ;
+
+call_expr          = identifier "(" [ expression { "," expression } [ "," ] ] ")" ;
+
+secret_ref         = "secret" "(" string_literal ")" ;
+
+paren_expr         = "(" expression ")" ;
 
 quantifier_expression
-                   = ( "any" | "all" | "none" ) identifier "in" expression block_expr ;
+                   = ( "any" | "all" | "none" ) identifier "in" expression
+                     "{" expression "}" ;
+
+join_expression    = "join" join_binding { "," join_binding }
+                     [ "including_self" ]
+                     "on" ( expression | "." identifier )
+                     "{" expression "}" ;
+
+join_binding       = identifier ":" identifier ;
+
+aggregate_expression
+                   = identifier "(" value_expression "for" identifier "in" expression ")"
+                   | identifier "(" identifier "in" expression ")" ;
 ```
 
 ## Literals and Lexical Rules
 
 ```ebnf
 literal            = number_literal
+                   | decimal_literal
+                   | quantity_literal
+                   | timestamp_literal
+                   | temporal_duration_literal
                    | string_literal
                    | bool_literal
                    | list_literal ;
 
-list_literal       = "[" [ expression { "," expression } ] "]" ;
+list_literal       = "[" expression { "," expression } [ "," ] "]" ;
 bool_literal       = "true" | "false" ;
 
-identifier         = letter { letter | digit | "_" | "-" } ;
-number_literal     = integer_literal | float_literal ;
-string_literal     = "\"" { character } "\"" ;
-uri_literal        = string_literal | bare_uri ;
-duration_literal   = integer_literal ( "ms" | "s" | "m" | "h" ) ;
-percent_literal    = number_literal ;
+identifier         = letter { letter | digit | "_" } ;
+number_literal     = [ "-" ] digit { digit } [ "." digit { digit } ] [ ( "e" | "E" ) [ "+" | "-" ] digit { digit } ] ;
+decimal_literal    = number_literal currency_unit ;
+quantity_literal   = number_literal physical_unit ;
+timestamp_literal  = RFC3339 timestamp (e.g. "2025-01-15T00:00:00Z") ;
+temporal_duration_literal
+                   = number_literal ( "ms" | "s" | "m" | "hr" | "d" ) ;
+duration_literal   = { digit { digit } ( "ns" | "us" | "µs" | "ms" | "s" | "m" | "h" ) } ;
+string_literal     = '"' { character } '"' ;
+resource_literal   = non-whitespace, non-brace sequence ;
+
+currency_unit      = "USD" | "EUR" | "GBP" | "JPY" | "CNY" | "CHF" | "CAD" | "AUD"
+                   | "BTC" | "ETH" | "SOL" | "USDC" | "USDT" ;
+
+physical_unit      = "C" | "F" | "K"
+                   | "m" | "mm" | "cm" | "km" | "in" | "ft" | "yd" | "mi"
+                   | "g" | "mg" | "kg" | "lb" | "oz"
+                   | "s" | "ms" | "min" | "hr" | "d"
+                   | "m2" | "mm2" | "cm2" | "km2" | "ha" | "acre"
+                   | "L" | "mL" | "gal" | "fl_oz"
+                   | "m/s" | "km/h" | "mph" | "kn"
+                   | "L/min" | "L/hr" | "gal/min" | "m3/s"
+                   | "Pa" | "kPa" | "hPa" | "bar" | "atm" | "psi"
+                   | "A" | "mA" | "V" | "mV" | "kV" | "W" | "kW" | "MW" | "hp"
+                   | "J" | "kJ" | "cal" | "kcal" | "kWh"
+                   | "Hz" | "kHz" | "MHz" | "GHz"
+                   | "B" | "KB" | "MB" | "GB" | "TB"
+                   | "pct" | "ppm" | "ppb" | "%" ;
 ```
 
 Notes:
 
-- Comments may use `// ...` or bare `# ...` line comments.
+- Comments: `// ...`, `# ...` (line), or `/* ... */` (block).
 - `slack #channel` is parsed as a handler target, not as a comment.
+- `secret("path")` references are resolved at runtime, never stored in plaintext.
 - The hosted/runtime surface may intentionally support only a subset of the full
   declaration language at any given release; the language grammar is broader.

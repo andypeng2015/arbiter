@@ -9,7 +9,7 @@
 //	arbiter diff <base.arb> <candidate.arb> [--data '{...}' | --data-file contexts.json] [--key path] [--json] — compare governed outcomes
 //	arbiter replay <rules.arb> --audit decisions.jsonl [--request-id id] [--limit N] [--json] — replay audited rule decisions
 //	arbiter expert <file.arb> --envelope '{...}' [--facts '[...]'] — run one expert session
-//	arbiter test [file.test.arb] [--verbose] — run executable bundle specs
+//	arbiter test [file.test.arb] [--verbose] — test rules, flags, and scenarios against expected outcomes
 //	arbiter import <file.json> [-o output.arb] — decompile Arishem JSON to .arb
 //	arbiter serve [--grpc :8081] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
@@ -243,7 +243,7 @@ func runTest(args []string) error {
 				path = arg
 				continue
 			}
-			return usageError("Usage: arbiter test [file.test.arb] [--verbose]")
+			return usageError("Usage: arbiter test [file.test.arb] [--verbose]\n\nWrite a .test.arb file next to your .arb bundle to test rules, flags, and scenarios against expected outcomes.")
 		}
 	}
 	return testCmd(path, verbose)
@@ -501,7 +501,7 @@ func testCmd(path string, verbose bool) error {
 			return fmt.Errorf("resolve tests: %w", err)
 		}
 		if len(files) == 0 {
-			return fmt.Errorf("test requires a .test.arb path when the current directory has no *.test.arb files")
+			return fmt.Errorf("no .test.arb files found; create one next to your .arb bundle (e.g. pricing.test.arb for pricing.arb)")
 		}
 		paths = files
 	} else {
