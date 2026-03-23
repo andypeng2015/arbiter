@@ -105,6 +105,12 @@ func (s *server) handle(msg rpcMessage) []rpcMessage {
 		return []rpcMessage{s.handleHover(msg)}
 	case "textDocument/definition":
 		return []rpcMessage{s.handleDefinition(msg)}
+	case "textDocument/references":
+		return []rpcMessage{s.handleReferences(msg)}
+	case "textDocument/rename":
+		return []rpcMessage{s.handleRename(msg)}
+	case "textDocument/documentSymbol":
+		return []rpcMessage{s.handleDocumentSymbol(msg)}
 	default:
 		if msg.ID != nil {
 			return []rpcMessage{{
@@ -133,6 +139,9 @@ func (s *server) handleInitialize(msg rpcMessage) rpcMessage {
 				"completionProvider":   map[string]any{"triggerCharacters": []string{".", " "}},
 				"hoverProvider":        true,
 				"definitionProvider":   true,
+				"referencesProvider":   true,
+				"renameProvider":       true,
+				"documentSymbolProvider": true,
 				"diagnosticProvider":   map[string]any{"interFileDependencies": true, "workspaceDiagnostics": false},
 			},
 			"serverInfo": map[string]any{
@@ -509,8 +518,211 @@ func computeHover(source []byte, word string) string {
 // --- Definition ---
 
 func (s *server) handleDefinition(msg rpcMessage) rpcMessage {
-	// TODO: Implement go-to-definition by tracking declaration positions in IR.
-	return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: nil}
+	var params textDocumentPositionParams
+	json.Unmarshal(msg.Params, &params)
+
+	s.mu.Lock()
+	f, ok := s.files[params.TextDocument.URI]
+	if !ok {
+		s.mu.Unlock()
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: nil}
+	}
+	content := f.content
+	s.mu.Unlock()
+
+	word := wordAtPosition(content, params.Position.Line, params.Position.Character)
+	if word == "" {
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: nil}
+	}
+
+	span := findDefinition([]byte(content), word)
+	if span == nil {
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: nil}
+	}
+
+	return rpcMessage{
+		JSONRPC: "2.0",
+		ID:      msg.ID,
+		Result: map[string]any{
+			"uri": params.TextDocument.URI,
+			"range": map[string]any{
+				"start": map[string]any{"line": span.StartRow, "character": span.StartCol},
+				"end":   map[string]any{"line": span.EndRow, "character": span.EndCol},
+			},
+		},
+	}
+}
+
+// --- References ---
+
+func (s *server) handleReferences(msg rpcMessage) rpcMessage {
+	var params textDocumentPositionParams
+	json.Unmarshal(msg.Params, &params)
+
+	s.mu.Lock()
+	f, ok := s.files[params.TextDocument.URI]
+	if !ok {
+		s.mu.Unlock()
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: []any{}}
+	}
+	content := f.content
+	s.mu.Unlock()
+
+	word := wordAtPosition(content, params.Position.Line, params.Position.Character)
+	if word == "" {
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: []any{}}
+	}
+
+	refs := findReferences([]byte(content), word)
+	locations := make([]map[string]any, 0, len(refs))
+	for _, ref := range refs {
+		locations = append(locations, map[string]any{
+			"uri": params.TextDocument.URI,
+			"range": map[string]any{
+				"start": map[string]any{"line": ref.StartRow, "character": ref.StartCol},
+				"end":   map[string]any{"line": ref.EndRow, "character": ref.EndCol},
+			},
+		})
+	}
+	return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: locations}
+}
+
+// --- Rename ---
+
+func (s *server) handleRename(msg rpcMessage) rpcMessage {
+	var params struct {
+		TextDocument struct {
+			URI string `json:"uri"`
+		} `json:"textDocument"`
+		Position struct {
+			Line      int `json:"line"`
+			Character int `json:"character"`
+		} `json:"position"`
+		NewName string `json:"newName"`
+	}
+	json.Unmarshal(msg.Params, &params)
+
+	s.mu.Lock()
+	f, ok := s.files[params.TextDocument.URI]
+	if !ok {
+		s.mu.Unlock()
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: nil}
+	}
+	content := f.content
+	s.mu.Unlock()
+
+	word := wordAtPosition(content, params.Position.Line, params.Position.Character)
+	if word == "" {
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: nil}
+	}
+
+	// Find all occurrences of the word in the source for text-based rename.
+	lines := strings.Split(content, "\n")
+	var edits []map[string]any
+	for lineIdx, line := range lines {
+		start := 0
+		for {
+			idx := strings.Index(line[start:], word)
+			if idx < 0 {
+				break
+			}
+			pos := start + idx
+			// Check word boundaries.
+			if pos > 0 && isIdentChar(line[pos-1]) {
+				start = pos + len(word)
+				continue
+			}
+			end := pos + len(word)
+			if end < len(line) && isIdentChar(line[end]) {
+				start = end
+				continue
+			}
+			edits = append(edits, map[string]any{
+				"range": map[string]any{
+					"start": map[string]any{"line": lineIdx, "character": pos},
+					"end":   map[string]any{"line": lineIdx, "character": end},
+				},
+				"newText": params.NewName,
+			})
+			start = end
+		}
+	}
+
+	if len(edits) == 0 {
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: nil}
+	}
+
+	return rpcMessage{
+		JSONRPC: "2.0",
+		ID:      msg.ID,
+		Result: map[string]any{
+			"changes": map[string]any{
+				params.TextDocument.URI: edits,
+			},
+		},
+	}
+}
+
+// --- Document Symbols ---
+
+func (s *server) handleDocumentSymbol(msg rpcMessage) rpcMessage {
+	var params struct {
+		TextDocument struct {
+			URI string `json:"uri"`
+		} `json:"textDocument"`
+	}
+	json.Unmarshal(msg.Params, &params)
+
+	s.mu.Lock()
+	f, ok := s.files[params.TextDocument.URI]
+	if !ok {
+		s.mu.Unlock()
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: []any{}}
+	}
+	content := f.content
+	s.mu.Unlock()
+
+	syms := getSymbols([]byte(content))
+	result := make([]map[string]any, 0, len(syms))
+	for _, sym := range syms {
+		kind := symbolKind(sym.kind)
+		result = append(result, map[string]any{
+			"name": sym.name,
+			"kind": kind,
+			"range": map[string]any{
+				"start": map[string]any{"line": sym.span.StartRow, "character": sym.span.StartCol},
+				"end":   map[string]any{"line": sym.span.EndRow, "character": sym.span.EndCol},
+			},
+			"selectionRange": map[string]any{
+				"start": map[string]any{"line": sym.span.StartRow, "character": sym.span.StartCol},
+				"end":   map[string]any{"line": sym.span.StartRow, "character": sym.span.StartCol + uint32(len(sym.name))},
+			},
+		})
+	}
+	return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: result}
+}
+
+func symbolKind(kind string) int {
+	switch kind {
+	case "rule", "expert":
+		return 12 // Function
+	case "fact", "outcome":
+		return 23 // Struct
+	case "segment":
+		return 14 // Enum
+	case "strategy":
+		return 6 // Method
+	case "const":
+		return 14 // Constant
+	case "flag":
+		return 8 // Field
+	case "worker":
+		return 9 // Constructor
+	case "arbiter":
+		return 2 // Module
+	default:
+		return 1 // File
+	}
 }
 
 // --- Helpers ---
