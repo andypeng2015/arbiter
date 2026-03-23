@@ -23,18 +23,12 @@ jobs:
         run: go vet ./...
 
       - name: Build CLI
-        run: go build -o /dev/null ./cmd/arbiter
-
-      - name: Build CLI (slim)
         run: go build -tags grammar_blobs_external -o /dev/null ./cmd/arbiter
 
       - name: Build Agent
-        run: go build -o /dev/null ./cmd/arbiter-agent
+        run: go build -tags grammar_blobs_external -o /dev/null ./cmd/arbiter-agent
 
       - name: Build WASM
-        run: GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/arbiter-wasm
-
-      - name: Build WASM (slim)
         run: GOOS=js GOARCH=wasm go build -tags grammar_blobs_external -o /dev/null ./cmd/arbiter-wasm
 
       - name: Check grammar
