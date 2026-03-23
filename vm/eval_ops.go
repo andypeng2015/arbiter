@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/odvcencio/arbiter/compiler"
+	dec "github.com/odvcencio/arbiter/decimal"
 	"github.com/odvcencio/arbiter/intern"
 )
 
@@ -171,16 +172,56 @@ func (vm *VM) evalMathOp(ip uint32, op compiler.OpCode) (uint32, bool) {
 	case compiler.OpMul:
 		b, a := vm.pop(), vm.pop()
 		if a.Typ == TypeDecimal || b.Typ == TypeDecimal {
-			vm.setErr(fmt.Errorf("operator * does not support decimal operands"))
-			vm.push(NullVal())
+			ad, aok := a.Any.(dec.Value)
+			bd, bok := b.Any.(dec.Value)
+			if !aok && a.Typ == TypeNumber {
+				ad = dec.MustParse(fmt.Sprintf("%g", a.Num), "")
+				aok = true
+			}
+			if !bok && b.Typ == TypeNumber {
+				bd = dec.MustParse(fmt.Sprintf("%g", b.Num), "")
+				bok = true
+			}
+			if aok && bok {
+				result, err := ad.Mul(bd)
+				if err != nil {
+					vm.setErr(err)
+					vm.push(NullVal())
+				} else {
+					vm.push(DecimalVal(result))
+				}
+			} else {
+				vm.setErr(fmt.Errorf("operator * requires numeric operands"))
+				vm.push(NullVal())
+			}
 			break
 		}
 		vm.push(NumVal(vm.toNum(a) * vm.toNum(b)))
 	case compiler.OpDiv:
 		b, a := vm.pop(), vm.pop()
 		if a.Typ == TypeDecimal || b.Typ == TypeDecimal {
-			vm.setErr(fmt.Errorf("operator / does not support decimal operands"))
-			vm.push(NullVal())
+			ad, aok := a.Any.(dec.Value)
+			bd, bok := b.Any.(dec.Value)
+			if !aok && a.Typ == TypeNumber {
+				ad = dec.MustParse(fmt.Sprintf("%g", a.Num), "")
+				aok = true
+			}
+			if !bok && b.Typ == TypeNumber {
+				bd = dec.MustParse(fmt.Sprintf("%g", b.Num), "")
+				bok = true
+			}
+			if aok && bok {
+				result, err := ad.Div(bd, 10)
+				if err != nil {
+					vm.setErr(err)
+					vm.push(NullVal())
+				} else {
+					vm.push(DecimalVal(result))
+				}
+			} else {
+				vm.setErr(fmt.Errorf("operator / requires numeric operands"))
+				vm.push(NullVal())
+			}
 			break
 		}
 		denom := vm.toNum(b)
@@ -192,8 +233,20 @@ func (vm *VM) evalMathOp(ip uint32, op compiler.OpCode) (uint32, bool) {
 	case compiler.OpMod:
 		b, a := vm.pop(), vm.pop()
 		if a.Typ == TypeDecimal || b.Typ == TypeDecimal {
-			vm.setErr(fmt.Errorf("operator %% does not support decimal operands"))
-			vm.push(NullVal())
+			ad, aok := a.Any.(dec.Value)
+			bd, bok := b.Any.(dec.Value)
+			if aok && bok {
+				result, err := ad.Mod(bd)
+				if err != nil {
+					vm.setErr(err)
+					vm.push(NullVal())
+				} else {
+					vm.push(DecimalVal(result))
+				}
+			} else {
+				vm.setErr(fmt.Errorf("operator %% requires decimal operands"))
+				vm.push(NullVal())
+			}
 			break
 		}
 		denom := vm.toNum(b)

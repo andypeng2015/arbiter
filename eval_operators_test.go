@@ -1135,3 +1135,39 @@ func TestEvalFraudInstantBlock(t *testing.T) {
 		t.Error("normal account should not trigger block")
 	}
 }
+
+func TestDecimalArithmetic(t *testing.T) {
+	src := `
+rule Invoice {
+	when { true }
+	then Total {
+		amount: item.price * item.qty,
+	}
+}
+`
+	rs, err := Compile([]byte(src))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	dc := DataFromMap(map[string]any{
+		"item": map[string]any{
+			"price": dec.MustParse("49.99", "USD"),
+			"qty":   dec.MustParse("3", ""),
+		},
+	}, rs)
+	matched, err := Eval(rs, dc)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	if len(matched) == 0 {
+		t.Fatal("no match")
+	}
+	amount, ok := matched[0].Params["amount"].(dec.Value)
+	if !ok {
+		t.Fatalf("amount not decimal: %T %v", matched[0].Params["amount"], matched[0].Params["amount"])
+	}
+	expected := dec.MustParse("149.97", "USD")
+	if !amount.Equal(expected) {
+		t.Errorf("expected %s, got %s", expected, amount)
+	}
+}

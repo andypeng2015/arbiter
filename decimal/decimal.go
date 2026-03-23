@@ -148,6 +148,73 @@ func (v Value) Sub(other Value) (Value, error) {
 	return normalize(diff.String(), scale, v.unit)
 }
 
+// Mul multiplies two decimals. The result unit is the left operand's unit
+// (right must be unitless) or both must be unitless.
+func (v Value) Mul(other Value) (Value, error) {
+	unit := v.unit
+	if other.unit != "" {
+		if v.unit == "" {
+			unit = other.unit
+		} else {
+			return Value{}, fmt.Errorf("cannot multiply %q by %q — at least one operand must be unitless", v.unit, other.unit)
+		}
+	}
+	a := mustBig(v.coeff)
+	b := mustBig(other.coeff)
+	product := new(big.Int).Mul(a, b)
+	return normalize(product.String(), v.scale+other.scale, unit)
+}
+
+// Div divides two decimals. Both must share the same unit (result is unitless)
+// or the divisor must be unitless (result keeps the dividend's unit).
+func (v Value) Div(other Value, precision int32) (Value, error) {
+	if other.coeff == "0" {
+		return Value{}, fmt.Errorf("division by zero")
+	}
+	unit := v.unit
+	if other.unit != "" {
+		if v.unit == other.unit {
+			unit = "" // same-unit division yields unitless ratio
+		} else {
+			return Value{}, fmt.Errorf("cannot divide %q by %q", v.unit, other.unit)
+		}
+	}
+	if precision <= 0 {
+		precision = 10
+	}
+	// Scale numerator up for precision, then divide.
+	a := mustBig(v.coeff)
+	b := mustBig(other.coeff)
+	pow := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(precision)), nil)
+	scaled := new(big.Int).Mul(a, pow)
+	quotient := new(big.Int).Div(scaled, b)
+	totalScale := v.scale - other.scale + precision
+	if totalScale < 0 {
+		// Scale back up if the subtraction went negative.
+		pow2 := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-totalScale)), nil)
+		quotient.Mul(quotient, pow2)
+		totalScale = 0
+	}
+	return normalize(quotient.String(), totalScale, unit)
+}
+
+// Mod computes the remainder of dividing two decimals with the same unit.
+func (v Value) Mod(other Value) (Value, error) {
+	if v.unit != other.unit {
+		return Value{}, fmt.Errorf("unit mismatch: %q vs %q", v.unit, other.unit)
+	}
+	if other.coeff == "0" {
+		return Value{}, fmt.Errorf("modulo by zero")
+	}
+	left, right := align(v, other)
+	rem := new(big.Int).Mod(left, right)
+	scale := v.scale
+	if other.scale > scale {
+		scale = other.scale
+	}
+	return normalize(rem.String(), scale, v.unit)
+}
+
 // Abs returns the absolute value.
 func (v Value) Abs() Value {
 	if strings.HasPrefix(v.coeff, "-") {

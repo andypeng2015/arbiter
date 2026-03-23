@@ -857,20 +857,69 @@ none item in cart.items { item.banned == true }
 
 ```text
 intern/       Constant pool — deduplicates strings and numbers across all rules
-compiler/     CST → bytecode compiler + Arishem JSON loader
-vm/           Stack-based bytecode VM (fixed 256-element stack, low-allocation eval)
+compiler/     CST → IR → bytecode compiler (with constant folding) + Arishem JSON loader
+ir/           Intermediate representation with optimization passes (constant folding)
+vm/           Stack-based bytecode VM (fixed 256-element stack, thread-safe string pool)
 govern/       Governance primitives: segments, rollouts, kill switches, prerequisites, trace
 flags/        Feature flags: variants, schema validation, secret references, hot reload
 strategy/     Native decision trees: exactly-one governed routing with trace
 expert/       Forward-chaining inference: working memory, assert/emit/retract/modify, activation trace
+workflow/     Multi-arbiter chaining: outcome→fact mapping, topological ordering, delivery
 audit/        Durable decision logging (Sink interface, JSONL default)
 overrides/    Runtime governance overrides (kill switches, rollout percentages)
 grpcserver/   gRPC service: bundle registry, evaluation, flag resolution, expert sessions
+dataplane/    Agent sidecar: local compiled cache, bundle/override watch streams
+arbtest/      Test framework: .test.arb files for rules, flags, strategies, expert scenarios
 decompile/    Bytecode → Arishem JSON
-sourceunit.go Multi-file include expansion for file-backed APIs
+decimal/      Exact fixed-point arithmetic (add, sub, mul, div, mod) with unit validation
+units/        70+ units across 17 dimensions with base-unit conversion
+sourceunit.go Multi-file include expansion with pluggable IncludeResolver interface
 ```
 
-Flat `[]byte` of fixed-width 4-byte instructions: `[opcode(1B), flags(1B), arg(2B)]`. Constant pool indices are `uint16`, giving 65K unique values per type. The parser uses [gotreesitter](https://github.com/odvcencio/gotreesitter), and the repo now ships both a tree-sitter highlight query and a minimal VS Code language package for `.arb` files.
+Flat `[]byte` of fixed-width 4-byte instructions: `[opcode(1B), flags(1B), arg(2B)]`. Constant pool indices are `uint16`, giving 65K unique values per type. The parser uses [gotreesitter](https://github.com/odvcencio/gotreesitter), and the repo ships a tree-sitter highlight query and a VS Code language package for `.arb` files.
+
+### Dataplane Agent
+
+`cmd/arbiter-agent` is a localhost sidecar that watches the control plane for bundle and override updates. It caches compiled snapshots locally for subsecond evaluation without network round-trips.
+
+```bash
+arbiter-agent --upstream 127.0.0.1:8081 --grpc 127.0.0.1:7081 --bundle-name checkout --bundle-name pricing
+```
+
+### WASM Target
+
+`cmd/arbiter-wasm` compiles to WebAssembly for browser and edge evaluation.
+
+```bash
+GOOS=js GOARCH=wasm go build -o arbiter.wasm ./cmd/arbiter-wasm
+```
+
+Exposes `arbiterCompile`, `arbiterEval`, `arbiterEvalGoverned`, and `arbiterEvalStrategy` to JavaScript. Includes `loader.js` for Node.js and browser environments.
+
+### Typed Evaluation
+
+Go generics map structs directly to evaluation contexts via `arb` struct tags:
+
+```go
+type Order struct {
+    Total  float64 `arb:"order.total"`
+    Region string  `arb:"order.region"`
+}
+
+matched, trace, err := arbiter.EvalGovernedTyped(compiled, Order{Total: 150, Region: "US"})
+```
+
+### Include Resolver
+
+Include resolution is pluggable via the `IncludeResolver` interface. The default reads from the filesystem; custom implementations can resolve from HTTP, registries, or in-memory sources.
+
+```go
+unit, err := arbiter.LoadFileUnitWithResolver("rules.arb", myHTTPResolver)
+```
+
+### Multi-Error Recovery
+
+The compiler reports all errors in one pass. Lowering and validation accumulate errors across declarations and return them via `errors.Join`. The CLI and VS Code extension display all diagnostics at once.
 
 ## Examples
 
@@ -962,14 +1011,24 @@ What you can rely on today:
 - Stateless rule evaluation at sub-microsecond latency
 - Feature flag resolution with segments, rollouts, prerequisites, and kill switches
 - Expert inference with forward-chaining, truth maintenance, and reversible overlays
+- Strategy evaluation with governed candidate selection
 - The `.arb` language syntax and governance keywords
 - gRPC bundle management with versioning, activation, and rollback
+- gRPC expert sessions with assert, retract, run, and trace
 - Audit trail on every decision
 - Decision diff and replay via CLI
+- Concurrency-safe evaluation (race-tested, thread-safe string pool)
+- IR constant folding optimization
+- Multi-error compiler diagnostics
+- Exact decimal arithmetic (add, sub, mul, div, mod) with unit validation
+- WASM compilation target for browser and edge evaluation
+- Pluggable include resolution
+- `.test.arb` test framework covering all four evaluation modes
 
 What is evolving:
 
-- Continuous arbiter runtime (poll-based execution is stable; streaming and scheduled triggers are defined in the language but not yet orchestrated by the hosted runtime)
+- Continuous arbiter runtime (poll-based execution is stable; streaming and scheduled triggers are defined in the language but orchestrated by the Orchard runtime platform, not this repo)
+- Worker execution (declarations are parsed and validated; dispatch to external handlers is orchestrated by the Orchard runtime platform)
 - Fact source and sink plugin ecosystem (CSV, JSON, JSONL, HTTP, Terraform, and Google Sheets are shipped; additional connectors are straightforward to add via the `Loader`/`Saver` interfaces)
 - SDK coverage (Node, Python, and Rust gRPC stubs are generated; idiomatic wrapper libraries are not yet built)
 - Multi-arbiter workflow chaining (functional and tested; production deployment patterns are still forming)

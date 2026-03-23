@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.12.0
+
+### Decimal Arithmetic
+
+- **Multiply, divide, and modulo for exact decimals** — `price * quantity`, `total / count`, and `amount % threshold` now work with `decimal` values (e.g., `49.99 USD * 3 = 149.97 USD`). Unit propagation follows: unitless * unit → unit, same-unit / same-unit → unitless. Division uses 10-digit precision. Division and modulo by zero return errors.
+
+### Documentation
+
+- **README overhaul** — added dataplane agent, WASM target, typed evaluation (generics), `IncludeResolver` interface, multi-error recovery, decimal arithmetic, IR constant folding, test framework, workflow and units packages to the architecture section. Clarified that continuous arbiter and worker runtime execution is orchestrated by Orchard, not this repo. Updated status section with all v0.9.0–v0.12.0 features.
+
+### Corrections
+
+- gRPC expert sessions (StartSession, RunSession, AssertFacts, RetractFacts, GetSessionTrace, CloseSession) were already fully implemented in `grpcserver/expert.go`. All 22 proto methods are live. Previous evaluation incorrectly reported them as missing.
+
+---
+
 ## v0.11.0
 
 ### Multi-Error Recovery
