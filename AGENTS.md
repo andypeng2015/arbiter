@@ -1,18 +1,51 @@
 # Arbiter Agent Instructions
 
-## gts / Orchard Safety
+## What This Is
 
-- Do not run raw `gts` commands in this repo. Use [`scripts/gts-safe`](/home/draco/work/arbiter/scripts/gts-safe) instead.
-- Do not run more than one `gts` process at a time. The wrapper enforces a repo lock for this.
-- Prefer cached reads, but do not default to `scripts/gts-safe index .` on this repo. Build a cache only for a narrowly scoped directory when it is genuinely needed, then let the wrapper inject `--cache .gts/index.json` for follow-up reads.
-- Scope structural analysis to the narrowest path that answers the question. Do not point `gts` at the whole repo unless that scope is actually required.
-- Do not launch background `gts` jobs, `gts mcp`, or `gts index --watch` unless the user explicitly asks for a long-lived session. The wrapper blocks those modes unless `GTS_ALLOW_LONG_RUNNING=1` is set.
-- Do not use `gts refactor --write` or `gts mcp --allow-writes` unless the user explicitly asked for a write operation. The wrapper blocks those modes unless `GTS_ALLOW_WRITES=1` is set.
-- Default safety budget for `scripts/gts-safe`: `GOMAXPROCS=2`, `GOMEMLIMIT=2GiB`, `GOGC=50`, and a 120s timeout for one-shot commands. Override only with clear need.
-- Full-repo indexing is currently treated as exceptional work. On this repo, a root `gts index .` exceeded the default 120s budget and peaked around 2.4 GiB RSS, so prefer direct code reads unless a scoped `gts` query is clearly the better tradeoff.
+Arbiter is a Go rule engine and decision service. It compiles `.arb` rule files to bytecode and evaluates them via a VM. Four evaluation modes: stateless eval, feature flags, expert inference (forward-chaining), and continuous arbiters (always-on workflows). Module path: `github.com/odvcencio/arbiter`.
 
-## General Workflow
+## Build & Test
 
-- For repo analysis, mix targeted code reads with a small number of `scripts/gts-safe` queries rather than fan-out background investigations.
-- Before heavy structural analysis, check whether `.gts/index.json` already exists and reuse it when possible.
-- If a `gts` command times out or hits the repo lock, narrow the scope instead of retrying in parallel.
+```bash
+go test ./... -count=1 -short -timeout=120s   # run tests
+go vet ./...                                    # lint
+go build ./cmd/arbiter                          # build CLI
+go build ./cmd/arbiter-agent                    # build agent
+go run ./cmd/arbiter check testdata/fraud.arb   # validate a rule file
+```
+
+## Commits
+
+- Use `buckley commit --yes -min -graft` — not `git commit`.
+- No Co-Authored-By lines.
+- Never commit spec docs, plans, or design documents.
+- Entity extraction always on (never `--skip-entities`).
+
+## Agent Coordination
+
+- Register with a tree species name: `graft workon --as "{name}"` (birch, cedar, maple, oak, etc.)
+- Run `graft coord check` before committing.
+- Sign off when done: `graft workon --done --as "{name}"`
+
+## Deploy
+
+- Dockerfile: `deploy/Dockerfile` — multi-stage Alpine build, entry point `arbiter serve --grpc :8081`
+- K8s manifests: `deploy/k8s.yaml` — Harbor registry at `harbor.draco.quest/orchard/arbiter:latest`
+- Use `kubectl`, not docker compose or Helm.
+
+## Key Directories
+
+| Path | Purpose |
+|------|---------|
+| `compiler/` | Bytecode compiler pipeline |
+| `vm/` | Virtual machine execution |
+| `ir/` | Intermediate representation |
+| `expert/` | Forward-chaining expert inference |
+| `workflow/` | Continuous arbiter runtime |
+| `govern/` | Kill switches, rollouts, prerequisites |
+| `strategy/` | Strategy declaration evaluation |
+| `flags/` | Feature flag resolution |
+| `dataplane/` | Data plane and fact sources |
+| `cmd/arbiter/` | CLI (check, compile, eval, diff, replay, serve, etc.) |
+| `sdks/` | Node, Python, Rust client SDKs |
+| `examples/` | Example `.arb` files |
