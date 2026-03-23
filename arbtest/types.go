@@ -54,11 +54,12 @@ type FactSpec struct {
 type ExpectationKind string
 
 const (
-	ExpectRule    ExpectationKind = "rule"
-	ExpectAction  ExpectationKind = "action"
-	ExpectFlag    ExpectationKind = "flag"
-	ExpectFact    ExpectationKind = "fact"
-	ExpectOutcome ExpectationKind = "outcome"
+	ExpectRule     ExpectationKind = "rule"
+	ExpectAction   ExpectationKind = "action"
+	ExpectFlag     ExpectationKind = "flag"
+	ExpectFact     ExpectationKind = "fact"
+	ExpectOutcome  ExpectationKind = "outcome"
+	ExpectStrategy ExpectationKind = "strategy"
 )
 
 // FieldMatchKind identifies how a field expectation is evaluated.
@@ -84,6 +85,7 @@ type FieldExpectation struct {
 type Expectation struct {
 	Kind        ExpectationKind
 	Target      string
+	Selected    string // strategy candidate label
 	Negated     bool
 	RuleMatched bool
 	Value       any

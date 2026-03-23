@@ -114,7 +114,7 @@ func runTestCase(test TestCase, full *arbiter.CompileResult, flagSet *flags.Flag
 			result.Error = "flag expectation requires loaded flags"
 			return result
 		}
-		details, err := evaluateStatelessExpectation(expectation, matched, flagSet, test.Given)
+		details, err := evaluateStatelessExpectation(expectation, matched, full, flagSet, test.Given)
 		if err != nil {
 			result.Passed = false
 			result.Details = append(result.Details, details...)
@@ -289,7 +289,7 @@ func runContinuousScenario(scenario Scenario, bundlePath string, full *arbiter.C
 	return result
 }
 
-func evaluateStatelessExpectation(expectation Expectation, matched []vm.MatchedRule, flagSet *flags.Flags, ctx map[string]any) ([]string, error) {
+func evaluateStatelessExpectation(expectation Expectation, matched []vm.MatchedRule, full *arbiter.CompileResult, flagSet *flags.Flags, ctx map[string]any) ([]string, error) {
 	switch expectation.Kind {
 	case ExpectRule:
 		ruleMatched := false
@@ -330,6 +330,27 @@ func evaluateStatelessExpectation(expectation Expectation, matched []vm.MatchedR
 			return nil, fmt.Errorf("expected flag %s == %v, got %v", expectation.Target, expectation.Value, got)
 		}
 		return []string{fmt.Sprintf("flag %s ok", expectation.Target)}, nil
+	case ExpectStrategy:
+		if full == nil || full.Strategies == nil {
+			return nil, fmt.Errorf("strategy expectation requires compiled strategies")
+		}
+		result, err := arbiter.EvalStrategy(full, expectation.Target, ctx)
+		if err != nil {
+			return nil, fmt.Errorf("strategy %s: %v", expectation.Target, err)
+		}
+		if result.Selected != expectation.Selected {
+			return nil, fmt.Errorf("expected strategy %s selected %s, got %s", expectation.Target, expectation.Selected, result.Selected)
+		}
+		if len(expectation.Fields) > 0 {
+			ok, err := matchFields(result.Params, expectation.Fields)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, fmt.Errorf("expected strategy %s selected %s with matching params, got %v", expectation.Target, expectation.Selected, result.Params)
+			}
+		}
+		return []string{fmt.Sprintf("strategy %s selected %s ok", expectation.Target, expectation.Selected)}, nil
 	default:
 		return nil, fmt.Errorf("unsupported stateless expectation kind %s", expectation.Kind)
 	}

@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9.0
+
+### Testing
+
+- **Strategy assertions in `.test.arb`** — `expect strategy X selected Y { field: value }` tests that a strategy selects the expected candidate with the expected params. Covers candidate selection, else-arm fallthrough, and param matching.
+
+### Documentation
+
+- **Grammar EBNF update** — added fact/outcome/feature/worker declarations, schema types, expert temporal clauses, join expressions, decimal/quantity/timestamp literals, and the full unit table.
+- **AGENTS.md rewrite** — project context, build commands, commit rules, deploy info, and key directories.
+- **`arbiter test` framing** — CLI help and changelog now describe testing in plain language instead of "executable bundle specs."
+
+---
+
 ## v0.8.0
 
 ### Workers

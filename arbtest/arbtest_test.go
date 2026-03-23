@@ -8,6 +8,85 @@ import (
 	"github.com/odvcencio/arbiter/arbtest"
 )
 
+func TestRunFileStrategy(t *testing.T) {
+	dir := t.TempDir()
+	bundlePath := filepath.Join(dir, "bundle.arb")
+	testPath := filepath.Join(dir, "bundle.test.arb")
+
+	bundle := `
+outcome CheckoutPath {
+	target: string
+	currency: string
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	when {
+		user.country == "US"
+	} then Domestic {
+		target: "us-checkout",
+		currency: "USD",
+	}
+
+	when {
+		user.country == "GB"
+	} then UK {
+		target: "uk-checkout",
+		currency: "GBP",
+	}
+
+	else Global {
+		target: "global-checkout",
+		currency: "USD",
+	}
+}
+`
+	testSuite := `
+test "US user routes to domestic checkout" {
+	given {
+		user.country: "US"
+	}
+	expect strategy CheckoutRouting selected Domestic { target: "us-checkout", currency: "USD" }
+}
+
+test "GB user routes to UK checkout" {
+	given {
+		user.country: "GB"
+	}
+	expect strategy CheckoutRouting selected UK { target: "uk-checkout" }
+}
+
+test "unknown country falls through to global" {
+	given {
+		user.country: "BR"
+	}
+	expect strategy CheckoutRouting selected Global
+}
+`
+
+	if err := os.WriteFile(bundlePath, []byte(bundle), 0o644); err != nil {
+		t.Fatalf("write bundle: %v", err)
+	}
+	if err := os.WriteFile(testPath, []byte(testSuite), 0o644); err != nil {
+		t.Fatalf("write test suite: %v", err)
+	}
+
+	result, err := arbtest.RunFile(testPath, arbtest.Options{})
+	if err != nil {
+		t.Fatalf("RunFile: %v", err)
+	}
+	if result.Failed != 0 {
+		for _, c := range result.Cases {
+			if !c.Passed {
+				t.Errorf("[FAIL] %s: %s", c.Name, c.Error)
+			}
+		}
+		t.Fatalf("expected no failures, got %d failed", result.Failed)
+	}
+	if result.Passed != 3 {
+		t.Fatalf("expected 3 passed cases, got %d", result.Passed)
+	}
+}
+
 func TestRunFile(t *testing.T) {
 	dir := t.TempDir()
 	bundlePath := filepath.Join(dir, "bundle.arb")

@@ -392,6 +392,9 @@ func (p *parser) parseExpectation() (Expectation, error) {
 	if p.peekKeyword("rule") {
 		return p.parseRuleExpectation()
 	}
+	if p.peekKeyword("strategy") {
+		return p.parseStrategyExpectation()
+	}
 	negated := false
 	if p.peekKeyword("no") {
 		if err := p.consumeKeyword("no"); err != nil {
@@ -415,8 +418,39 @@ func (p *parser) parseExpectation() (Expectation, error) {
 	case p.peekKeyword("outcome"):
 		return p.parseEntityExpectation(ExpectOutcome, negated)
 	default:
-		return Expectation{}, p.errorf("expected rule, action, flag, fact, or outcome")
+		return Expectation{}, p.errorf("expected rule, action, flag, fact, outcome, or strategy")
 	}
+}
+
+func (p *parser) parseStrategyExpectation() (Expectation, error) {
+	if err := p.consumeKeyword("strategy"); err != nil {
+		return Expectation{}, err
+	}
+	target, err := p.parseIdentifier()
+	if err != nil {
+		return Expectation{}, err
+	}
+	if err := p.consumeKeyword("selected"); err != nil {
+		return Expectation{}, err
+	}
+	selected, err := p.parseIdentifier()
+	if err != nil {
+		return Expectation{}, err
+	}
+	fields := make(map[string]FieldExpectation)
+	p.skipSpace()
+	if p.peek() == '{' {
+		fields, err = p.parseExpectationMap()
+		if err != nil {
+			return Expectation{}, err
+		}
+	}
+	return Expectation{
+		Kind:     ExpectStrategy,
+		Target:   target,
+		Selected: selected,
+		Fields:   fields,
+	}, nil
 }
 
 func (p *parser) parseRuleExpectation() (Expectation, error) {
