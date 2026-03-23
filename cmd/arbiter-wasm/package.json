@@ -1,0 +1,17 @@
+{
+  "name": "@arbiter/wasm",
+  "version": "0.12.0",
+  "description": "Arbiter decision language — all four evaluation modes in WASM",
+  "main": "loader.js",
+  "types": "arbiter.d.ts",
+  "files": [
+    "loader.js",
+    "arbiter.d.ts",
+    "arbiter.wasm"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/odvcencio/arbiter"
+  }
+}
