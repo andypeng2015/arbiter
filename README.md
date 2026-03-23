@@ -238,6 +238,35 @@ The declaration surface is built around a few ideas:
 - `on Outcome where ... handler target` routes by outcome fields, not just outcome name
 - `checkpoint path` marks the arbiter as stateful across restarts
 
+Workers fit beside arbiters as named typed capabilities, not as a second decision modality. An arbiter still owns triggers, working memory, governance, and routing. A worker owns a typed input, a typed output, and one runtime transport.
+
+```arb
+outcome RiskAlert {
+    key: string
+    severity: string
+}
+
+fact ExecutionResult {
+    status: string
+}
+
+worker kill_all_orders {
+    input RiskAlert
+    output ExecutionResult
+    exec "kill-all-orders"
+}
+
+arbiter trading_system {
+    poll 5s
+    source https://exchange.internal/risk
+    source worker://kill_all_orders
+
+    on RiskAlert where severity == "critical" worker kill_all_orders
+}
+```
+
+`source worker://name` is runtime-owned: the runner materializes successful worker results there on the next tick so expert rules can reason about them without turning worker execution into an imperative in-tick loop.
+
 The runtime-side fact adapters already ship separately in `expert/factsource`. Today that includes `.csv`, `.json`, `.jsonl`, `http(s)://`, `gsheet://SPREADSHEET_ID/SheetName`, versioned `postgres://...` tables, and Terraform/HCL inputs via `.tf`, `.tfvars`, `.hcl`, and `terraform://...`.
 
 ```go
@@ -285,6 +314,23 @@ runner, _ := workflow.NewRunner(w, workflow.RunnerOptions{
             return deliverWebhook(ctx, d.Handler.Target, d.Outcome)
         }),
     },
+    WorkerHandlers: map[arbiter.ArbiterHandlerKind]workflow.WorkerHandler{
+        arbiter.ArbiterHandlerExec: workflow.WorkerHandlerFunc(func(ctx context.Context, invocation workflow.WorkerInvocation) (workflow.WorkerExecution, error) {
+            err := runKillAllOrders(ctx, invocation.Delivery.Outcome)
+            if err != nil {
+                return workflow.WorkerExecution{}, err
+            }
+            return workflow.WorkerExecution{
+                Facts: []expert.Fact{{
+                    Type: "ExecutionResult",
+                    Key:  invocation.Delivery.Outcome.Params["key"].(string),
+                    Fields: map[string]any{
+                        "status": "submitted",
+                    },
+                }},
+            }, nil
+        }),
+    },
 })
 tick, _ := runner.Tick(context.Background())
 _ = tick.Sources["https://transactions.internal/feed"]
@@ -305,7 +351,7 @@ expert rule HaltOnStaleFeed priority 0 {
 }
 ```
 
-`workflow` still owns `chain://...` sources, validates that chain handlers and chain sources agree, and rejects cyclic arbiter graphs. Built-in delivery implementations cover `audit` and `stdout`; `webhook`, `slack`, `exec`, and `grpc` stay pluggable through `RunnerOptions.Handlers` so deployments can supply their own transport behavior without forking the runtime.
+`workflow` still owns `chain://...` and `worker://...` sources, validates that chain handlers and worker sources point at declared runtime objects, and rejects cyclic arbiter graphs. Built-in delivery implementations cover `audit` and `stdout`; `webhook`, `slack`, `exec`, and `grpc` stay pluggable through `RunnerOptions.Handlers` and `RunnerOptions.WorkerHandlers` so deployments can supply their own transport behavior without forking the runtime.
 
 Arbiters are always killable by default. There is no `kill_switch` keyword inside an `arbiter` block because the loop should run unless a runtime stop path is used. The exact stop path can vary by deployment, but the invariant is the same: every arbiter must be stoppable quickly. In practice that can be wired through several control paths, including a control-plane override, a local override file, parent-context cancellation, or ordinary process shutdown/signal handling.
 

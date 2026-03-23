@@ -103,6 +103,18 @@ strategy RouteHeat returns HeatWarning {
 	}
 }
 
+worker notify_ops {
+	input HeatWarning
+	output HeatWarning
+	webhook https://hooks.internal/heat
+}
+
+arbiter greenhouse {
+	poll 30s
+	source worker://notify_ops
+	on HeatWarning worker notify_ops
+}
+
 expert rule HeatStress {
 	when { input.hot == true } for 10m
 	then emit HeatWarning {
@@ -121,6 +133,9 @@ expert rule HeatStress {
 	}
 	if !strings.Contains(out, `"strategies"`) {
 		t.Fatalf("expected explore output to include strategies, got %s", out)
+	}
+	if !strings.Contains(out, `"workers"`) || !strings.Contains(out, `"arbiters"`) {
+		t.Fatalf("expected explore output to include workers and arbiters, got %s", out)
 	}
 	if !strings.Contains(out, `"SAFE_TEMP"`) {
 		t.Fatalf("expected explore output to include constants, got %s", out)

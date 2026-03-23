@@ -49,6 +49,12 @@ func TranspileParsed(parsed *ParsedSource) (string, error) {
 	if len(program.Strategies) > 0 {
 		return "", fmt.Errorf("bundle contains strategy declarations; Arishem JSON emit only supports rules")
 	}
+	if len(program.Workers) > 0 {
+		return "", fmt.Errorf("bundle contains worker declarations; Arishem JSON emit only supports rules")
+	}
+	if len(program.Arbiters) > 0 {
+		return "", fmt.Errorf("bundle contains arbiter declarations; Arishem JSON emit only supports rules")
+	}
 	result := emitIRProgram(program)
 	out, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {

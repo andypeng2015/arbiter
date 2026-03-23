@@ -66,6 +66,28 @@ type compiledOutcomeFilter struct {
 	ruleset *compiler.CompiledRuleset
 }
 
+const workerSourceScheme = "worker://"
+
+func isChainSourceTarget(target string) bool {
+	return strings.HasPrefix(target, "chain://")
+}
+
+func isWorkerSourceTarget(target string) bool {
+	return strings.HasPrefix(target, workerSourceScheme)
+}
+
+func isRuntimeOwnedSourceTarget(target string) bool {
+	return isChainSourceTarget(target) || isWorkerSourceTarget(target)
+}
+
+func workerSourceTarget(name string) string {
+	return workerSourceScheme + name
+}
+
+func workerNameFromSourceTarget(target string) string {
+	return strings.TrimPrefix(target, workerSourceScheme)
+}
+
 // Compile parses source once, compiles arbiters plus expert rules, and prepares
 // a persistent chained workflow runtime.
 func Compile(source []byte, opts Options) (*Workflow, error) {
@@ -105,7 +127,7 @@ func CompileFile(path string, opts Options) (*Workflow, error) {
 	return w, nil
 }
 
-// ExternalSources returns the declared non-chain source targets used by the workflow.
+// ExternalSources returns the declared loader-backed source targets used by the workflow.
 func (w *Workflow) ExternalSources() []string {
 	if w == nil {
 		return nil
@@ -114,7 +136,7 @@ func (w *Workflow) ExternalSources() []string {
 	out := make([]string, 0)
 	for _, name := range w.order {
 		for _, source := range w.arbiters[name].decl.Sources {
-			if strings.HasPrefix(source.Target, "chain://") {
+			if isRuntimeOwnedSourceTarget(source.Target) {
 				continue
 			}
 			if _, ok := seen[source.Target]; ok {
@@ -128,13 +150,27 @@ func (w *Workflow) ExternalSources() []string {
 	return out
 }
 
-// SetSourceFacts updates one external source snapshot. Chain sources are runtime-owned.
+// SetSourceFacts updates one loader-backed source snapshot. Runtime-owned sources are reserved for the workflow runtime.
 func (w *Workflow) SetSourceFacts(target string, facts []expert.Fact) error {
 	if w == nil {
 		return fmt.Errorf("nil workflow")
 	}
-	if strings.HasPrefix(target, "chain://") {
+	if isRuntimeOwnedSourceTarget(target) {
 		return fmt.Errorf("workflow source %q is runtime-owned", target)
+	}
+	if _, ok := w.sources[target]; !ok {
+		return fmt.Errorf("workflow source %q is not declared", target)
+	}
+	w.external[target] = cloneExpertFacts(facts)
+	return nil
+}
+
+func (w *Workflow) setRuntimeSourceFacts(target string, facts []expert.Fact) error {
+	if w == nil {
+		return fmt.Errorf("nil workflow")
+	}
+	if !isRuntimeOwnedSourceTarget(target) {
+		return fmt.Errorf("workflow source %q is not runtime-owned", target)
 	}
 	if _, ok := w.sources[target]; !ok {
 		return fmt.Errorf("workflow source %q is not declared", target)
@@ -237,6 +273,9 @@ func buildWorkflow(full *arbiter.CompileResult, program *expert.Program, opts Op
 	if err := registerChainSources(arbiters); err != nil {
 		return nil, err
 	}
+	if err := registerWorkerSources(arbiters, full.Workers); err != nil {
+		return nil, err
+	}
 	graph, err := compileChainHandlers(arbiters)
 	if err != nil {
 		return nil, err
@@ -256,7 +295,7 @@ func buildWorkflow(full *arbiter.CompileResult, program *expert.Program, opts Op
 		order:      order,
 		arbiters:   arbiters,
 		external:   make(map[string][]expert.Fact),
-		sources:    collectExternalSources(arbiters),
+		sources:    collectDeclaredSources(arbiters),
 		workers:    cloneWorkers(full.Workers),
 		mapOutcome: mapper,
 	}, nil
@@ -297,7 +336,7 @@ func instantiateArbiters(decls []arbiter.ArbiterDeclaration, program *expert.Pro
 func registerChainSources(arbiters map[string]*runtimeArbiter) error {
 	for _, arb := range arbiters {
 		for _, source := range arb.decl.Sources {
-			if !strings.HasPrefix(source.Target, "chain://") {
+			if !isChainSourceTarget(source.Target) {
 				continue
 			}
 			upstream := strings.TrimPrefix(source.Target, "chain://")
@@ -310,11 +349,26 @@ func registerChainSources(arbiters map[string]*runtimeArbiter) error {
 	return nil
 }
 
-func collectExternalSources(arbiters map[string]*runtimeArbiter) map[string]struct{} {
+func registerWorkerSources(arbiters map[string]*runtimeArbiter, workers map[string]arbiter.WorkerDeclaration) error {
+	for _, arb := range arbiters {
+		for _, source := range arb.decl.Sources {
+			if !isWorkerSourceTarget(source.Target) {
+				continue
+			}
+			name := workerNameFromSourceTarget(source.Target)
+			if _, ok := workers[name]; !ok {
+				return fmt.Errorf("workflow arbiter %s: unknown worker source %q", arb.decl.Name, source.Target)
+			}
+		}
+	}
+	return nil
+}
+
+func collectDeclaredSources(arbiters map[string]*runtimeArbiter) map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, arb := range arbiters {
 		for _, source := range arb.decl.Sources {
-			if strings.HasPrefix(source.Target, "chain://") {
+			if isChainSourceTarget(source.Target) {
 				continue
 			}
 			out[source.Target] = struct{}{}
@@ -418,7 +472,7 @@ func (w *Workflow) buildInputFacts(arb *runtimeArbiter, chainFacts map[string][]
 	for _, source := range arb.decl.Sources {
 		var facts []expert.Fact
 		switch {
-		case strings.HasPrefix(source.Target, "chain://"):
+		case isChainSourceTarget(source.Target):
 			upstream := strings.TrimPrefix(source.Target, "chain://")
 			facts = chainFacts[upstream]
 		default:

@@ -33,6 +33,19 @@ strategy RouteHeat returns HeatWarning {
 	}
 }
 
+worker notify_ops {
+	input HeatWarning
+	output HeatWarning
+	webhook https://hooks.internal/heat
+}
+
+arbiter greenhouse {
+	poll 30s
+	source gsheet://greenhouse/readings
+	source worker://notify_ops
+	on HeatWarning worker notify_ops
+}
+
 rule CheckTemp {
 	when { sensor.temperature > SAFE_TEMP }
 	then Alert {}
@@ -64,6 +77,15 @@ expert rule HeatStress cooldown 15m {
 	}
 	if len(summary.Strategies) != 1 || summary.Strategies[0].Name != "RouteHeat" {
 		t.Fatalf("unexpected strategies: %+v", summary.Strategies)
+	}
+	if len(summary.Workers) != 1 || summary.Workers[0].Name != "notify_ops" || summary.Workers[0].Kind != "webhook" {
+		t.Fatalf("unexpected workers: %+v", summary.Workers)
+	}
+	if len(summary.Arbiters) != 1 || summary.Arbiters[0].Name != "greenhouse" {
+		t.Fatalf("unexpected arbiters: %+v", summary.Arbiters)
+	}
+	if len(summary.Arbiters[0].Sources) != 2 || summary.Arbiters[0].Handlers[0].Kind != "worker" {
+		t.Fatalf("unexpected arbiter summary: %+v", summary.Arbiters[0])
 	}
 	if len(summary.Constants) != 1 || summary.Constants[0].Raw != "28 C" {
 		t.Fatalf("unexpected constants: %+v", summary.Constants)

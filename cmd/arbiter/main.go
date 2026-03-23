@@ -355,7 +355,7 @@ func check(path string) error {
 	if _, err := expert.CompileParsed(parsed, full); err != nil {
 		return fmt.Errorf("check %s: %w", path, arbiter.WrapFileError(unit, err))
 	}
-	if full.Strategies.Count() == 0 {
+	if full.Strategies.Count() == 0 && len(full.Workers) == 0 && len(full.Arbiters) == 0 {
 		if _, err := arbiter.TranspileParsed(parsed); err != nil {
 			return fmt.Errorf("check %s: %w", path, arbiter.WrapFileError(unit, err))
 		}
@@ -375,6 +375,8 @@ func compileCmd(path string) error {
 	fmt.Printf("compiled %s\n", path)
 	fmt.Printf("  rules:        %d\n", len(rs.Rules))
 	fmt.Printf("  strategies:   %d\n", full.Strategies.Count())
+	fmt.Printf("  workers:      %d\n", len(full.Workers))
+	fmt.Printf("  arbiters:     %d\n", len(full.Arbiters))
 	fmt.Printf("  actions:      %d\n", len(rs.Actions))
 	fmt.Printf("  instructions: %d bytes\n", len(rs.Instructions))
 	fmt.Printf("  strings:      %d\n", rs.Constants.StringCount())

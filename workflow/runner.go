@@ -30,10 +30,36 @@ func (f OutcomeHandlerFunc) Deliver(ctx context.Context, delivery Delivery) erro
 	return f(ctx, delivery)
 }
 
+// WorkerInvocation is one typed worker execution request.
+type WorkerInvocation struct {
+	Worker   arbiter.WorkerDeclaration
+	Delivery Delivery
+}
+
+// WorkerExecution is one worker's structured result payload.
+type WorkerExecution struct {
+	Facts    []expert.Fact
+	Outcomes []expert.Outcome
+}
+
+// WorkerHandler executes one worker capability and returns its typed result.
+type WorkerHandler interface {
+	Execute(context.Context, WorkerInvocation) (WorkerExecution, error)
+}
+
+// WorkerHandlerFunc adapts a function to WorkerHandler.
+type WorkerHandlerFunc func(context.Context, WorkerInvocation) (WorkerExecution, error)
+
+// Execute implements WorkerHandler.
+func (f WorkerHandlerFunc) Execute(ctx context.Context, invocation WorkerInvocation) (WorkerExecution, error) {
+	return f(ctx, invocation)
+}
+
 // RunnerOptions configure one reliable workflow runtime.
 type RunnerOptions struct {
 	Loader         SourceLoader
 	Handlers       map[arbiter.ArbiterHandlerKind]OutcomeHandler
+	WorkerHandlers map[arbiter.ArbiterHandlerKind]WorkerHandler
 	Now            func() time.Time
 	InitialBackoff time.Duration
 	MaxBackoff     time.Duration
@@ -100,6 +126,7 @@ type Runner struct {
 	now            func() time.Time
 	loader         SourceLoader
 	handlers       map[arbiter.ArbiterHandlerKind]OutcomeHandler
+	workerHandlers map[arbiter.ArbiterHandlerKind]WorkerHandler
 	dispatchers    map[string][]compiledDispatchHandler
 	sources        map[string]*sourceState
 	sinks          map[string]*sinkState
@@ -171,6 +198,7 @@ func NewRunner(w *Workflow, opts RunnerOptions) (*Runner, error) {
 		now:            opts.Now,
 		loader:         opts.Loader,
 		handlers:       opts.Handlers,
+		workerHandlers: opts.WorkerHandlers,
 		dispatchers:    make(map[string][]compiledDispatchHandler, len(w.order)),
 		sources:        make(map[string]*sourceState),
 		sinks:          make(map[string]*sinkState),
@@ -183,7 +211,7 @@ func NewRunner(w *Workflow, opts RunnerOptions) (*Runner, error) {
 		auditSinks:     make(map[string]*audit.JSONLSink),
 	}
 
-	for _, target := range w.ExternalSources() {
+	for target := range w.sources {
 		r.sources[target] = &sourceState{
 			SourceSnapshot: SourceSnapshot{
 				Target: target,
@@ -305,7 +333,7 @@ func (r *Runner) compileDispatchers() error {
 				if !ok {
 					return fmt.Errorf("workflow arbiter %s: unknown worker %q", name, spec.Target)
 				}
-				if !r.supportsHandler(worker.Kind) {
+				if !r.supportsWorkerRuntime(worker.Kind) {
 					return fmt.Errorf("workflow arbiter %s: no runtime handler registered for worker %s (%s)", name, worker.Name, worker.Kind)
 				}
 				workerCopy := worker
@@ -338,6 +366,19 @@ func (r *Runner) supportsHandler(kind arbiter.ArbiterHandlerKind) bool {
 	case arbiter.ArbiterHandlerWorker:
 		return true
 	default:
+		_, ok := r.handlers[kind]
+		return ok
+	}
+}
+
+func (r *Runner) supportsWorkerRuntime(kind arbiter.ArbiterHandlerKind) bool {
+	switch kind {
+	case arbiter.ArbiterHandlerAudit, arbiter.ArbiterHandlerStdout:
+		return true
+	default:
+		if _, ok := r.workerHandlers[kind]; ok {
+			return true
+		}
 		_, ok := r.handlers[kind]
 		return ok
 	}

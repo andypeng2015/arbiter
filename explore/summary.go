@@ -15,6 +15,8 @@ type Summary struct {
 	FactSchemas    []SchemaSummary     `json:"fact_schemas,omitempty"`
 	OutcomeSchemas []SchemaSummary     `json:"outcome_schemas,omitempty"`
 	Strategies     []StrategySummary   `json:"strategies,omitempty"`
+	Workers        []WorkerSummary     `json:"workers,omitempty"`
+	Arbiters       []ArbiterSummary    `json:"arbiters,omitempty"`
 	Constants      []ConstantSummary   `json:"constants,omitempty"`
 	Rules          []RuleSummary       `json:"rules,omitempty"`
 	ExpertRules    []ExpertRuleSummary `json:"expert_rules,omitempty"`
@@ -77,6 +79,36 @@ type StrategyCandidateSummary struct {
 	Else       bool   `json:"else,omitempty"`
 }
 
+type WorkerSummary struct {
+	Name   string `json:"name"`
+	Input  string `json:"input"`
+	Output string `json:"output"`
+	Kind   string `json:"kind"`
+	Target string `json:"target,omitempty"`
+}
+
+type ArbiterSummary struct {
+	Name       string                  `json:"name"`
+	Triggers   []ArbiterTriggerSummary `json:"triggers,omitempty"`
+	Sources    []string                `json:"sources,omitempty"`
+	Checkpoint string                  `json:"checkpoint,omitempty"`
+	Handlers   []ArbiterHandlerSummary `json:"handlers,omitempty"`
+}
+
+type ArbiterTriggerSummary struct {
+	Kind     string `json:"kind"`
+	Interval string `json:"interval,omitempty"`
+	Schedule string `json:"schedule,omitempty"`
+	Target   string `json:"target,omitempty"`
+}
+
+type ArbiterHandlerSummary struct {
+	Outcome string `json:"outcome"`
+	Where   string `json:"where,omitempty"`
+	Kind    string `json:"kind"`
+	Target  string `json:"target,omitempty"`
+}
+
 type DimensionUnits struct {
 	Dimension string   `json:"dimension"`
 	Symbols   []string `json:"symbols,omitempty"`
@@ -110,6 +142,18 @@ func BuildSummary(program *ir.Program) *Summary {
 	}
 	for _, strategy := range program.Strategies {
 		summary.Strategies = append(summary.Strategies, summarizeStrategy(program, strategy))
+	}
+	for _, worker := range program.Workers {
+		summary.Workers = append(summary.Workers, WorkerSummary{
+			Name:   worker.Name,
+			Input:  worker.Input,
+			Output: worker.Output,
+			Kind:   worker.Kind,
+			Target: worker.Target,
+		})
+	}
+	for _, arbiterDecl := range program.Arbiters {
+		summary.Arbiters = append(summary.Arbiters, summarizeArbiter(program, arbiterDecl))
 	}
 	for _, decl := range program.Consts {
 		value, ok := ir.LiteralValue(program, decl.Value)
@@ -210,6 +254,45 @@ func summarizeStrategy(program *ir.Program, strategy ir.Strategy) StrategySummar
 			item.Rollout = formatRollout(candidate.Rollout)
 		}
 		out.Candidates = append(out.Candidates, item)
+	}
+	return out
+}
+
+func summarizeArbiter(program *ir.Program, arbiterDecl ir.Arbiter) ArbiterSummary {
+	out := ArbiterSummary{Name: arbiterDecl.Name}
+	for _, clause := range arbiterDecl.Clauses {
+		switch clause.Kind {
+		case ir.ArbiterPollClause:
+			out.Triggers = append(out.Triggers, ArbiterTriggerSummary{
+				Kind:     string(clause.Kind),
+				Interval: clause.Interval,
+			})
+		case ir.ArbiterStreamClause:
+			out.Triggers = append(out.Triggers, ArbiterTriggerSummary{
+				Kind:   string(clause.Kind),
+				Target: clause.Target,
+			})
+		case ir.ArbiterScheduleClause:
+			out.Triggers = append(out.Triggers, ArbiterTriggerSummary{
+				Kind:     string(clause.Kind),
+				Schedule: clause.Expr,
+				Target:   clause.Target,
+			})
+		case ir.ArbiterSourceClause:
+			out.Sources = append(out.Sources, clause.Target)
+		case ir.ArbiterCheckpointClause:
+			out.Checkpoint = clause.Target
+		case ir.ArbiterHandlerClause:
+			item := ArbiterHandlerSummary{
+				Outcome: clause.Outcome,
+				Kind:    clause.Handler,
+				Target:  clause.Target,
+			}
+			if clause.HasFilter {
+				item.Where = ir.RenderExpr(program, clause.Filter)
+			}
+			out.Handlers = append(out.Handlers, item)
+		}
 	}
 	return out
 }

@@ -399,6 +399,216 @@ expert rule QualifyLead priority 10 per_fact {
 	}
 }
 
+func TestRunnerFeedsWorkerFactOutputsBackThroughWorkerSources(t *testing.T) {
+	src := []byte(`
+fact WorkerReceipt {
+	status: string
+}
+
+outcome Qualified {
+	key: string
+}
+
+outcome ReceiptObserved {
+	key: string
+	status: string
+}
+
+worker notify_sales {
+	input Qualified
+	output WorkerReceipt
+	webhook https://hooks.internal/qualified
+}
+
+arbiter sales {
+	poll 1s
+	source https://feed.internal/facts
+	source worker://notify_sales
+	on Qualified worker notify_sales
+}
+
+expert rule QualifyLead priority 10 per_fact {
+	when {
+		any lead in facts.Lead { lead.score >= 90 }
+	}
+	then emit Qualified {
+		key: lead.key,
+	}
+}
+
+expert rule ObserveReceipt priority 20 per_fact {
+	when {
+		any receipt in facts.WorkerReceipt { receipt.status == "sent" }
+	}
+	then emit ReceiptObserved {
+		key: receipt.key,
+		status: receipt.status,
+	}
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	invocations := 0
+	runner, err := NewRunner(w, RunnerOptions{
+		Loader: func(_ context.Context, _ string) ([]expert.Fact, error) {
+			return []expert.Fact{{
+				Type: "Lead",
+				Key:  "lead-1",
+				Fields: map[string]any{
+					"score": float64(95),
+				},
+			}}, nil
+		},
+		WorkerHandlers: map[arbiter.ArbiterHandlerKind]WorkerHandler{
+			arbiter.ArbiterHandlerWebhook: WorkerHandlerFunc(func(_ context.Context, invocation WorkerInvocation) (WorkerExecution, error) {
+				invocations++
+				if invocation.Worker.Name != "notify_sales" {
+					t.Fatalf("unexpected worker invocation %+v", invocation.Worker)
+				}
+				return WorkerExecution{
+					Facts: []expert.Fact{{
+						Key: "lead-1",
+						Fields: map[string]any{
+							"status": "sent",
+						},
+					}},
+				}, nil
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner: %v", err)
+	}
+
+	first, err := runner.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("first Tick: %v", err)
+	}
+	if invocations != 1 {
+		t.Fatalf("worker invocations = %d, want 1", invocations)
+	}
+	workerSource := first.Sources["worker://notify_sales"]
+	if !workerSource.Available || workerSource.FactCount != 1 {
+		t.Fatalf("unexpected worker source snapshot after first tick: %+v", workerSource)
+	}
+	if got := first.Workflow.Arbiters["sales"].Delta.Outcomes; len(got) != 1 || got[0].Name != "Qualified" {
+		t.Fatalf("first delta outcomes = %+v, want Qualified only", got)
+	}
+
+	second, err := runner.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("second Tick: %v", err)
+	}
+	got := second.Workflow.Arbiters["sales"].Delta.Outcomes
+	if len(got) != 1 || got[0].Name != "ReceiptObserved" {
+		t.Fatalf("second delta outcomes = %+v, want ReceiptObserved", got)
+	}
+	if got[0].Params["status"] != "sent" || got[0].Params["key"] != "lead-1" {
+		t.Fatalf("unexpected receipt outcome params: %+v", got[0].Params)
+	}
+}
+
+func TestRunnerMaterializesWorkerOutcomeOutputsIntoWorkerSources(t *testing.T) {
+	src := []byte(`
+outcome Qualified {
+	key: string
+}
+
+outcome ExecutionResult {
+	key: string
+	status: string
+}
+
+outcome ExecutionObserved {
+	key: string
+	status: string
+}
+
+worker notify_sales {
+	input Qualified
+	output ExecutionResult
+	webhook https://hooks.internal/qualified
+}
+
+arbiter sales {
+	poll 1s
+	source https://feed.internal/facts
+	source worker://notify_sales
+	on Qualified worker notify_sales
+}
+
+expert rule QualifyLead priority 10 per_fact {
+	when {
+		any lead in facts.Lead { lead.score >= 90 }
+	}
+	then emit Qualified {
+		key: lead.key,
+	}
+}
+
+expert rule ObserveExecution priority 20 per_fact {
+	when {
+		any result in facts.ExecutionResult { result.status == "sent" }
+	}
+	then emit ExecutionObserved {
+		key: result.key,
+		status: result.status,
+	}
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	runner, err := NewRunner(w, RunnerOptions{
+		Loader: func(_ context.Context, _ string) ([]expert.Fact, error) {
+			return []expert.Fact{{
+				Type: "Lead",
+				Key:  "lead-1",
+				Fields: map[string]any{
+					"score": float64(95),
+				},
+			}}, nil
+		},
+		WorkerHandlers: map[arbiter.ArbiterHandlerKind]WorkerHandler{
+			arbiter.ArbiterHandlerWebhook: WorkerHandlerFunc(func(_ context.Context, invocation WorkerInvocation) (WorkerExecution, error) {
+				return WorkerExecution{
+					Outcomes: []expert.Outcome{{
+						Params: map[string]any{
+							"key":    invocation.Delivery.Outcome.Params["key"],
+							"status": "sent",
+						},
+					}},
+				}, nil
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner: %v", err)
+	}
+
+	if _, err := runner.Tick(context.Background()); err != nil {
+		t.Fatalf("first Tick: %v", err)
+	}
+	second, err := runner.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("second Tick: %v", err)
+	}
+	got := second.Workflow.Arbiters["sales"].Delta.Outcomes
+	if len(got) != 1 || got[0].Name != "ExecutionObserved" {
+		t.Fatalf("second delta outcomes = %+v, want ExecutionObserved", got)
+	}
+	if got[0].Params["status"] != "sent" || got[0].Params["key"] != "lead-1" {
+		t.Fatalf("unexpected execution outcome params: %+v", got[0].Params)
+	}
+}
+
 func TestRunnerExposesSinkFailuresToRulesOnNextTick(t *testing.T) {
 	src := []byte(`
 arbiter sales {

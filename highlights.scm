@@ -35,6 +35,14 @@
 (strategy_else_candidate "else" @keyword)
 (strategy_else_candidate action_name: (identifier) @function)
 
+(worker_declaration "worker" @keyword)
+(worker_declaration name: (identifier) @type.definition)
+(worker_input_clause "input" @keyword)
+(worker_input_clause input: (identifier) @type)
+(worker_output_clause "output" @keyword)
+(worker_output_clause output: (identifier) @type)
+(worker_runtime_clause (worker_handler_kind) @keyword)
+
 (arbiter_declaration "arbiter" @keyword)
 (arbiter_declaration name: (identifier) @type.definition)
 (arbiter_poll_clause "poll" @keyword)

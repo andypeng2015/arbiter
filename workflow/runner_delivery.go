@@ -152,6 +152,9 @@ func (r *Runner) recordDeliveryFailure(id string, delivery Delivery, state *sink
 	delivery.LastError = err.Error()
 	delivery.NextAttemptAt = now.Add(deliveryBackoff(delivery.Attempt, r.initialBackoff, r.maxBackoff))
 	r.pending[id] = delivery
+	if delivery.Worker != "" {
+		r.markWorkerSourceFailure(delivery.Worker, now, err)
+	}
 	if state != nil {
 		state.Available = false
 		state.LastError = delivery.LastError
@@ -202,6 +205,16 @@ func (r *Runner) dispatchWorker(ctx context.Context, delivery Delivery) error {
 		Where:   delivery.Handler.Where,
 		Kind:    worker.Kind,
 		Target:  worker.Target,
+	}
+	if handler := r.workerHandlers[worker.Kind]; handler != nil {
+		result, err := handler.Execute(ctx, WorkerInvocation{
+			Worker:   worker,
+			Delivery: resolved,
+		})
+		if err != nil {
+			return err
+		}
+		return r.applyWorkerExecution(delivery.Arbiter, worker, result)
 	}
 	return r.dispatch(ctx, resolved)
 }

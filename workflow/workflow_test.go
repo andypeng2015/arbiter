@@ -146,6 +146,48 @@ arbiter upstream {
 	}
 }
 
+func TestWorkflowRejectsUnknownWorkerSource(t *testing.T) {
+	_, err := Compile([]byte(`
+arbiter sales {
+	poll 1s
+	source worker://missing_worker
+}
+`), Options{})
+	if err == nil || !strings.Contains(err.Error(), "unknown worker source") {
+		t.Fatalf("expected worker source validation error, got %v", err)
+	}
+}
+
+func TestWorkflowRejectsRuntimeOwnedWorkerSourceUpdates(t *testing.T) {
+	w, err := Compile([]byte(`
+outcome Qualified {
+	key: string
+}
+
+fact WorkerReceipt {
+	status: string
+}
+
+worker notify_sales {
+	input Qualified
+	output WorkerReceipt
+	webhook https://hooks.internal/qualified
+}
+
+arbiter sales {
+	poll 1s
+	source worker://notify_sales
+}
+`), Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	err = w.SetSourceFacts("worker://notify_sales", nil)
+	if err == nil || !strings.Contains(err.Error(), "runtime-owned") {
+		t.Fatalf("expected runtime-owned error, got %v", err)
+	}
+}
+
 func TestWorkflowRejectsUndeclaredExternalSourceUpdates(t *testing.T) {
 	w, err := Compile([]byte(`
 arbiter upstream {

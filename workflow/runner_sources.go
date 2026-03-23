@@ -127,7 +127,7 @@ func (r *Runner) sourceEnvelope(arb *runtimeArbiter) map[string]any {
 	now := r.now().UTC()
 	out := make(map[string]any)
 	for _, source := range arb.decl.Sources {
-		if strings.HasPrefix(source.Target, "chain://") {
+		if isChainSourceTarget(source.Target) {
 			continue
 		}
 		state := r.sources[source.Target]

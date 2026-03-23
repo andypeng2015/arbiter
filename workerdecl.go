@@ -8,12 +8,21 @@ import (
 
 // WorkerDeclaration is one named typed capability that an arbiter can invoke.
 type WorkerDeclaration struct {
-	Name   string
-	Input  string
-	Output string
-	Kind   ArbiterHandlerKind
-	Target string
+	Name       string
+	Input      string
+	Output     string
+	OutputKind WorkerOutputKind
+	Kind       ArbiterHandlerKind
+	Target     string
 }
+
+// WorkerOutputKind identifies whether a worker returns facts or outcomes.
+type WorkerOutputKind string
+
+const (
+	WorkerOutputFact    WorkerOutputKind = "fact"
+	WorkerOutputOutcome WorkerOutputKind = "outcome"
+)
 
 func compileWorkers(program *ir.Program) (map[string]WorkerDeclaration, error) {
 	if program == nil {
@@ -49,10 +58,12 @@ func compileWorkerDeclaration(program *ir.Program, worker *ir.Worker) (WorkerDec
 	if worker.Output == "" {
 		return WorkerDeclaration{}, fmt.Errorf("worker %s: output is required", worker.Name)
 	}
+	outputKind := WorkerOutputOutcome
 	if _, ok := program.OutcomeSchemaByName(worker.Output); !ok {
 		if _, ok := program.FactSchemaByName(worker.Output); !ok {
 			return WorkerDeclaration{}, fmt.Errorf("worker %s: output %s must reference a fact or outcome schema", worker.Name, worker.Output)
 		}
+		outputKind = WorkerOutputFact
 	}
 
 	kind := ArbiterHandlerKind(worker.Kind)
@@ -67,11 +78,12 @@ func compileWorkerDeclaration(program *ir.Program, worker *ir.Worker) (WorkerDec
 	}
 
 	return WorkerDeclaration{
-		Name:   worker.Name,
-		Input:  worker.Input,
-		Output: worker.Output,
-		Kind:   kind,
-		Target: worker.Target,
+		Name:       worker.Name,
+		Input:      worker.Input,
+		Output:     worker.Output,
+		OutputKind: outputKind,
+		Kind:       kind,
+		Target:     worker.Target,
 	}, nil
 }
 
