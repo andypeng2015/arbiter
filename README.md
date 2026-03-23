@@ -51,7 +51,7 @@ ARBITER_BENCH_PORT_FORWARD_ADDR=127.0.0.1:18081 \
 go test -run '^$' -bench '^BenchmarkLatencySplit/grpc_port_forward$' -benchmem -benchtime=100x
 
 # gRPC direct to the cluster service (run from an environment that can resolve it)
-ARBITER_BENCH_IN_CLUSTER_ADDR=arbiter.orchard.svc.cluster.local:8081 \
+ARBITER_BENCH_IN_CLUSTER_ADDR=arbiter.default.svc.cluster.local:8081 \
 go test -run '^$' -bench '^BenchmarkLatencySplit/grpc_in_cluster$' -benchmem -benchtime=100x
 ```
 

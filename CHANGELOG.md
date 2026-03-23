@@ -4,7 +4,7 @@
 
 ### Reference Runtime
 
-- **`cmd/arbiter-runtime`** — standalone host process for continuous arbiters and workers. Loads a `.arb` file, compiles the workflow, and runs the arbiter loop with source polling, worker dispatch (exec, webhook), delivery retry with exponential backoff, and health endpoints (`/healthz`, `/readyz`, `/status`). Arbiter no longer depends on Orchard for continuous execution.
+- **`cmd/arbiter-runtime`** — standalone host process for continuous arbiters and workers. Loads a `.arb` file, compiles the workflow, and runs the arbiter loop with source polling, worker dispatch (exec, webhook), delivery retry with exponential backoff, and health endpoints (`/healthz`, `/readyz`, `/status`). Continuous arbiter execution is now fully self-contained.
 
 ### WASM SDK
 
@@ -27,7 +27,7 @@
 
 ### Documentation
 
-- **README overhaul** — added dataplane agent, WASM target, typed evaluation (generics), `IncludeResolver` interface, multi-error recovery, decimal arithmetic, IR constant folding, test framework, workflow and units packages to the architecture section. Clarified that continuous arbiter and worker runtime execution is orchestrated by Orchard, not this repo. Updated status section with all v0.9.0–v0.12.0 features.
+- **README overhaul** — added dataplane agent, WASM target, typed evaluation (generics), `IncludeResolver` interface, multi-error recovery, decimal arithmetic, IR constant folding, test framework, workflow and units packages to the architecture section. Updated status section with all v0.9.0–v0.12.0 features.
 
 ### Corrections
 
@@ -120,7 +120,7 @@
 
 ### Tooling And Safety
 
-- **Safer `gts` usage in-repo** — `scripts/gts-safe` serializes and bounds Orchard code-intelligence commands to avoid runaway background indexing and unsafe write-capable modes during local investigation.
+- **Safer `gts` usage in-repo** — `scripts/gts-safe` serializes and bounds code-intelligence commands to avoid runaway background indexing and unsafe write-capable modes during local investigation.
 - **Version bump to `0.7.0`** — SDK, editor package, and release metadata now align on `0.7.0` for the strategy-runtime and worker-capability release.
 
 ---
@@ -310,7 +310,7 @@
 ### Deployment
 
 - **Kubernetes manifests** — `deploy/Dockerfile` and `deploy/k8s.yaml` for deploying Arbiter as an in-cluster gRPC service. 3 replicas at 1 core each delivers 41K evals/sec with sub-2ms p50 latency.
-- **Deploy script** — `scripts/deploy.sh` for the Orchard platform with pre-flight postgres checks.
+- **Deploy script** — `scripts/deploy.sh` with pre-flight postgres checks.
 
 ### Examples
 
