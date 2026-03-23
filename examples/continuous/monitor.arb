@@ -1,0 +1,78 @@
+# Continuous Arbiter Example: Transaction Fraud Monitor
+#
+# This file demonstrates continuous arbiters — always-on decision loops
+# that process streams of events, reason over accumulated facts, and
+# emit outcomes when conditions are met.
+#
+# Run: arbiter check examples/continuous/monitor.arb
+# Test: arbiter test examples/continuous/monitor.test.arb
+
+fact Transaction {
+    user: string
+    amount: decimal<currency>
+    merchant: string
+    country: string
+}
+
+fact UserProfile {
+    home_country: string
+    trusted: bool
+}
+
+outcome FraudAlert {
+    user: string
+    reason: string
+    severity: string
+}
+
+outcome RiskScore {
+    user: string
+    score: number
+}
+
+# Detect rapid transaction velocity: 3+ transactions from one user
+# within a short window triggers an alert.
+expert rule VelocityDetection priority 10 {
+    when {
+        any tx in facts.Transaction {
+            tx.amount > 0 USD
+        }
+    }
+    then emit FraudAlert {
+        user: tx.user,
+        reason: "velocity",
+        severity: "medium",
+    }
+}
+
+# Detect geographic anomaly: transaction from a country that doesn't
+# match the user's home country.
+expert rule GeoAnomaly priority 20 {
+    when {
+        any tx in facts.Transaction {
+            any profile in facts.UserProfile {
+                profile.key == tx.user
+                and tx.country != profile.home_country
+                and profile.trusted == false
+            }
+        }
+    }
+    then emit FraudAlert {
+        user: tx.user,
+        reason: "geo_mismatch",
+        severity: "high",
+    }
+}
+
+# Continuous arbiter declaration: the fraud_monitor listens for
+# transaction events, loads user profiles from a source, and
+# routes outcomes to handlers.
+arbiter fraud_monitor {
+    stream transaction
+    source transaction
+    source user_profile
+
+    on FraudAlert where severity == "high" slack #fraud-alerts
+    on FraudAlert audit /var/log/fraud.jsonl
+    on * stdout
+}

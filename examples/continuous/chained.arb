@@ -1,0 +1,113 @@
+# Chained Arbiter Example: Fraud Detection → Risk Scoring → Response
+#
+# Three arbiters chain together: the fraud monitor emits alerts,
+# the risk scorer accumulates alerts into a score, and the response
+# arbiter decides what action to take based on the score.
+#
+# Run: arbiter check examples/continuous/chained.arb
+
+fact Transaction {
+    user: string
+    amount: decimal<currency>
+    country: string
+}
+
+fact Alert {
+    user: string
+    reason: string
+    severity: string
+}
+
+outcome FraudAlert {
+    user: string
+    reason: string
+    severity: string
+}
+
+outcome RiskAssessment {
+    user: string
+    level: string
+}
+
+outcome BlockUser {
+    user: string
+    reason: string
+}
+
+# Stage 1: detect fraud patterns from transaction stream.
+expert rule DetectHighAmount priority 10 {
+    when {
+        any tx in facts.Transaction {
+            tx.amount > 1000 USD
+        }
+    }
+    then emit FraudAlert {
+        user: tx.user,
+        reason: "high_amount",
+        severity: "medium",
+    }
+}
+
+expert rule DetectForeignTransaction priority 20 {
+    when {
+        any tx in facts.Transaction {
+            tx.country != "US"
+        }
+    }
+    then emit FraudAlert {
+        user: tx.user,
+        reason: "foreign",
+        severity: "low",
+    }
+}
+
+# Stage 2: accumulate alerts into risk assessment.
+expert rule AssessHighRisk priority 10 {
+    when {
+        any alert in facts.Alert {
+            alert.severity == "medium"
+        }
+    }
+    then emit RiskAssessment {
+        user: alert.user,
+        level: "high",
+    }
+}
+
+# Stage 3: respond to risk assessments.
+expert rule BlockHighRisk priority 10 {
+    when {
+        any alert in facts.Alert {
+            alert.severity == "medium"
+        }
+    }
+    then emit BlockUser {
+        user: alert.user,
+        reason: "high_risk_score",
+    }
+}
+
+# Arbiter declarations wire the chain together.
+arbiter fraud_detector {
+    stream transaction
+    source transaction
+
+    on FraudAlert chain risk_scorer
+    on * stdout
+}
+
+arbiter risk_scorer {
+    poll 1s
+    source chain://fraud_detector
+
+    on RiskAssessment chain response_handler
+    on * stdout
+}
+
+arbiter response_handler {
+    poll 1s
+    source chain://risk_scorer
+
+    on BlockUser audit /var/log/blocks.jsonl
+    on * stdout
+}

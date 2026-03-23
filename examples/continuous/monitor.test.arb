@@ -1,0 +1,22 @@
+# Tests for the continuous fraud monitor.
+#
+# Continuous arbiter scenarios use `stream` to inject events and
+# `within` to assert outcomes appeared in a time window.
+
+scenario "velocity detection triggers on transactions" {
+    stream transaction { key: "tx-1", user: "alice", amount: 100 USD, merchant: "shop-a", country: "US" }
+    stream transaction { key: "tx-2", user: "alice", amount: 200 USD, merchant: "shop-b", country: "US" }
+    stream transaction { key: "tx-3", user: "alice", amount: 300 USD, merchant: "shop-c", country: "US" }
+
+    within 1m {
+        expect outcome FraudAlert { user: "alice", reason: "velocity" }
+    }
+}
+
+scenario "no alert for single transaction" {
+    stream transaction { key: "tx-solo", user: "bob", amount: 50 USD, merchant: "store", country: "GB" }
+
+    within 1m {
+        expect outcome FraudAlert { user: "bob", reason: "velocity" }
+    }
+}

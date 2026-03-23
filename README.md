@@ -853,6 +853,99 @@ none item in cart.items { item.banned == true }
 (a > 1 or b > 2) and c > 3
 ```
 
+## Continuous Arbiters
+
+Continuous arbiters are always-on decision loops declared in the language. They process event streams, load facts from external sources, run expert inference, and route outcomes to handlers.
+
+### Single Arbiter
+
+```arb
+fact Transaction {
+    user: string
+    amount: decimal<currency>
+    country: string
+}
+
+outcome FraudAlert {
+    user: string
+    reason: string
+    severity: string
+}
+
+expert rule VelocityDetection priority 10 {
+    when {
+        any tx in facts.Transaction { tx.amount > 0 USD }
+    }
+    then emit FraudAlert {
+        user: tx.user,
+        reason: "velocity",
+        severity: "medium",
+    }
+}
+
+arbiter fraud_monitor {
+    stream transaction         # trigger: subscribe to transaction events
+    source transaction         # fact source: materialize events as facts
+    source user_profile        # fact source: load user profiles
+
+    on FraudAlert where severity == "high" slack #fraud-alerts
+    on FraudAlert audit /var/log/fraud.jsonl
+    on * stdout
+}
+```
+
+The `arbiter` declaration wires together:
+- **Triggers** — `poll` (interval), `stream` (subscription), `schedule` (cron)
+- **Sources** — fact providers loaded before each evaluation
+- **Handlers** — route outcomes to `webhook`, `slack`, `chain`, `exec`, `worker`, `grpc`, `audit`, or `stdout`
+
+### Chained Arbiters
+
+Outcomes from one arbiter become facts in another via `chain`. The workflow engine executes them in topological order.
+
+```arb
+arbiter fraud_detector {
+    stream transaction
+    source transaction
+
+    on FraudAlert chain risk_scorer    # forward alerts to next stage
+    on * stdout
+}
+
+arbiter risk_scorer {
+    poll 1s
+    source chain://fraud_detector      # receive chained facts
+
+    on RiskAssessment chain response_handler
+    on * stdout
+}
+
+arbiter response_handler {
+    poll 1s
+    source chain://risk_scorer
+
+    on BlockUser audit /var/log/blocks.jsonl
+    on * stdout
+}
+```
+
+The `workflow/` package handles chaining locally: `workflow.Compile()` builds the graph, validates for cycles, topologically sorts the arbiters, and `workflow.Run()` executes one pass with outcome→fact propagation between stages.
+
+### Testing Continuous Arbiters
+
+`.test.arb` files test continuous arbiter scenarios with `stream` events and `within` time windows:
+
+```arb
+scenario "velocity detection triggers on transactions" {
+    stream transaction { key: "tx-1", user: "alice", amount: 100 USD, country: "US" }
+    stream transaction { key: "tx-2", user: "alice", amount: 200 USD, country: "US" }
+
+    within 1m {
+        expect outcome FraudAlert { user: "alice", reason: "velocity" }
+    }
+}
+```
+
 ## Architecture
 
 ```text
