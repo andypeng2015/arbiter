@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/odvcencio/arbiter/format"
 )
 
 func main() {
@@ -111,6 +113,8 @@ func (s *server) handle(msg rpcMessage) []rpcMessage {
 		return []rpcMessage{s.handleRename(msg)}
 	case "textDocument/documentSymbol":
 		return []rpcMessage{s.handleDocumentSymbol(msg)}
+	case "textDocument/formatting":
+		return []rpcMessage{s.handleFormatting(msg)}
 	default:
 		if msg.ID != nil {
 			return []rpcMessage{{
@@ -141,8 +145,9 @@ func (s *server) handleInitialize(msg rpcMessage) rpcMessage {
 				"definitionProvider":   true,
 				"referencesProvider":   true,
 				"renameProvider":       true,
-				"documentSymbolProvider": true,
-				"diagnosticProvider":   map[string]any{"interFileDependencies": true, "workspaceDiagnostics": false},
+				"documentSymbolProvider":    true,
+				"documentFormattingProvider": true,
+				"diagnosticProvider":         map[string]any{"interFileDependencies": true, "workspaceDiagnostics": false},
 			},
 			"serverInfo": map[string]any{
 				"name":    "arbiter-lsp",
@@ -723,6 +728,49 @@ func symbolKind(kind string) int {
 	default:
 		return 1 // File
 	}
+}
+
+// --- Formatting ---
+
+func (s *server) handleFormatting(msg rpcMessage) rpcMessage {
+	var params struct {
+		TextDocument struct {
+			URI string `json:"uri"`
+		} `json:"textDocument"`
+	}
+	json.Unmarshal(msg.Params, &params)
+
+	s.mu.Lock()
+	f, ok := s.files[params.TextDocument.URI]
+	if !ok {
+		s.mu.Unlock()
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: []any{}}
+	}
+	content := f.content
+	s.mu.Unlock()
+
+	formatted := string(format.Format([]byte(content)))
+	if formatted == content {
+		return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: []any{}}
+	}
+
+	// Count lines in original document.
+	lineCount := strings.Count(content, "\n")
+	if len(content) > 0 && content[len(content)-1] != '\n' {
+		lineCount++
+	}
+
+	// Return a single TextEdit that replaces the entire document.
+	edits := []map[string]any{
+		{
+			"range": map[string]any{
+				"start": map[string]any{"line": 0, "character": 0},
+				"end":   map[string]any{"line": lineCount, "character": 0},
+			},
+			"newText": formatted,
+		},
+	}
+	return rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: edits}
 }
 
 // --- Helpers ---
