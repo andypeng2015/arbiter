@@ -1,16 +1,25 @@
-// Arbiter WASM Loader
+// Arbiter WASM SDK
+//
+// All four evaluation modes in 3.6MB gzipped.
 //
 // Usage (Node.js):
 //   const arbiter = require('./loader.js');
 //   await arbiter.init('./arbiter.wasm');
-//   arbiter.compile('rule X { when { a > 1 } then Y { z: 1 } }');
-//   const result = arbiter.eval('{"a": 5}');
 //
-// Usage (Browser):
-//   <script src="wasm_exec.js"></script>
-//   <script src="loader.js"></script>
-//   await arbiter.init('arbiter.wasm');
+//   // Stateless rules
 //   arbiter.compile('rule X { when { a > 1 } then Y { z: 1 } }');
+//   arbiter.eval('{"a": 5}');
+//
+//   // Expert inference
+//   const sid = arbiter.startSession('{"temp": 30}');
+//   arbiter.assertFact(sid, '{"type":"Reading","key":"r1","fields":{"value":30}}');
+//   const result = arbiter.runSession(sid);
+//   arbiter.closeSession(sid);
+//
+//   // Workflows
+//   arbiter.compileWorkflow(source);
+//   arbiter.setSourceFacts('transaction', '[...]');
+//   arbiter.runWorkflow();
 
 (function (exports) {
   "use strict";
@@ -20,7 +29,6 @@
   exports.init = async function init(wasmPath) {
     if (_ready) return;
 
-    // Node.js: load wasm_exec.js if Go global isn't present.
     if (typeof Go === "undefined" && typeof require !== "undefined") {
       require("./wasm_exec.js");
     }
@@ -29,43 +37,95 @@
     let wasm;
 
     if (typeof fetch === "function") {
-      // Browser / Deno
       const resp = await fetch(wasmPath);
       const result = await WebAssembly.instantiateStreaming(resp, go.importObject);
       wasm = result.instance;
     } else {
-      // Node.js
       const fs = require("fs");
       const buf = fs.readFileSync(wasmPath);
       const result = await WebAssembly.instantiate(buf, go.importObject);
       wasm = result.instance;
     }
 
-    go.run(wasm); // Starts the Go runtime; blocks via select{}.
+    go.run(wasm);
     _ready = true;
   };
 
-  exports.compile = function compile(source) {
+  function check() {
     if (!_ready) throw new Error("arbiter: call init() first");
+  }
+
+  // --- Compilation ---
+
+  exports.compile = function (source) {
+    check();
     return globalThis.arbiterCompile(source);
   };
 
-  exports.eval = function eval(jsonContext) {
-    if (!_ready) throw new Error("arbiter: call init() first");
+  // --- Stateless Evaluation ---
+
+  exports.eval = function (jsonContext) {
+    check();
     return globalThis.arbiterEval(jsonContext);
   };
 
-  exports.evalGoverned = function evalGoverned(jsonContext) {
-    if (!_ready) throw new Error("arbiter: call init() first");
+  exports.evalGoverned = function (jsonContext) {
+    check();
     return globalThis.arbiterEvalGoverned(jsonContext);
   };
 
-  exports.evalStrategy = function evalStrategy(name, jsonContext) {
-    if (!_ready) throw new Error("arbiter: call init() first");
+  exports.evalStrategy = function (name, jsonContext) {
+    check();
     return globalThis.arbiterEvalStrategy(name, jsonContext);
   };
 
-  // CommonJS / ESM / Browser global
+  // --- Expert Sessions ---
+
+  exports.startSession = function (jsonEnvelope, jsonFacts) {
+    check();
+    if (jsonFacts) {
+      return globalThis.arbiterStartSession(jsonEnvelope, jsonFacts);
+    }
+    return globalThis.arbiterStartSession(jsonEnvelope);
+  };
+
+  exports.assertFact = function (sessionId, jsonFact) {
+    check();
+    return globalThis.arbiterAssertFact(sessionId, jsonFact);
+  };
+
+  exports.retractFact = function (sessionId, factType, factKey) {
+    check();
+    return globalThis.arbiterRetractFact(sessionId, factType, factKey);
+  };
+
+  exports.runSession = function (sessionId) {
+    check();
+    return globalThis.arbiterRunSession(sessionId);
+  };
+
+  exports.closeSession = function (sessionId) {
+    check();
+    return globalThis.arbiterCloseSession(sessionId);
+  };
+
+  // --- Workflows ---
+
+  exports.compileWorkflow = function (source) {
+    check();
+    return globalThis.arbiterCompileWorkflow(source);
+  };
+
+  exports.setSourceFacts = function (target, jsonFacts) {
+    check();
+    return globalThis.arbiterSetSourceFacts(target, jsonFacts);
+  };
+
+  exports.runWorkflow = function () {
+    check();
+    return globalThis.arbiterRunWorkflow();
+  };
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = exports;
   } else {
