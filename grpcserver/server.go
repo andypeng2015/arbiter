@@ -72,6 +72,7 @@ func (s *Server) PublishBundle(ctx context.Context, req *arbiterv1.PublishBundle
 		RuleCount:       uint32(bundle.RuleCount),
 		FlagCount:       uint32(bundle.FlagCount),
 		ExpertRuleCount: uint32(bundle.ExpertRuleCount),
+		StrategyCount:   uint32(bundle.StrategyCount),
 		PublishedAt:     timestamppb.New(bundle.Published),
 	}, nil
 }
@@ -335,6 +336,53 @@ func (s *Server) ResolveFlag(ctx context.Context, req *arbiterv1.ResolveFlagRequ
 	}, nil
 }
 
+// EvaluateStrategy evaluates a strategy in a published bundle.
+func (s *Server) EvaluateStrategy(ctx context.Context, req *arbiterv1.EvaluateStrategyRequest) (*arbiterv1.EvaluateStrategyResponse, error) {
+	bundle, err := s.bundleRef(req.GetBundleId(), req.GetBundleName())
+	if err != nil {
+		return nil, err
+	}
+	if bundle.Compiled == nil || bundle.Compiled.Strategies == nil || bundle.StrategyCount == 0 {
+		return nil, status.Error(codes.FailedPrecondition, "bundle has no strategies")
+	}
+	if !bundle.Compiled.Strategies.Has(req.GetStrategyName()) {
+		return nil, status.Errorf(codes.NotFound, "strategy %q not found", req.GetStrategyName())
+	}
+
+	ctxMap := req.GetContext().AsMap()
+	result, err := arbiter.EvalStrategyWithOverrides(bundle.Compiled, req.GetStrategyName(), ctxMap, bundle.ID, s.overrides)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "evaluate strategy: %v", err)
+	}
+
+	params, err := structpb.NewStruct(cleanMap(result.Params))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "marshal params: %v", err)
+	}
+
+	_ = s.audit.WriteDecision(ctx, audit.DecisionEvent{
+		Timestamp: time.Now().UTC(),
+		RequestID: req.GetRequestId(),
+		BundleID:  bundle.ID,
+		Kind:      "strategy",
+		Context:   ctxMap,
+		Strategy: &audit.StrategyDecision{
+			Strategy: result.Strategy,
+			Outcome:  result.Outcome,
+			Selected: result.Selected,
+			Params:   result.Params,
+		},
+		Trace: result.Trace.Steps,
+	})
+
+	return &arbiterv1.EvaluateStrategyResponse{
+		Outcome:  result.Outcome,
+		Selected: result.Selected,
+		Params:   params,
+		Trace:    protoTrace(result.Trace.Steps),
+	}, nil
+}
+
 // SetRuleOverride updates runtime rule overrides for a bundle.
 func (s *Server) SetRuleOverride(ctx context.Context, req *arbiterv1.SetRuleOverrideRequest) (*arbiterv1.SetRuleOverrideResponse, error) {
 	if _, err := s.bundle(req.GetBundleId()); err != nil {
@@ -435,6 +483,50 @@ func (s *Server) SetFlagRuleOverride(ctx context.Context, req *arbiterv1.SetFlag
 		},
 	})
 	return &arbiterv1.SetFlagRuleOverrideResponse{}, nil
+}
+
+// SetStrategyOverride updates runtime governance overrides for one strategy candidate.
+func (s *Server) SetStrategyOverride(ctx context.Context, req *arbiterv1.SetStrategyOverrideRequest) (*arbiterv1.SetStrategyOverrideResponse, error) {
+	bundle, err := s.bundle(req.GetBundleId())
+	if err != nil {
+		return nil, err
+	}
+	if bundle.Compiled == nil || bundle.Compiled.Strategies == nil || !bundle.Compiled.Strategies.Has(req.GetStrategyName()) {
+		return nil, status.Errorf(codes.NotFound, "strategy %q not found", req.GetStrategyName())
+	}
+	if !bundle.Compiled.Strategies.HasCandidate(req.GetStrategyName(), req.GetCandidateLabel()) {
+		return nil, status.Errorf(codes.NotFound, "strategy candidate %q not found in %q", req.GetCandidateLabel(), req.GetStrategyName())
+	}
+
+	ov := overrides.StrategyOverride{}
+	if req.KillSwitch != nil {
+		v := req.KillSwitch.GetValue()
+		ov.KillSwitch = &v
+	}
+	if req.Rollout != nil {
+		v, err := normalizeOverrideRollout(req.Rollout.GetValue())
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		ov.Rollout = &v
+	}
+
+	if err := s.overrides.SetStrategy(req.GetBundleId(), req.GetStrategyName(), req.GetCandidateLabel(), ov); err != nil {
+		return nil, status.Errorf(codes.Internal, "persist strategy override: %v", err)
+	}
+
+	_ = s.audit.WriteDecision(ctx, audit.DecisionEvent{
+		Timestamp: time.Now().UTC(),
+		BundleID:  req.GetBundleId(),
+		Kind:      "override",
+		Override: &audit.OverrideChange{
+			Scope:      "strategy_candidate",
+			Target:     req.GetStrategyName() + "/" + req.GetCandidateLabel(),
+			KillSwitch: ov.KillSwitch,
+			Rollout:    ov.Rollout,
+		},
+	})
+	return &arbiterv1.SetStrategyOverrideResponse{}, nil
 }
 
 func (s *Server) bundle(id string) (*Bundle, error) {
@@ -568,19 +660,25 @@ func (s *Server) protoBundleSummary(bundle *Bundle) *arbiterv1.BundleSummary {
 		RuleCount:       uint32(bundle.RuleCount),
 		FlagCount:       uint32(bundle.FlagCount),
 		ExpertRuleCount: uint32(bundle.ExpertRuleCount),
+		StrategyCount:   uint32(bundle.StrategyCount),
 		Active:          active != nil && active.ID == bundle.ID,
 	}
 }
 
 func (s *Server) protoBundleOverrides(snapshot overrides.BundleSnapshot) *arbiterv1.BundleOverrides {
-	if snapshot.BundleID == "" && len(snapshot.Rules) == 0 && len(snapshot.Flags) == 0 && len(snapshot.FlagRules) == 0 {
+	if snapshot.BundleID == "" &&
+		len(snapshot.Rules) == 0 &&
+		len(snapshot.Flags) == 0 &&
+		len(snapshot.FlagRules) == 0 &&
+		len(snapshot.Strategies) == 0 {
 		return nil
 	}
 	out := &arbiterv1.BundleOverrides{
-		BundleId:  snapshot.BundleID,
-		Rules:     make([]*arbiterv1.RuleOverrideEntry, 0, len(snapshot.Rules)),
-		Flags:     make([]*arbiterv1.FlagOverrideEntry, 0, len(snapshot.Flags)),
-		FlagRules: make([]*arbiterv1.FlagRuleOverrideEntry, 0),
+		BundleId:   snapshot.BundleID,
+		Rules:      make([]*arbiterv1.RuleOverrideEntry, 0, len(snapshot.Rules)),
+		Flags:      make([]*arbiterv1.FlagOverrideEntry, 0, len(snapshot.Flags)),
+		FlagRules:  make([]*arbiterv1.FlagRuleOverrideEntry, 0),
+		Strategies: make([]*arbiterv1.StrategyOverrideEntry, 0),
 	}
 	for ruleName, ov := range snapshot.Rules {
 		out.Rules = append(out.Rules, protoRuleOverrideEntry(ruleName, ov))
@@ -593,6 +691,11 @@ func (s *Server) protoBundleOverrides(snapshot overrides.BundleSnapshot) *arbite
 			out.FlagRules = append(out.FlagRules, protoFlagRuleOverrideEntry(flagKey, idx, ov))
 		}
 	}
+	for strategyName, candidates := range snapshot.Strategies {
+		for candidateLabel, ov := range candidates {
+			out.Strategies = append(out.Strategies, protoStrategyOverrideEntry(strategyName, candidateLabel, ov))
+		}
+	}
 	return out
 }
 
@@ -602,11 +705,13 @@ func (s *Server) protoOverrideEvent(event overrides.OverrideEvent) *arbiterv1.Ov
 		snapshot = s.protoBundleOverrides(event.Snapshot)
 	}
 	out := &arbiterv1.OverrideEvent{
-		Type:     protoOverrideEventType(event.Type),
-		BundleId: event.BundleID,
-		Snapshot: snapshot,
-		RuleName: event.RuleName,
-		FlagKey:  event.FlagKey,
+		Type:           protoOverrideEventType(event.Type),
+		BundleId:       event.BundleID,
+		Snapshot:       snapshot,
+		RuleName:       event.RuleName,
+		FlagKey:        event.FlagKey,
+		StrategyName:   event.StrategyName,
+		CandidateLabel: event.CandidateLabel,
 	}
 	switch event.Type {
 	case overrides.OverrideEventRule:
@@ -616,6 +721,8 @@ func (s *Server) protoOverrideEvent(event overrides.OverrideEvent) *arbiterv1.Ov
 	case overrides.OverrideEventFlagRule:
 		out.RuleIndex = uint32(event.RuleIndex)
 		out.FlagRule = protoFlagRuleOverrideEntry(event.FlagKey, event.RuleIndex, event.FlagRule)
+	case overrides.OverrideEventStrategy:
+		out.Strategy = protoStrategyOverrideEntry(event.StrategyName, event.CandidateLabel, event.Strategy)
 	}
 	return out
 }
@@ -662,6 +769,22 @@ func protoFlagRuleOverrideEntry(flagKey string, ruleIndex int, ov overrides.Flag
 	return out
 }
 
+func protoStrategyOverrideEntry(strategyName, candidateLabel string, ov overrides.StrategyOverride) *arbiterv1.StrategyOverrideEntry {
+	out := &arbiterv1.StrategyOverrideEntry{
+		StrategyName:   strategyName,
+		CandidateLabel: candidateLabel,
+	}
+	if ov.KillSwitch != nil {
+		out.KillSwitchSet = true
+		out.KillSwitch = *ov.KillSwitch
+	}
+	if ov.Rollout != nil {
+		out.RolloutSet = true
+		out.Rollout = uint32(*ov.Rollout)
+	}
+	return out
+}
+
 func protoOverrideEventType(eventType overrides.OverrideEventType) arbiterv1.OverrideEventType {
 	switch eventType {
 	case overrides.OverrideEventSnapshot:
@@ -672,6 +795,8 @@ func protoOverrideEventType(eventType overrides.OverrideEventType) arbiterv1.Ove
 		return arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_FLAG
 	case overrides.OverrideEventFlagRule:
 		return arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_FLAG_RULE
+	case overrides.OverrideEventStrategy:
+		return arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_STRATEGY
 	default:
 		return arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_UNSPECIFIED
 	}

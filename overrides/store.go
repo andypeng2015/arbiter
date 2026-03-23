@@ -24,19 +24,27 @@ type FlagRuleOverride struct {
 	Rollout *uint16
 }
 
+// StrategyOverride overlays strategy-candidate governance fields at runtime.
+type StrategyOverride struct {
+	KillSwitch *bool
+	Rollout    *uint16
+}
+
 // View exposes read-only access to runtime overrides.
 type View interface {
 	Rule(bundleID, ruleName string) (RuleOverride, bool)
 	Flag(bundleID, flagKey string) (FlagOverride, bool)
 	FlagRule(bundleID, flagKey string, ruleIndex int) (FlagRuleOverride, bool)
+	Strategy(bundleID, strategyName, candidateLabel string) (StrategyOverride, bool)
 }
 
 // BundleSnapshot is a serializable copy of one bundle's runtime overrides.
 type BundleSnapshot struct {
-	BundleID  string
-	Rules     map[string]RuleOverride
-	Flags     map[string]FlagOverride
-	FlagRules map[string]map[int]FlagRuleOverride
+	BundleID   string
+	Rules      map[string]RuleOverride
+	Flags      map[string]FlagOverride
+	FlagRules  map[string]map[int]FlagRuleOverride
+	Strategies map[string]map[string]StrategyOverride
 }
 
 // OverrideEventType describes why an override update was emitted.
@@ -47,19 +55,23 @@ const (
 	OverrideEventRule     OverrideEventType = "rule"
 	OverrideEventFlag     OverrideEventType = "flag"
 	OverrideEventFlagRule OverrideEventType = "flag_rule"
+	OverrideEventStrategy OverrideEventType = "strategy"
 )
 
 // OverrideEvent is one update from the control-plane override watch stream.
 type OverrideEvent struct {
-	Type      OverrideEventType
-	BundleID  string
-	RuleName  string
-	FlagKey   string
-	RuleIndex int
-	Rule      RuleOverride
-	Flag      FlagOverride
-	FlagRule  FlagRuleOverride
-	Snapshot  BundleSnapshot
+	Type           OverrideEventType
+	BundleID       string
+	RuleName       string
+	FlagKey        string
+	RuleIndex      int
+	Rule           RuleOverride
+	Flag           FlagOverride
+	FlagRule       FlagRuleOverride
+	StrategyName   string
+	CandidateLabel string
+	Strategy       StrategyOverride
+	Snapshot       BundleSnapshot
 }
 
 // Store holds in-memory runtime overrides for governed bundles.
@@ -68,6 +80,7 @@ type Store struct {
 	rules       map[string]map[string]RuleOverride
 	flags       map[string]map[string]FlagOverride
 	flagRules   map[string]map[string]map[int]FlagRuleOverride
+	strategies  map[string]map[string]map[string]StrategyOverride
 	subscribers map[uint64]overrideSubscription
 	nextSubID   uint64
 	path        string
@@ -80,9 +93,10 @@ type overrideSubscription struct {
 
 // Snapshot is a serializable copy of all stored overrides.
 type Snapshot struct {
-	Rules     map[string]map[string]RuleOverride             `json:"rules,omitempty"`
-	Flags     map[string]map[string]FlagOverride             `json:"flags,omitempty"`
-	FlagRules map[string]map[string]map[int]FlagRuleOverride `json:"flag_rules,omitempty"`
+	Rules      map[string]map[string]RuleOverride                `json:"rules,omitempty"`
+	Flags      map[string]map[string]FlagOverride                `json:"flags,omitempty"`
+	FlagRules  map[string]map[string]map[int]FlagRuleOverride    `json:"flag_rules,omitempty"`
+	Strategies map[string]map[string]map[string]StrategyOverride `json:"strategies,omitempty"`
 }
 
 // NewStore creates an empty override store.
@@ -91,6 +105,7 @@ func NewStore() *Store {
 		rules:       make(map[string]map[string]RuleOverride),
 		flags:       make(map[string]map[string]FlagOverride),
 		flagRules:   make(map[string]map[string]map[int]FlagRuleOverride),
+		strategies:  make(map[string]map[string]map[string]StrategyOverride),
 		subscribers: make(map[uint64]overrideSubscription),
 	}
 }
@@ -250,6 +265,57 @@ func (s *Store) SetFlagRule(bundleID, flagKey string, ruleIndex int, ov FlagRule
 	}, changed)
 }
 
+// SetStrategy stores or clears a strategy-candidate override.
+func (s *Store) SetStrategy(bundleID, strategyName, candidateLabel string, ov StrategyOverride) error {
+	s.mu.Lock()
+	changed := false
+	if ov.KillSwitch == nil && ov.Rollout == nil {
+		if strategies, ok := s.strategies[bundleID]; ok {
+			if candidates, ok := strategies[strategyName]; ok {
+				if _, ok := candidates[candidateLabel]; ok {
+					delete(candidates, candidateLabel)
+					changed = true
+				}
+				if len(candidates) == 0 {
+					delete(strategies, strategyName)
+				}
+			}
+			if len(strategies) == 0 {
+				delete(s.strategies, bundleID)
+			}
+		}
+		return s.persistAndNotifyLocked(OverrideEvent{
+			Type:           OverrideEventStrategy,
+			BundleID:       bundleID,
+			StrategyName:   strategyName,
+			CandidateLabel: candidateLabel,
+			Strategy:       cloneStrategyOverride(ov),
+		}, changed)
+	}
+
+	strategies := s.strategies[bundleID]
+	if strategies == nil {
+		strategies = make(map[string]map[string]StrategyOverride)
+		s.strategies[bundleID] = strategies
+	}
+	candidates := strategies[strategyName]
+	if candidates == nil {
+		candidates = make(map[string]StrategyOverride)
+		strategies[strategyName] = candidates
+	}
+	if current, ok := candidates[candidateLabel]; !ok || current != ov {
+		changed = true
+	}
+	candidates[candidateLabel] = ov
+	return s.persistAndNotifyLocked(OverrideEvent{
+		Type:           OverrideEventStrategy,
+		BundleID:       bundleID,
+		StrategyName:   strategyName,
+		CandidateLabel: candidateLabel,
+		Strategy:       cloneStrategyOverride(ov),
+	}, changed)
+}
+
 // Rule returns a rule override if present.
 func (s *Store) Rule(bundleID, ruleName string) (RuleOverride, bool) {
 	s.mu.RLock()
@@ -290,15 +356,32 @@ func (s *Store) FlagRule(bundleID, flagKey string, ruleIndex int) (FlagRuleOverr
 	return ov, ok
 }
 
+// Strategy returns a strategy-candidate override if present.
+func (s *Store) Strategy(bundleID, strategyName, candidateLabel string) (StrategyOverride, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	strategies := s.strategies[bundleID]
+	if strategies == nil {
+		return StrategyOverride{}, false
+	}
+	candidates := strategies[strategyName]
+	if candidates == nil {
+		return StrategyOverride{}, false
+	}
+	ov, ok := candidates[candidateLabel]
+	return ov, ok
+}
+
 // Snapshot returns a deep copy of the current override store.
 func (s *Store) Snapshot() Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	out := Snapshot{
-		Rules:     make(map[string]map[string]RuleOverride, len(s.rules)),
-		Flags:     make(map[string]map[string]FlagOverride, len(s.flags)),
-		FlagRules: make(map[string]map[string]map[int]FlagRuleOverride, len(s.flagRules)),
+		Rules:      make(map[string]map[string]RuleOverride, len(s.rules)),
+		Flags:      make(map[string]map[string]FlagOverride, len(s.flags)),
+		FlagRules:  make(map[string]map[string]map[int]FlagRuleOverride, len(s.flagRules)),
+		Strategies: make(map[string]map[string]map[string]StrategyOverride, len(s.strategies)),
 	}
 	for bundleID, rules := range s.rules {
 		cloned := make(map[string]RuleOverride, len(rules))
@@ -325,6 +408,17 @@ func (s *Store) Snapshot() Snapshot {
 		}
 		out.FlagRules[bundleID] = clonedFlags
 	}
+	for bundleID, strategies := range s.strategies {
+		clonedStrategies := make(map[string]map[string]StrategyOverride, len(strategies))
+		for strategyName, candidates := range strategies {
+			clonedCandidates := make(map[string]StrategyOverride, len(candidates))
+			for candidateLabel, ov := range candidates {
+				clonedCandidates[candidateLabel] = cloneStrategyOverride(ov)
+			}
+			clonedStrategies[strategyName] = clonedCandidates
+		}
+		out.Strategies[bundleID] = clonedStrategies
+	}
 	return out
 }
 
@@ -332,7 +426,7 @@ func (s *Store) Snapshot() Snapshot {
 func (s *Store) SnapshotForBundle(bundleID string) BundleSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return snapshotForBundleLocked(bundleID, s.rules, s.flags, s.flagRules)
+	return snapshotForBundleLocked(bundleID, s.rules, s.flags, s.flagRules, s.strategies)
 }
 
 // RestoreBundle replaces one bundle's overrides while leaving all others intact.
@@ -346,6 +440,7 @@ func (s *Store) RestoreBundle(bundleID string, snapshot Snapshot) {
 	delete(s.rules, bundleID)
 	delete(s.flags, bundleID)
 	delete(s.flagRules, bundleID)
+	delete(s.strategies, bundleID)
 
 	if rules, ok := snapshot.Rules[bundleID]; ok && len(rules) > 0 {
 		cloned := make(map[string]RuleOverride, len(rules))
@@ -372,6 +467,17 @@ func (s *Store) RestoreBundle(bundleID string, snapshot Snapshot) {
 		}
 		s.flagRules[bundleID] = clonedFlags
 	}
+	if strategies, ok := snapshot.Strategies[bundleID]; ok && len(strategies) > 0 {
+		clonedStrategies := make(map[string]map[string]StrategyOverride, len(strategies))
+		for strategyName, candidates := range strategies {
+			clonedCandidates := make(map[string]StrategyOverride, len(candidates))
+			for candidateLabel, ov := range candidates {
+				clonedCandidates[candidateLabel] = cloneStrategyOverride(ov)
+			}
+			clonedStrategies[strategyName] = clonedCandidates
+		}
+		s.strategies[bundleID] = clonedStrategies
+	}
 }
 
 // Subscribe registers for bundle-specific override change events.
@@ -384,7 +490,7 @@ func (s *Store) Subscribe(bundleID string) (BundleSnapshot, <-chan OverrideEvent
 	s.nextSubID++
 	ch := make(chan OverrideEvent, 4)
 	s.subscribers[id] = overrideSubscription{bundleID: bundleID, ch: ch}
-	snapshot := snapshotForBundleLocked(bundleID, s.rules, s.flags, s.flagRules)
+	snapshot := snapshotForBundleLocked(bundleID, s.rules, s.flags, s.flagRules, s.strategies)
 	s.mu.Unlock()
 
 	var once sync.Once
@@ -405,6 +511,7 @@ func (s *Store) Restore(snapshot Snapshot) {
 	s.rules = make(map[string]map[string]RuleOverride, len(snapshot.Rules))
 	s.flags = make(map[string]map[string]FlagOverride, len(snapshot.Flags))
 	s.flagRules = make(map[string]map[string]map[int]FlagRuleOverride, len(snapshot.FlagRules))
+	s.strategies = make(map[string]map[string]map[string]StrategyOverride, len(snapshot.Strategies))
 	for bundleID, rules := range snapshot.Rules {
 		cloned := make(map[string]RuleOverride, len(rules))
 		for name, ov := range rules {
@@ -429,6 +536,17 @@ func (s *Store) Restore(snapshot Snapshot) {
 			clonedFlags[key] = clonedRules
 		}
 		s.flagRules[bundleID] = clonedFlags
+	}
+	for bundleID, strategies := range snapshot.Strategies {
+		clonedStrategies := make(map[string]map[string]StrategyOverride, len(strategies))
+		for strategyName, candidates := range strategies {
+			clonedCandidates := make(map[string]StrategyOverride, len(candidates))
+			for candidateLabel, ov := range candidates {
+				clonedCandidates[candidateLabel] = cloneStrategyOverride(ov)
+			}
+			clonedStrategies[strategyName] = clonedCandidates
+		}
+		s.strategies[bundleID] = clonedStrategies
 	}
 }
 
@@ -461,9 +579,10 @@ func (s *Store) LoadFile(path string) error {
 
 func (s *Store) snapshotLocked() Snapshot {
 	out := Snapshot{
-		Rules:     make(map[string]map[string]RuleOverride, len(s.rules)),
-		Flags:     make(map[string]map[string]FlagOverride, len(s.flags)),
-		FlagRules: make(map[string]map[string]map[int]FlagRuleOverride, len(s.flagRules)),
+		Rules:      make(map[string]map[string]RuleOverride, len(s.rules)),
+		Flags:      make(map[string]map[string]FlagOverride, len(s.flags)),
+		FlagRules:  make(map[string]map[string]map[int]FlagRuleOverride, len(s.flagRules)),
+		Strategies: make(map[string]map[string]map[string]StrategyOverride, len(s.strategies)),
 	}
 	for bundleID, rules := range s.rules {
 		cloned := make(map[string]RuleOverride, len(rules))
@@ -489,6 +608,17 @@ func (s *Store) snapshotLocked() Snapshot {
 			clonedFlags[key] = clonedRules
 		}
 		out.FlagRules[bundleID] = clonedFlags
+	}
+	for bundleID, strategies := range s.strategies {
+		clonedStrategies := make(map[string]map[string]StrategyOverride, len(strategies))
+		for strategyName, candidates := range strategies {
+			clonedCandidates := make(map[string]StrategyOverride, len(candidates))
+			for candidateLabel, ov := range candidates {
+				clonedCandidates[candidateLabel] = cloneStrategyOverride(ov)
+			}
+			clonedStrategies[strategyName] = clonedCandidates
+		}
+		out.Strategies[bundleID] = clonedStrategies
 	}
 	return out
 }
@@ -560,12 +690,26 @@ func cloneFlagRuleOverride(ov FlagRuleOverride) FlagRuleOverride {
 	return out
 }
 
-func snapshotForBundleLocked(bundleID string, rules map[string]map[string]RuleOverride, flags map[string]map[string]FlagOverride, flagRules map[string]map[string]map[int]FlagRuleOverride) BundleSnapshot {
+func cloneStrategyOverride(ov StrategyOverride) StrategyOverride {
+	out := StrategyOverride{}
+	if ov.KillSwitch != nil {
+		v := *ov.KillSwitch
+		out.KillSwitch = &v
+	}
+	if ov.Rollout != nil {
+		v := *ov.Rollout
+		out.Rollout = &v
+	}
+	return out
+}
+
+func snapshotForBundleLocked(bundleID string, rules map[string]map[string]RuleOverride, flags map[string]map[string]FlagOverride, flagRules map[string]map[string]map[int]FlagRuleOverride, strategies map[string]map[string]map[string]StrategyOverride) BundleSnapshot {
 	out := BundleSnapshot{
-		BundleID:  bundleID,
-		Rules:     make(map[string]RuleOverride),
-		Flags:     make(map[string]FlagOverride),
-		FlagRules: make(map[string]map[int]FlagRuleOverride),
+		BundleID:   bundleID,
+		Rules:      make(map[string]RuleOverride),
+		Flags:      make(map[string]FlagOverride),
+		FlagRules:  make(map[string]map[int]FlagRuleOverride),
+		Strategies: make(map[string]map[string]StrategyOverride),
 	}
 	if ruleSet, ok := rules[bundleID]; ok {
 		for name, ov := range ruleSet {
@@ -584,6 +728,15 @@ func snapshotForBundleLocked(bundleID string, rules map[string]map[string]RuleOv
 				cloned[idx] = cloneFlagRuleOverride(ov)
 			}
 			out.FlagRules[key] = cloned
+		}
+	}
+	if strategySet, ok := strategies[bundleID]; ok {
+		for strategyName, candidates := range strategySet {
+			cloned := make(map[string]StrategyOverride, len(candidates))
+			for candidateLabel, ov := range candidates {
+				cloned[candidateLabel] = cloneStrategyOverride(ov)
+			}
+			out.Strategies[strategyName] = cloned
 		}
 	}
 	return out

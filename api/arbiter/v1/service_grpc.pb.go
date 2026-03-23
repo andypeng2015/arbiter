@@ -29,6 +29,7 @@ const (
 	ArbiterService_WatchOverrides_FullMethodName      = "/arbiter.v1.ArbiterService/WatchOverrides"
 	ArbiterService_EvaluateRules_FullMethodName       = "/arbiter.v1.ArbiterService/EvaluateRules"
 	ArbiterService_ResolveFlag_FullMethodName         = "/arbiter.v1.ArbiterService/ResolveFlag"
+	ArbiterService_EvaluateStrategy_FullMethodName    = "/arbiter.v1.ArbiterService/EvaluateStrategy"
 	ArbiterService_StartSession_FullMethodName        = "/arbiter.v1.ArbiterService/StartSession"
 	ArbiterService_RunSession_FullMethodName          = "/arbiter.v1.ArbiterService/RunSession"
 	ArbiterService_AssertFacts_FullMethodName         = "/arbiter.v1.ArbiterService/AssertFacts"
@@ -38,6 +39,7 @@ const (
 	ArbiterService_SetRuleOverride_FullMethodName     = "/arbiter.v1.ArbiterService/SetRuleOverride"
 	ArbiterService_SetFlagOverride_FullMethodName     = "/arbiter.v1.ArbiterService/SetFlagOverride"
 	ArbiterService_SetFlagRuleOverride_FullMethodName = "/arbiter.v1.ArbiterService/SetFlagRuleOverride"
+	ArbiterService_SetStrategyOverride_FullMethodName = "/arbiter.v1.ArbiterService/SetStrategyOverride"
 )
 
 // ArbiterServiceClient is the client API for ArbiterService service.
@@ -54,6 +56,7 @@ type ArbiterServiceClient interface {
 	WatchOverrides(ctx context.Context, in *WatchOverridesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[OverrideEvent], error)
 	EvaluateRules(ctx context.Context, in *EvaluateRulesRequest, opts ...grpc.CallOption) (*EvaluateRulesResponse, error)
 	ResolveFlag(ctx context.Context, in *ResolveFlagRequest, opts ...grpc.CallOption) (*ResolveFlagResponse, error)
+	EvaluateStrategy(ctx context.Context, in *EvaluateStrategyRequest, opts ...grpc.CallOption) (*EvaluateStrategyResponse, error)
 	StartSession(ctx context.Context, in *StartSessionRequest, opts ...grpc.CallOption) (*StartSessionResponse, error)
 	RunSession(ctx context.Context, in *RunSessionRequest, opts ...grpc.CallOption) (*RunSessionResponse, error)
 	AssertFacts(ctx context.Context, in *AssertFactsRequest, opts ...grpc.CallOption) (*AssertFactsResponse, error)
@@ -63,6 +66,7 @@ type ArbiterServiceClient interface {
 	SetRuleOverride(ctx context.Context, in *SetRuleOverrideRequest, opts ...grpc.CallOption) (*SetRuleOverrideResponse, error)
 	SetFlagOverride(ctx context.Context, in *SetFlagOverrideRequest, opts ...grpc.CallOption) (*SetFlagOverrideResponse, error)
 	SetFlagRuleOverride(ctx context.Context, in *SetFlagRuleOverrideRequest, opts ...grpc.CallOption) (*SetFlagRuleOverrideResponse, error)
+	SetStrategyOverride(ctx context.Context, in *SetStrategyOverrideRequest, opts ...grpc.CallOption) (*SetStrategyOverrideResponse, error)
 }
 
 type arbiterServiceClient struct {
@@ -191,6 +195,16 @@ func (c *arbiterServiceClient) ResolveFlag(ctx context.Context, in *ResolveFlagR
 	return out, nil
 }
 
+func (c *arbiterServiceClient) EvaluateStrategy(ctx context.Context, in *EvaluateStrategyRequest, opts ...grpc.CallOption) (*EvaluateStrategyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EvaluateStrategyResponse)
+	err := c.cc.Invoke(ctx, ArbiterService_EvaluateStrategy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *arbiterServiceClient) StartSession(ctx context.Context, in *StartSessionRequest, opts ...grpc.CallOption) (*StartSessionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StartSessionResponse)
@@ -281,6 +295,16 @@ func (c *arbiterServiceClient) SetFlagRuleOverride(ctx context.Context, in *SetF
 	return out, nil
 }
 
+func (c *arbiterServiceClient) SetStrategyOverride(ctx context.Context, in *SetStrategyOverrideRequest, opts ...grpc.CallOption) (*SetStrategyOverrideResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetStrategyOverrideResponse)
+	err := c.cc.Invoke(ctx, ArbiterService_SetStrategyOverride_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ArbiterServiceServer is the server API for ArbiterService service.
 // All implementations must embed UnimplementedArbiterServiceServer
 // for forward compatibility.
@@ -295,6 +319,7 @@ type ArbiterServiceServer interface {
 	WatchOverrides(*WatchOverridesRequest, grpc.ServerStreamingServer[OverrideEvent]) error
 	EvaluateRules(context.Context, *EvaluateRulesRequest) (*EvaluateRulesResponse, error)
 	ResolveFlag(context.Context, *ResolveFlagRequest) (*ResolveFlagResponse, error)
+	EvaluateStrategy(context.Context, *EvaluateStrategyRequest) (*EvaluateStrategyResponse, error)
 	StartSession(context.Context, *StartSessionRequest) (*StartSessionResponse, error)
 	RunSession(context.Context, *RunSessionRequest) (*RunSessionResponse, error)
 	AssertFacts(context.Context, *AssertFactsRequest) (*AssertFactsResponse, error)
@@ -304,6 +329,7 @@ type ArbiterServiceServer interface {
 	SetRuleOverride(context.Context, *SetRuleOverrideRequest) (*SetRuleOverrideResponse, error)
 	SetFlagOverride(context.Context, *SetFlagOverrideRequest) (*SetFlagOverrideResponse, error)
 	SetFlagRuleOverride(context.Context, *SetFlagRuleOverrideRequest) (*SetFlagRuleOverrideResponse, error)
+	SetStrategyOverride(context.Context, *SetStrategyOverrideRequest) (*SetStrategyOverrideResponse, error)
 	mustEmbedUnimplementedArbiterServiceServer()
 }
 
@@ -344,6 +370,9 @@ func (UnimplementedArbiterServiceServer) EvaluateRules(context.Context, *Evaluat
 func (UnimplementedArbiterServiceServer) ResolveFlag(context.Context, *ResolveFlagRequest) (*ResolveFlagResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolveFlag not implemented")
 }
+func (UnimplementedArbiterServiceServer) EvaluateStrategy(context.Context, *EvaluateStrategyRequest) (*EvaluateStrategyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method EvaluateStrategy not implemented")
+}
 func (UnimplementedArbiterServiceServer) StartSession(context.Context, *StartSessionRequest) (*StartSessionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartSession not implemented")
 }
@@ -370,6 +399,9 @@ func (UnimplementedArbiterServiceServer) SetFlagOverride(context.Context, *SetFl
 }
 func (UnimplementedArbiterServiceServer) SetFlagRuleOverride(context.Context, *SetFlagRuleOverrideRequest) (*SetFlagRuleOverrideResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetFlagRuleOverride not implemented")
+}
+func (UnimplementedArbiterServiceServer) SetStrategyOverride(context.Context, *SetStrategyOverrideRequest) (*SetStrategyOverrideResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetStrategyOverride not implemented")
 }
 func (UnimplementedArbiterServiceServer) mustEmbedUnimplementedArbiterServiceServer() {}
 func (UnimplementedArbiterServiceServer) testEmbeddedByValue()                        {}
@@ -558,6 +590,24 @@ func _ArbiterService_ResolveFlag_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ArbiterService_EvaluateStrategy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EvaluateStrategyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ArbiterServiceServer).EvaluateStrategy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ArbiterService_EvaluateStrategy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ArbiterServiceServer).EvaluateStrategy(ctx, req.(*EvaluateStrategyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ArbiterService_StartSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StartSessionRequest)
 	if err := dec(in); err != nil {
@@ -720,6 +770,24 @@ func _ArbiterService_SetFlagRuleOverride_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ArbiterService_SetStrategyOverride_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetStrategyOverrideRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ArbiterServiceServer).SetStrategyOverride(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ArbiterService_SetStrategyOverride_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ArbiterServiceServer).SetStrategyOverride(ctx, req.(*SetStrategyOverrideRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ArbiterService_ServiceDesc is the grpc.ServiceDesc for ArbiterService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -760,6 +828,10 @@ var ArbiterService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ArbiterService_ResolveFlag_Handler,
 		},
 		{
+			MethodName: "EvaluateStrategy",
+			Handler:    _ArbiterService_EvaluateStrategy_Handler,
+		},
+		{
 			MethodName: "StartSession",
 			Handler:    _ArbiterService_StartSession_Handler,
 		},
@@ -794,6 +866,10 @@ var ArbiterService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetFlagRuleOverride",
 			Handler:    _ArbiterService_SetFlagRuleOverride_Handler,
+		},
+		{
+			MethodName: "SetStrategyOverride",
+			Handler:    _ArbiterService_SetStrategyOverride_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -175,7 +175,10 @@ func overrideEventTypeFromProto(eventType arbiterv1.OverrideEventType) OverrideE
 	switch eventType {
 	case arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_SNAPSHOT:
 		return OverrideEventSnapshot
-	case arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_RULE, arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_FLAG, arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_FLAG_RULE:
+	case arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_RULE,
+		arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_FLAG,
+		arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_FLAG_RULE,
+		arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_STRATEGY:
 		return OverrideEventMutation
 	default:
 		return OverrideEventUnknown
@@ -217,6 +220,19 @@ func snapshotFromProto(items *arbiterv1.BundleOverrides) *overrides.Snapshot {
 			rules[int(entry.GetRuleIndex())] = flagRuleOverrideFromProto(entry)
 		}
 	}
+	if len(items.GetStrategies()) > 0 {
+		snapshot.Strategies = map[string]map[string]map[string]overrides.StrategyOverride{
+			bundleID: make(map[string]map[string]overrides.StrategyOverride),
+		}
+		for _, entry := range items.GetStrategies() {
+			candidates := snapshot.Strategies[bundleID][entry.GetStrategyName()]
+			if candidates == nil {
+				candidates = make(map[string]overrides.StrategyOverride)
+				snapshot.Strategies[bundleID][entry.GetStrategyName()] = candidates
+			}
+			candidates[entry.GetCandidateLabel()] = strategyOverrideFromProto(entry)
+		}
+	}
 	return snapshot
 }
 
@@ -231,6 +247,8 @@ func applyProtoOverrideMutation(snapshot *overrides.Snapshot, bundleID string, e
 		applyFlagMutation(snapshot, bundleID, event.GetFlag())
 	case arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_FLAG_RULE:
 		applyFlagRuleMutation(snapshot, bundleID, event.GetFlagRule())
+	case arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_STRATEGY:
+		applyStrategyMutation(snapshot, bundleID, event.GetStrategy())
 	}
 }
 
@@ -316,6 +334,40 @@ func applyFlagRuleMutation(snapshot *overrides.Snapshot, bundleID string, entry 
 	rules[int(entry.GetRuleIndex())] = flagRuleOverrideFromProto(entry)
 }
 
+func applyStrategyMutation(snapshot *overrides.Snapshot, bundleID string, entry *arbiterv1.StrategyOverrideEntry) {
+	if entry == nil {
+		return
+	}
+	if !entry.GetKillSwitchSet() && !entry.GetRolloutSet() {
+		if strategies := snapshot.Strategies[bundleID]; strategies != nil {
+			if candidates := strategies[entry.GetStrategyName()]; candidates != nil {
+				delete(candidates, entry.GetCandidateLabel())
+				if len(candidates) == 0 {
+					delete(strategies, entry.GetStrategyName())
+				}
+			}
+			if len(strategies) == 0 {
+				delete(snapshot.Strategies, bundleID)
+			}
+		}
+		return
+	}
+	if snapshot.Strategies == nil {
+		snapshot.Strategies = make(map[string]map[string]map[string]overrides.StrategyOverride)
+	}
+	strategies := snapshot.Strategies[bundleID]
+	if strategies == nil {
+		strategies = make(map[string]map[string]overrides.StrategyOverride)
+		snapshot.Strategies[bundleID] = strategies
+	}
+	candidates := strategies[entry.GetStrategyName()]
+	if candidates == nil {
+		candidates = make(map[string]overrides.StrategyOverride)
+		strategies[entry.GetStrategyName()] = candidates
+	}
+	candidates[entry.GetCandidateLabel()] = strategyOverrideFromProto(entry)
+}
+
 func ruleOverrideFromProto(entry *arbiterv1.RuleOverrideEntry) overrides.RuleOverride {
 	ov := overrides.RuleOverride{}
 	if entry != nil && entry.GetKillSwitchSet() {
@@ -340,6 +392,19 @@ func flagOverrideFromProto(entry *arbiterv1.FlagOverrideEntry) overrides.FlagOve
 
 func flagRuleOverrideFromProto(entry *arbiterv1.FlagRuleOverrideEntry) overrides.FlagRuleOverride {
 	ov := overrides.FlagRuleOverride{}
+	if entry != nil && entry.GetRolloutSet() {
+		v := uint16(entry.GetRollout())
+		ov.Rollout = &v
+	}
+	return ov
+}
+
+func strategyOverrideFromProto(entry *arbiterv1.StrategyOverrideEntry) overrides.StrategyOverride {
+	ov := overrides.StrategyOverride{}
+	if entry != nil && entry.GetKillSwitchSet() {
+		v := entry.GetKillSwitch()
+		ov.KillSwitch = &v
+	}
 	if entry != nil && entry.GetRolloutSet() {
 		v := uint16(entry.GetRollout())
 		ov.Rollout = &v
@@ -383,6 +448,20 @@ func cloneOverrideSnapshot(snapshot overrides.Snapshot) overrides.Snapshot {
 			out.FlagRules[bundleID] = clonedFlags
 		}
 	}
+	if len(snapshot.Strategies) > 0 {
+		out.Strategies = make(map[string]map[string]map[string]overrides.StrategyOverride, len(snapshot.Strategies))
+		for bundleID, strategies := range snapshot.Strategies {
+			clonedStrategies := make(map[string]map[string]overrides.StrategyOverride, len(strategies))
+			for strategyName, candidates := range strategies {
+				clonedCandidates := make(map[string]overrides.StrategyOverride, len(candidates))
+				for candidateLabel, ov := range candidates {
+					clonedCandidates[candidateLabel] = cloneStrategyOverride(ov)
+				}
+				clonedStrategies[strategyName] = clonedCandidates
+			}
+			out.Strategies[bundleID] = clonedStrategies
+		}
+	}
 	return out
 }
 
@@ -410,6 +489,19 @@ func cloneFlagOverride(ov overrides.FlagOverride) overrides.FlagOverride {
 
 func cloneFlagRuleOverride(ov overrides.FlagRuleOverride) overrides.FlagRuleOverride {
 	out := overrides.FlagRuleOverride{}
+	if ov.Rollout != nil {
+		v := *ov.Rollout
+		out.Rollout = &v
+	}
+	return out
+}
+
+func cloneStrategyOverride(ov overrides.StrategyOverride) overrides.StrategyOverride {
+	out := overrides.StrategyOverride{}
+	if ov.KillSwitch != nil {
+		v := *ov.KillSwitch
+		out.KillSwitch = &v
+	}
 	if ov.Rollout != nil {
 		v := *ov.Rollout
 		out.Rollout = &v

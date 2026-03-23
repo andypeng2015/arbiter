@@ -8,6 +8,7 @@ import (
 
 	arbiter "github.com/odvcencio/arbiter"
 	"github.com/odvcencio/arbiter/govern"
+	"github.com/odvcencio/arbiter/overrides"
 )
 
 func TestEvalStrategySelectsCandidateAndFallsBack(t *testing.T) {
@@ -245,6 +246,76 @@ strategy CheckoutRouting returns CheckoutPath {
 	}
 	if !reflect.DeepEqual(result.Trace.Steps, want) {
 		t.Fatalf("trace steps = %#v, want %#v", result.Trace.Steps, want)
+	}
+}
+
+func TestEvalStrategyWithOverridesAddsCandidateRollout(t *testing.T) {
+	full := compileStrategyBundle(t, `
+outcome CheckoutPath {
+	target: string
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	when {
+		user.country == "US"
+	} then Canary {
+		target: "canary",
+	}
+
+	else Stable {
+		target: "stable",
+	}
+}
+`)
+
+	store := overrides.NewStore()
+	rollout := uint16(2000)
+	if err := store.SetStrategy("bundle_test", "CheckoutRouting", "Canary", overrides.StrategyOverride{
+		Rollout: &rollout,
+	}); err != nil {
+		t.Fatalf("SetStrategy: %v", err)
+	}
+
+	namespace := govern.AutoRolloutNamespace("bundle_test", "strategy:CheckoutRouting:candidate:Canary")
+	var lowBucket, highBucket string
+	for i := 0; i < 1000; i++ {
+		id := fmt.Sprintf("user_%d", i)
+		bucket := govern.RolloutBucket(namespace, id)
+		if bucket < 2000 && lowBucket == "" {
+			lowBucket = id
+		}
+		if bucket >= 2000 && highBucket == "" {
+			highBucket = id
+		}
+		if lowBucket != "" && highBucket != "" {
+			break
+		}
+	}
+
+	low, err := arbiter.EvalStrategyWithOverrides(full, "CheckoutRouting", map[string]any{
+		"user": map[string]any{
+			"country": "US",
+			"id":      lowBucket,
+		},
+	}, "bundle_test", store)
+	if err != nil {
+		t.Fatalf("EvalStrategyWithOverrides low bucket: %v", err)
+	}
+	if low.Selected != "Canary" {
+		t.Fatalf("Selected = %q, want Canary", low.Selected)
+	}
+
+	high, err := arbiter.EvalStrategyWithOverrides(full, "CheckoutRouting", map[string]any{
+		"user": map[string]any{
+			"country": "US",
+			"id":      highBucket,
+		},
+	}, "bundle_test", store)
+	if err != nil {
+		t.Fatalf("EvalStrategyWithOverrides high bucket: %v", err)
+	}
+	if high.Selected != "Stable" {
+		t.Fatalf("Selected = %q, want Stable", high.Selected)
 	}
 }
 

@@ -44,6 +44,7 @@ type Bundle struct {
 	RuleCount       int
 	ExpertRuleCount int
 	FlagCount       int
+	StrategyCount   int
 }
 
 type bundleRecord struct {
@@ -589,6 +590,7 @@ func compileBundleRecord(record bundleRecord) (*Bundle, error) {
 		RuleCount:       len(compiled.Ruleset.Rules),
 		ExpertRuleCount: len(expertProgram.Rules()),
 		FlagCount:       flagSet.Count(),
+		StrategyCount:   compiled.Strategies.Count(),
 	}, nil
 }
 

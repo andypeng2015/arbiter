@@ -19,6 +19,7 @@ service ArbiterService {
   rpc WatchOverrides(WatchOverridesRequest) returns (stream OverrideEvent);
   rpc EvaluateRules(EvaluateRulesRequest) returns (EvaluateRulesResponse);
   rpc ResolveFlag(ResolveFlagRequest) returns (ResolveFlagResponse);
+  rpc EvaluateStrategy(EvaluateStrategyRequest) returns (EvaluateStrategyResponse);
   rpc StartSession(StartSessionRequest) returns (StartSessionResponse);
   rpc RunSession(RunSessionRequest) returns (RunSessionResponse);
   rpc AssertFacts(AssertFactsRequest) returns (AssertFactsResponse);
@@ -28,6 +29,7 @@ service ArbiterService {
   rpc SetRuleOverride(SetRuleOverrideRequest) returns (SetRuleOverrideResponse);
   rpc SetFlagOverride(SetFlagOverrideRequest) returns (SetFlagOverrideResponse);
   rpc SetFlagRuleOverride(SetFlagRuleOverrideRequest) returns (SetFlagRuleOverrideResponse);
+  rpc SetStrategyOverride(SetStrategyOverrideRequest) returns (SetStrategyOverrideResponse);
 }
 
 message PublishBundleRequest {
@@ -42,6 +44,7 @@ message PublishBundleResponse {
   uint32 flag_count = 4;
   google.protobuf.Timestamp published_at = 5;
   uint32 expert_rule_count = 6;
+  uint32 strategy_count = 7;
 }
 
 message BundleSummary {
@@ -53,6 +56,7 @@ message BundleSummary {
   uint32 flag_count = 6;
   uint32 expert_rule_count = 7;
   bool active = 8;
+  uint32 strategy_count = 9;
 }
 
 message ListBundlesRequest {
@@ -131,6 +135,7 @@ enum OverrideEventType {
   OVERRIDE_EVENT_TYPE_RULE = 2;
   OVERRIDE_EVENT_TYPE_FLAG = 3;
   OVERRIDE_EVENT_TYPE_FLAG_RULE = 4;
+  OVERRIDE_EVENT_TYPE_STRATEGY = 5;
 }
 
 message BundleOverrides {
@@ -138,6 +143,7 @@ message BundleOverrides {
   repeated RuleOverrideEntry rules = 2;
   repeated FlagOverrideEntry flags = 3;
   repeated FlagRuleOverrideEntry flag_rules = 4;
+  repeated StrategyOverrideEntry strategies = 5;
 }
 
 message RuleOverrideEntry {
@@ -161,6 +167,15 @@ message FlagRuleOverrideEntry {
   uint32 rollout = 4;
 }
 
+message StrategyOverrideEntry {
+  string strategy_name = 1;
+  string candidate_label = 2;
+  bool kill_switch_set = 3;
+  bool kill_switch = 4;
+  bool rollout_set = 5;
+  uint32 rollout = 6;
+}
+
 message OverrideEvent {
   OverrideEventType type = 1;
   string bundle_id = 2;
@@ -171,6 +186,9 @@ message OverrideEvent {
   FlagOverrideEntry flag = 7;
   uint32 rule_index = 8;
   FlagRuleOverrideEntry flag_rule = 9;
+  string strategy_name = 10;
+  string candidate_label = 11;
+  StrategyOverrideEntry strategy = 12;
 }
 
 message TraceStep {
@@ -213,6 +231,21 @@ message ResolveFlagResponse {
   bool is_default = 3;
   string reason = 4;
   repeated TraceStep trace = 5;
+}
+
+message EvaluateStrategyRequest {
+  string bundle_id = 1;
+  string strategy_name = 2;
+  google.protobuf.Struct context = 3;
+  string request_id = 4;
+  string bundle_name = 5;
+}
+
+message EvaluateStrategyResponse {
+  string outcome = 1;
+  string selected = 2;
+  google.protobuf.Struct params = 3;
+  repeated TraceStep trace = 4;
 }
 
 message ExpertFact {
@@ -326,3 +359,13 @@ message SetFlagRuleOverrideRequest {
 }
 
 message SetFlagRuleOverrideResponse {}
+
+message SetStrategyOverrideRequest {
+  string bundle_id = 1;
+  string strategy_name = 2;
+  string candidate_label = 3;
+  google.protobuf.BoolValue kill_switch = 4;
+  google.protobuf.UInt32Value rollout = 5;
+}
+
+message SetStrategyOverrideResponse {}

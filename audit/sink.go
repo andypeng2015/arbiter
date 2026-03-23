@@ -40,6 +40,14 @@ type FlagAssignment struct {
 	Values      map[string]any `json:"values,omitempty"`
 }
 
+// StrategyDecision captures one resolved strategy selection.
+type StrategyDecision struct {
+	Strategy string         `json:"strategy"`
+	Outcome  string         `json:"outcome"`
+	Selected string         `json:"selected"`
+	Params   map[string]any `json:"params,omitempty"`
+}
+
 // ExpertFact captures one expert working-memory fact.
 type ExpertFact struct {
 	Type      string         `json:"type"`
@@ -106,6 +114,7 @@ type DecisionEvent struct {
 	Rules       []RuleMatch        `json:"rules,omitempty"`
 	Flag        *FlagDecision      `json:"flag,omitempty"`
 	Assignment  *FlagAssignment    `json:"assignment,omitempty"`
+	Strategy    *StrategyDecision  `json:"strategy,omitempty"`
 	Expert      *ExpertDecision    `json:"expert,omitempty"`
 	Override    *OverrideChange    `json:"override,omitempty"`
 	Bundle      *BundleChange      `json:"bundle,omitempty"`

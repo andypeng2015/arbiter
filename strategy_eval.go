@@ -3,6 +3,7 @@ package arbiter
 import (
 	"fmt"
 
+	"github.com/odvcencio/arbiter/overrides"
 	"github.com/odvcencio/arbiter/strategy"
 )
 
@@ -35,11 +36,17 @@ func CompileStrategiesFile(path string) (*strategy.Strategies, error) {
 
 // EvalStrategy evaluates one compiled strategy against the given request context.
 func EvalStrategy(compiled *CompileResult, name string, ctx map[string]any) (strategy.Result, error) {
+	return EvalStrategyWithOverrides(compiled, name, ctx, "", nil)
+}
+
+// EvalStrategyWithOverrides evaluates one compiled strategy while applying
+// runtime candidate overrides.
+func EvalStrategyWithOverrides(compiled *CompileResult, name string, ctx map[string]any, bundleID string, view overrides.View) (strategy.Result, error) {
 	if compiled == nil {
 		return strategy.Result{}, fmt.Errorf("nil compiled program")
 	}
 	if compiled.Strategies == nil {
 		return strategy.Result{}, fmt.Errorf("nil compiled strategies")
 	}
-	return compiled.Strategies.Evaluate(name, ctx)
+	return compiled.Strategies.EvaluateWithOverrides(name, ctx, bundleID, view)
 }

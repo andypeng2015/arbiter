@@ -7,6 +7,7 @@ import (
 	"github.com/odvcencio/arbiter/compiler"
 	"github.com/odvcencio/arbiter/govern"
 	"github.com/odvcencio/arbiter/ir"
+	"github.com/odvcencio/arbiter/overrides"
 	"github.com/odvcencio/arbiter/vm"
 )
 
@@ -67,6 +68,12 @@ func Compile(program *ir.Program, segments *govern.SegmentSet) (*Strategies, err
 
 // Evaluate recognizes and selects one named strategy path against a request context.
 func (s *Strategies) Evaluate(name string, ctx map[string]any) (Result, error) {
+	return s.EvaluateWithOverrides(name, ctx, "", nil)
+}
+
+// EvaluateWithOverrides recognizes and selects one named strategy path while
+// applying runtime candidate overrides.
+func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bundleID string, view overrides.View) (Result, error) {
 	if s == nil {
 		return Result{}, fmt.Errorf("nil strategies")
 	}
@@ -87,8 +94,9 @@ func (s *Strategies) Evaluate(name string, ctx map[string]any) (Result, error) {
 	for i, rule := range def.Ruleset.Rules {
 		candidate := def.Candidates[i]
 		checkPrefix := "strategy:" + def.Name + "/" + candidate.Label + ":"
+		killSwitch, rollout := effectiveCandidateGovernance(bundleID, def.Name, candidate, view)
 
-		if candidate.KillSwitch {
+		if killSwitch {
 			trace.Append(checkPrefix+"kill_switch", false, "candidate kill_switch enabled")
 			continue
 		}
@@ -114,8 +122,8 @@ func (s *Strategies) Evaluate(name string, ctx map[string]any) (Result, error) {
 			continue
 		}
 
-		if candidate.Rollout != nil {
-			decision := govern.DecidePercentRollout(*candidate.Rollout, rc.Context())
+		if rollout != nil {
+			decision := govern.DecidePercentRollout(*rollout, rc.Context())
 			trace.Append(checkPrefix+"rollout", decision.Allowed, decision.Detail())
 			if !decision.Allowed {
 				continue
@@ -155,6 +163,23 @@ func (s *Strategies) Has(name string) bool {
 	}
 	_, ok := s.defs[name]
 	return ok
+}
+
+// HasCandidate reports whether one strategy contains the named candidate label.
+func (s *Strategies) HasCandidate(name, label string) bool {
+	if s == nil {
+		return false
+	}
+	def, ok := s.defs[name]
+	if !ok {
+		return false
+	}
+	for _, candidate := range def.Candidates {
+		if candidate.Label == label {
+			return true
+		}
+	}
+	return false
 }
 
 // Names returns all strategy names in sorted order.
@@ -269,4 +294,36 @@ func cloneRollout(rollout *ir.Rollout) *ir.Rollout {
 	}
 	clone := *rollout
 	return &clone
+}
+
+func effectiveCandidateGovernance(bundleID, strategyName string, candidate Candidate, view overrides.View) (bool, *govern.PercentRollout) {
+	killSwitch := candidate.KillSwitch
+	rollout := candidate.Rollout
+	if view == nil {
+		return killSwitch, rollout
+	}
+	ov, ok := view.Strategy(bundleID, strategyName, candidate.Label)
+	if !ok {
+		return killSwitch, rollout
+	}
+	if ov.KillSwitch != nil {
+		killSwitch = *ov.KillSwitch
+	}
+	if ov.Rollout != nil {
+		rollout = overrideCandidateRollout(bundleID, strategyName, candidate, *ov.Rollout)
+	}
+	return killSwitch, rollout
+}
+
+func overrideCandidateRollout(bundleID, strategyName string, candidate Candidate, rolloutBps uint16) *govern.PercentRollout {
+	if candidate.Rollout != nil {
+		spec := *candidate.Rollout
+		spec.PercentBps = rolloutBps
+		return &spec
+	}
+	return &govern.PercentRollout{
+		PercentBps: rolloutBps,
+		SubjectKey: govern.DefaultRolloutSubject,
+		Namespace:  govern.AutoRolloutNamespace(bundleID, "strategy:"+strategyName+":candidate:"+candidate.Label),
+	}
 }

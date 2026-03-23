@@ -161,6 +161,11 @@ func selectOverrideSnapshot(snapshot overrides.Snapshot, locator OverrideLocator
 			bundleID: cloneFlagRuleSets(flagRules),
 		}
 	}
+	if strategies, ok := snapshot.Strategies[bundleID]; ok {
+		selected.Strategies = map[string]map[string]map[string]overrides.StrategyOverride{
+			bundleID: cloneStrategyOverrideSets(strategies),
+		}
+	}
 	return &selected
 }
 
@@ -208,6 +213,21 @@ func cloneFlagRuleSets(in map[string]map[int]overrides.FlagRuleOverride) map[str
 	return out
 }
 
+func cloneStrategyOverrideSets(in map[string]map[string]overrides.StrategyOverride) map[string]map[string]overrides.StrategyOverride {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]overrides.StrategyOverride, len(in))
+	for strategyName, candidates := range in {
+		cloned := make(map[string]overrides.StrategyOverride, len(candidates))
+		for candidateLabel, ov := range candidates {
+			cloned[candidateLabel] = cloneStrategyOverrideValue(ov)
+		}
+		out[strategyName] = cloned
+	}
+	return out
+}
+
 func cloneRuleOverrideValue(ov overrides.RuleOverride) overrides.RuleOverride {
 	out := overrides.RuleOverride{}
 	if ov.KillSwitch != nil {
@@ -232,6 +252,19 @@ func cloneFlagOverrideValue(ov overrides.FlagOverride) overrides.FlagOverride {
 
 func cloneFlagRuleOverrideValue(ov overrides.FlagRuleOverride) overrides.FlagRuleOverride {
 	out := overrides.FlagRuleOverride{}
+	if ov.Rollout != nil {
+		v := *ov.Rollout
+		out.Rollout = &v
+	}
+	return out
+}
+
+func cloneStrategyOverrideValue(ov overrides.StrategyOverride) overrides.StrategyOverride {
+	out := overrides.StrategyOverride{}
+	if ov.KillSwitch != nil {
+		v := *ov.KillSwitch
+		out.KillSwitch = &v
+	}
 	if ov.Rollout != nil {
 		v := *ov.Rollout
 		out.Rollout = &v

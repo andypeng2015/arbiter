@@ -36,6 +36,25 @@ flag checkout_v2 type boolean default false {
 	when enterprise then true
 }
 
+outcome CheckoutPath {
+	target: string
+	reason: string
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	when {
+		user.plan == "enterprise"
+	} then Priority {
+		target: "priority",
+		reason: "enterprise",
+	}
+
+	else Standard {
+		target: "standard",
+		reason: "default",
+	}
+}
+
 expert rule SeedHighRisk {
 	when {
 		user.risk_score > 0.8
@@ -76,6 +95,25 @@ rule HighValue {
 
 flag checkout_v2 type boolean default false {
 	when enterprise then true
+}
+
+outcome CheckoutPath {
+	target: string
+	reason: string
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	when {
+		user.plan == "enterprise"
+	} then Priority {
+		target: "priority_v2",
+		reason: "enterprise",
+	}
+
+	else Standard {
+		target: "standard",
+		reason: "default",
+	}
 }
 `
 
@@ -121,6 +159,9 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 	if pub.ExpertRuleCount != 2 {
 		t.Fatalf("unexpected expert rule count: %+v", pub)
 	}
+	if pub.StrategyCount != 1 {
+		t.Fatalf("unexpected strategy count: %+v", pub)
+	}
 
 	ctxMap, err := structpb.NewStruct(map[string]any{
 		"user": map[string]any{
@@ -155,6 +196,18 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 		t.Fatalf("expected checkout_v2=true, got %+v", flagResp)
 	}
 
+	strategyResp, err := client.EvaluateStrategy(context.Background(), &arbiterv1.EvaluateStrategyRequest{
+		BundleId:     pub.BundleId,
+		StrategyName: "CheckoutRouting",
+		Context:      ctxMap,
+	})
+	if err != nil {
+		t.Fatalf("EvaluateStrategy: %v", err)
+	}
+	if strategyResp.Selected != "Priority" || strategyResp.GetOutcome() != "CheckoutPath" {
+		t.Fatalf("unexpected strategy response: %+v", strategyResp)
+	}
+
 	if _, err := client.SetRuleOverride(context.Background(), &arbiterv1.SetRuleOverrideRequest{
 		BundleId:   pub.BundleId,
 		RuleName:   "HighValue",
@@ -176,6 +229,14 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 		Rollout:   wrapperspb.UInt32(25),
 	}); err != nil {
 		t.Fatalf("SetFlagRuleOverride: %v", err)
+	}
+	if _, err := client.SetStrategyOverride(context.Background(), &arbiterv1.SetStrategyOverrideRequest{
+		BundleId:       pub.BundleId,
+		StrategyName:   "CheckoutRouting",
+		CandidateLabel: "Priority",
+		KillSwitch:     wrapperspb.Bool(true),
+	}); err != nil {
+		t.Fatalf("SetStrategyOverride: %v", err)
 	}
 
 	eval, err = client.EvaluateRules(context.Background(), &arbiterv1.EvaluateRulesRequest{
@@ -207,6 +268,18 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 	}
 	if flagResp.Variant != "false" || !flagResp.IsDefault {
 		t.Fatalf("expected default false after kill switch, got %+v", flagResp)
+	}
+
+	strategyResp, err = client.EvaluateStrategy(context.Background(), &arbiterv1.EvaluateStrategyRequest{
+		BundleId:     pub.BundleId,
+		StrategyName: "CheckoutRouting",
+		Context:      ctxMap,
+	})
+	if err != nil {
+		t.Fatalf("EvaluateStrategy after override: %v", err)
+	}
+	if strategyResp.Selected != "Standard" {
+		t.Fatalf("expected fallback strategy after override, got %+v", strategyResp)
 	}
 }
 
@@ -326,6 +399,14 @@ func TestServerGetOverridesByIDAndName(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SetFlagRuleOverride: %v", err)
 	}
+	if _, err := client.SetStrategyOverride(context.Background(), &arbiterv1.SetStrategyOverrideRequest{
+		BundleId:       pub.BundleId,
+		StrategyName:   "CheckoutRouting",
+		CandidateLabel: "Priority",
+		KillSwitch:     wrapperspb.Bool(true),
+	}); err != nil {
+		t.Fatalf("SetStrategyOverride: %v", err)
+	}
 
 	byID, err := client.GetOverrides(context.Background(), &arbiterv1.GetOverridesRequest{BundleId: pub.BundleId})
 	if err != nil {
@@ -374,6 +455,14 @@ func TestServerWatchOverridesStreamsSnapshotAndMutations(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SetFlagRuleOverride seed: %v", err)
 	}
+	if _, err := client.SetStrategyOverride(context.Background(), &arbiterv1.SetStrategyOverrideRequest{
+		BundleId:       pub.BundleId,
+		StrategyName:   "CheckoutRouting",
+		CandidateLabel: "Priority",
+		KillSwitch:     wrapperspb.Bool(true),
+	}); err != nil {
+		t.Fatalf("SetStrategyOverride seed: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -420,6 +509,25 @@ func TestServerWatchOverridesStreamsSnapshotAndMutations(t *testing.T) {
 	}
 	if flagRuleEvent.GetFlagRule().GetRollout() != 5500 {
 		t.Fatalf("unexpected flag rule payload: %+v", flagRuleEvent.GetFlagRule())
+	}
+
+	if _, err := client.SetStrategyOverride(context.Background(), &arbiterv1.SetStrategyOverrideRequest{
+		BundleId:       pub.BundleId,
+		StrategyName:   "CheckoutRouting",
+		CandidateLabel: "Priority",
+		KillSwitch:     wrapperspb.Bool(false),
+	}); err != nil {
+		t.Fatalf("SetStrategyOverride mutate: %v", err)
+	}
+
+	strategyEvent := mustRecvOverrideEvent(t, stream)
+	if strategyEvent.GetType() != arbiterv1.OverrideEventType_OVERRIDE_EVENT_TYPE_STRATEGY ||
+		strategyEvent.GetStrategyName() != "CheckoutRouting" ||
+		strategyEvent.GetCandidateLabel() != "Priority" {
+		t.Fatalf("unexpected strategy event: %+v", strategyEvent)
+	}
+	if strategyEvent.GetStrategy().GetKillSwitch() {
+		t.Fatalf("unexpected strategy payload: %+v", strategyEvent.GetStrategy())
 	}
 }
 
@@ -798,7 +906,7 @@ func assertOverrideSnapshot(t *testing.T, snapshot *arbiterv1.BundleOverrides, b
 	if snapshot.GetBundleId() != bundleID {
 		t.Fatalf("unexpected bundle id: %+v", snapshot)
 	}
-	if len(snapshot.GetRules()) != 1 || len(snapshot.GetFlags()) != 1 || len(snapshot.GetFlagRules()) != 1 {
+	if len(snapshot.GetRules()) != 1 || len(snapshot.GetFlags()) != 1 || len(snapshot.GetFlagRules()) != 1 || len(snapshot.GetStrategies()) != 1 {
 		t.Fatalf("unexpected override snapshot shape: %+v", snapshot)
 	}
 }

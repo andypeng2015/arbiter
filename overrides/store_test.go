@@ -10,6 +10,7 @@ func TestStoreSnapshotRoundTripViaFile(t *testing.T) {
 	kill := true
 	rollout := uint16(2500)
 	flagRollout := uint16(6000)
+	strategyRollout := uint16(7500)
 
 	if err := store.SetRule("bundle_a", "Approve", RuleOverride{
 		KillSwitch: &kill,
@@ -26,6 +27,12 @@ func TestStoreSnapshotRoundTripViaFile(t *testing.T) {
 		Rollout: &flagRollout,
 	}); err != nil {
 		t.Fatalf("SetFlagRule: %v", err)
+	}
+	if err := store.SetStrategy("bundle_a", "CheckoutRouting", "Canary", StrategyOverride{
+		KillSwitch: &kill,
+		Rollout:    &strategyRollout,
+	}); err != nil {
+		t.Fatalf("SetStrategy: %v", err)
 	}
 
 	path := t.TempDir() + "/overrides.json"
@@ -46,6 +53,9 @@ func TestStoreSnapshotRoundTripViaFile(t *testing.T) {
 	}
 	if got, ok := loaded.FlagRule("bundle_a", "checkout_v2", 1); !ok || got.Rollout == nil || *got.Rollout != 6000 {
 		t.Fatalf("unexpected flag rule override: %+v ok=%v", got, ok)
+	}
+	if got, ok := loaded.Strategy("bundle_a", "CheckoutRouting", "Canary"); !ok || got.KillSwitch == nil || !*got.KillSwitch || got.Rollout == nil || *got.Rollout != 7500 {
+		t.Fatalf("unexpected strategy override: %+v ok=%v", got, ok)
 	}
 }
 
@@ -165,6 +175,22 @@ func TestStoreSubscribeStreamsSnapshotAndMutations(t *testing.T) {
 	}
 	if event.FlagRule.Rollout == nil || *event.FlagRule.Rollout != 6000 {
 		t.Fatalf("unexpected flag rule payload: %+v", event.FlagRule)
+	}
+
+	strategyKill := true
+	strategyRollout := uint16(7200)
+	if err := store.SetStrategy("bundle_a", "CheckoutRouting", "Canary", StrategyOverride{
+		KillSwitch: &strategyKill,
+		Rollout:    &strategyRollout,
+	}); err != nil {
+		t.Fatalf("SetStrategy: %v", err)
+	}
+	event = mustRecvOverrideEvent(t, events)
+	if event.Type != OverrideEventStrategy || event.StrategyName != "CheckoutRouting" || event.CandidateLabel != "Canary" {
+		t.Fatalf("unexpected strategy event: %+v", event)
+	}
+	if event.Strategy.KillSwitch == nil || !*event.Strategy.KillSwitch || event.Strategy.Rollout == nil || *event.Strategy.Rollout != 7200 {
+		t.Fatalf("unexpected strategy payload: %+v", event.Strategy)
 	}
 }
 

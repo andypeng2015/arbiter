@@ -23,6 +23,22 @@ rule AllowCheckout {
 	}
 	then Allow {}
 }
+
+outcome CheckoutPath {
+	target: string
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	when {
+		user.country == "US"
+	} then Priority {
+		target: "priority",
+	}
+
+	else Standard {
+		target: "standard",
+	}
+}
 `
 
 const grpcPlaneUpdatedSource = `
@@ -32,6 +48,22 @@ rule AllowCheckout {
 	}
 	then Allow {
 		tier: "gold",
+	}
+}
+
+outcome CheckoutPath {
+	target: string
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	when {
+		user.country == "US"
+	} then Priority {
+		target: "priority_v2",
+	}
+
+	else Standard {
+		target: "standard",
 	}
 }
 `
@@ -69,6 +101,15 @@ func TestGRPCControlPlaneSyncsFromUpstream(t *testing.T) {
 		t.Fatalf("SetRuleOverride: %v", err)
 	}
 	waitForRuleOverride(t, syncer.Overrides(), first.Bundle.ID, "AllowCheckout", agentTestTimeout)
+	if _, err := client.SetStrategyOverride(context.Background(), &arbiterv1.SetStrategyOverrideRequest{
+		BundleId:       first.Bundle.ID,
+		StrategyName:   "CheckoutRouting",
+		CandidateLabel: "Priority",
+		KillSwitch:     wrapperspb.Bool(true),
+	}); err != nil {
+		t.Fatalf("SetStrategyOverride: %v", err)
+	}
+	waitForStrategyOverride(t, syncer.Overrides(), first.Bundle.ID, "CheckoutRouting", "Priority", agentTestTimeout)
 
 	if _, err := client.PublishBundle(context.Background(), &arbiterv1.PublishBundleRequest{
 		Name:   "checkout",
@@ -99,6 +140,17 @@ func TestGRPCControlPlaneSyncsFromUpstream(t *testing.T) {
 	if ov := waitForRuleOverride(t, syncer.Overrides(), updated.Bundle.ID, "AllowCheckout", agentTestTimeout); ov.KillSwitch == nil || *ov.KillSwitch {
 		t.Fatalf("expected override rebind to pick up updated bundle mutation, got %+v", ov)
 	}
+	if _, err := client.SetStrategyOverride(context.Background(), &arbiterv1.SetStrategyOverrideRequest{
+		BundleId:       updated.Bundle.ID,
+		StrategyName:   "CheckoutRouting",
+		CandidateLabel: "Priority",
+		KillSwitch:     wrapperspb.Bool(false),
+	}); err != nil {
+		t.Fatalf("SetStrategyOverride updated bundle: %v", err)
+	}
+	if ov := waitForStrategyOverride(t, syncer.Overrides(), updated.Bundle.ID, "CheckoutRouting", "Priority", agentTestTimeout); ov.KillSwitch == nil || *ov.KillSwitch {
+		t.Fatalf("expected strategy override rebind to pick up updated bundle mutation, got %+v", ov)
+	}
 
 	cancel()
 	if err := <-runErr; err != context.Canceled && err != nil {
@@ -117,6 +169,19 @@ func waitForRuleOverride(t *testing.T, store *overrides.Store, bundleID, ruleNam
 	}
 	t.Fatalf("timed out waiting for override %s on %s", ruleName, bundleID)
 	return overrides.RuleOverride{}
+}
+
+func waitForStrategyOverride(t *testing.T, store *overrides.Store, bundleID, strategyName, candidateLabel string, timeout time.Duration) overrides.StrategyOverride {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if ov, ok := store.Strategy(bundleID, strategyName, candidateLabel); ok {
+			return ov
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for strategy override %s/%s on %s", strategyName, candidateLabel, bundleID)
+	return overrides.StrategyOverride{}
 }
 
 func newUpstreamClient(t *testing.T) (arbiterv1.ArbiterServiceClient, func()) {
