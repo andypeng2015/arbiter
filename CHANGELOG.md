@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.10.0
+
+### Concurrency Safety
+
+- **StringPool data race fix** — `NewStringPool` now copies the backing array from the constant pool instead of sharing it. Concurrent evaluations against the same compiled ruleset were mutating a shared slice via `Intern()`. Added `sync.RWMutex` for thread-safe read/write access. This was a real production bug — found by new race-detector-verified concurrency tests.
+- **Concurrent evaluation tests** — parallel `Eval`, `EvalGoverned`, and `EvalStrategy` tests spin up 100 goroutines against shared compiled rulesets. All pass under `-race`.
+
+### Compiler
+
+- **IR constant folding** — new optimization pass runs after validation, before bytecode compilation. Inlines `const` refs to their literal values, folds number arithmetic (`+`, `-`, `*`, `/`, `%`), short-circuits boolean ops (`false and X → false`, `true or X → true`), folds literal comparisons, and folds `not` on boolean literals. Division by zero is left for runtime.
+
+### Validation
+
+- **Rollout namespace collision detection** — compile-time validation now warns when two rollout clauses across rules, strategies, flags, or expert rules produce identical auto-derived namespaces, which would silently correlate independent rollouts.
+
+### Testing
+
+- **Fuzz targets** — `FuzzCompile`, `FuzzParse`, and `FuzzEval` for `go test -fuzz`. Exercises the parser with arbitrary bytes, the compiler with arbitrary `.arb` input, and the evaluator with arbitrary JSON contexts. No panics found.
+- **Rollout distribution validation** — chi-squared uniformity test across 100K subjects proves bucket fairness. Per-percentage accuracy tests at 1%, 5%, 10%, 25%, 50%, 75%, 90%, 99%. Namespace independence and determinism verified.
+
+---
+
 ## v0.9.0
 
 ### Testing
