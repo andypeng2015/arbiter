@@ -1027,8 +1027,8 @@ What you can rely on today:
 
 What is evolving:
 
-- Continuous arbiter runtime (poll-based execution is stable; streaming and scheduled triggers are defined in the language but orchestrated by the Orchard runtime platform, not this repo)
-- Worker execution (declarations are parsed and validated; dispatch to external handlers is orchestrated by the Orchard runtime platform)
+- Continuous arbiter runtime (poll-based and chained execution works locally via the `workflow/` package; streaming and scheduled triggers are language-level declarations that need a host process to drive them)
+- Worker execution (declarations are parsed and validated; the host process dispatches to the declared handler target)
 - Fact source and sink plugin ecosystem (CSV, JSON, JSONL, HTTP, Terraform, and Google Sheets are shipped; additional connectors are straightforward to add via the `Loader`/`Saver` interfaces)
 - SDK coverage (Node, Python, and Rust gRPC stubs are generated; idiomatic wrapper libraries are not yet built)
 - Multi-arbiter workflow chaining (functional and tested; production deployment patterns are still forming)
