@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7.0
+
+### Runtime Surface
+
+- **Strategy productization** — strategies now have a public gRPC evaluation path, runtime override controls, audit visibility, bundle metadata, and dataplane propagation instead of living only as an in-process helper.
+- **Strategy override controls** — candidates can now be kill-switched or rollout-gated at runtime without source redeploys, which brings strategy in line with the existing operational model for rules and flags.
+
+### Workflow And Language
+
+- **`worker` primitive** — Arbiter now supports named worker declarations with typed `input` and `output` contracts so arbiters can invoke reusable capabilities without turning handlers into anonymous one-off targets.
+- **Typed worker dispatch** — workflow validation and delivery now understand worker references, which gives arbiters a clearer capability layer while keeping decision semantics in the arbiter runtime.
+
+### Tooling And Safety
+
+- **Safer `gts` usage in-repo** — `scripts/gts-safe` serializes and bounds Orchard code-intelligence commands to avoid runaway background indexing and unsafe write-capable modes during local investigation.
+- **Version bump to `0.7.0`** — SDK, editor package, and release metadata now align on `0.7.0` for the strategy-runtime and worker-capability release.
+
+---
+
 ## v0.6.0
 
 ### Strategy
