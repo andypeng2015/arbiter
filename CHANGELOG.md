@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.8.0
+
+### Workers
+
+- **Worker runtime integration** — workers now execute through a dedicated `WorkerHandler` surface instead of only piggybacking on generic delivery handlers, which gives the runtime a typed capability boundary for execution plus result handling.
+- **`worker://` feedback path** — successful worker results are now materialized into runtime-owned `worker://name` sources on the next tick, so arbiters can reason about worker outputs without collapsing into an imperative in-tick sublanguage.
+- **Typed worker output enforcement** — worker executions now validate returned fact/outcome shapes against the declared worker contract, and unknown `worker://...` source references are rejected at compile time.
+
+### Tooling
+
+- **Explore and CLI visibility** — `arbiter explore` summaries and compile/check surfaces now expose worker and arbiter declarations directly instead of hiding them behind the raw IR.
+- **Editor highlighting** — VS Code and tree-sitter highlighting now recognize `worker`, `arbiter`, runtime handler keywords, and worker contract clauses.
+
+### Release
+
+- **Version bump to `0.8.0`** — SDK, editor package, and release metadata now align on `0.8.0` for the fully integrated worker runtime release.
+
+---
+
 ## v0.7.0
 
 ### Runtime Surface
