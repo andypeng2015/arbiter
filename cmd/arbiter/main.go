@@ -10,7 +10,7 @@
 //	arbiter replay <rules.arb> --audit decisions.jsonl [--request-id id] [--limit N] [--json] — replay audited rule decisions
 //	arbiter expert <file.arb> --envelope '{...}' [--facts '[...]'] — run one expert session
 //	arbiter test [file.test.arb] [--verbose] — test rules, flags, and scenarios against expected outcomes
-//	arbiter bundle <file.arb> [-o output.arbb] [--force] — export obfuscated binary bundle for edge/browser (fails if business logic detected unless --force)
+//	arbiter bundle <file.arb> [-o output.arbb] [--risk-policy policy.arb] [--force] — export obfuscated binary bundle for edge/browser (policy-gated)
 //	arbiter import <file.json> [-o output.arb] — decompile Arishem JSON to .arb
 //	arbiter serve [--grpc :8081] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
@@ -755,16 +755,22 @@ func importRules(rules []importRuleJSON, outPath string) error {
 
 func runBundle(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter bundle <file.arb> [-o output.arbb] [--force]")
+		return usageError("Usage: arbiter bundle <file.arb> [-o output.arbb] [--risk-policy policy.arb] [--force]")
 	}
 	path := args[0]
 	outPath := ""
+	riskPolicyPath := ""
 	force := false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "-o":
 			if i+1 < len(args) {
 				outPath = args[i+1]
+				i++
+			}
+		case "--risk-policy":
+			if i+1 < len(args) {
+				riskPolicyPath = args[i+1]
 				i++
 			}
 		case "--force":
@@ -776,17 +782,32 @@ func runBundle(args []string) error {
 		return fmt.Errorf("bundle %s: %w", path, err)
 	}
 
-	// Lint for business-logic patterns that shouldn't ship to edge/browser.
-	warnings := bundle.LintForEdge(rs)
-	hasWarns := false
-	for _, w := range warnings {
-		if w.Severity == "warn" {
-			hasWarns = true
+	// Analyze bundle for edge export safety using Arbiter policy.
+	var policySource []byte
+	if riskPolicyPath != "" {
+		policySource, err = os.ReadFile(riskPolicyPath)
+		if err != nil {
+			return fmt.Errorf("read risk policy %s: %w", riskPolicyPath, err)
 		}
-		fmt.Fprintf(os.Stderr, "[%s] %s\n", w.Severity, w.Message)
 	}
-	if hasWarns && !force {
-		return fmt.Errorf("bundle contains business logic that should not ship to edge/browser — use --force to override")
+	result, err := bundle.Analyze(rs, policySource)
+	if err != nil {
+		return fmt.Errorf("analyze %s: %w", path, err)
+	}
+
+	// Print signals.
+	for _, sig := range result.Signals {
+		fmt.Fprintf(os.Stderr, "[signal] %s: count=%d\n", sig.Kind, sig.Count)
+	}
+	// Print decision.
+	for _, reason := range result.Reasons {
+		fmt.Fprintf(os.Stderr, "[%s] %s\n", result.Decision, reason)
+	}
+	if result.Decision == "block" && !force {
+		return fmt.Errorf("edge export blocked by policy — use --force to override")
+	}
+	if result.Decision == "warn" {
+		fmt.Fprintln(os.Stderr, "[warn] proceeding with warnings")
 	}
 
 	opts := bundle.ObfuscateOptions{
