@@ -775,6 +775,13 @@ func runBundle(args []string) error {
 	if err != nil {
 		return fmt.Errorf("bundle %s: %w", path, err)
 	}
+
+	// Lint for business-logic patterns that shouldn't ship to edge/browser.
+	warnings := bundle.LintForEdge(rs)
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "[%s] %s\n", w.Severity, w.Message)
+	}
+
 	opts := bundle.ObfuscateOptions{}
 	if obfuscate {
 		opts = bundle.ObfuscateOptions{
