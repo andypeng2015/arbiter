@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.13.0
+
+### Reference Runtime
+
+- **`cmd/arbiter-runtime`** — standalone host process for continuous arbiters and workers. Loads a `.arb` file, compiles the workflow, and runs the arbiter loop with source polling, worker dispatch (exec, webhook), delivery retry with exponential backoff, and health endpoints (`/healthz`, `/readyz`, `/status`). Arbiter no longer depends on Orchard for continuous execution.
+
+### WASM SDK
+
+- **Full four-mode WASM SDK** — expert sessions (`startSession`, `assertFact`, `retractFact`, `runSession`, `closeSession`) and workflows (`compileWorkflow`, `setSourceFacts`, `runWorkflow`) added to the WASM module. TypeScript types for the full API. 6.1MB gzipped with all four evaluation modes.
+- **`loadBundle`** — WASM SDK can load pre-compiled binary bundles (base64) without exposing `.arb` source.
+
+### Binary Bundle Format
+
+- **`bundle/` package** — binary serialization and obfuscation for compiled rulesets. Hashes rule/segment names, strips rollout details and prerequisites. Action names and param keys preserved for result interpretation.
+- **`arbiter bundle` CLI** — exports `.arbb` files. Always obfuscates. Fails with a hard error if business-logic patterns are detected (numeric thresholds, fraud/risk/price variable paths, monetary values). `--force` overrides the gate.
+- **Edge bundle lint** — heuristic analysis warns when rules look like business logic rather than config/flags.
+
+---
+
 ## v0.12.0
 
 ### Decimal Arithmetic

@@ -946,6 +946,28 @@ scenario "velocity detection triggers on transactions" {
 }
 ```
 
+## Reference Runtime
+
+`arbiter-runtime` is the canonical host process for continuous arbiters and workers:
+
+```bash
+arbiter-runtime --bundle monitor.arb --poll 5s --status :7082
+```
+
+It handles the full lifecycle:
+- **Arbiter loop** — ticks on the declared poll interval, runs all arbiters in topological order
+- **Source polling** — loads external fact sources with retry and exponential backoff; keeps last-known-good facts on failure
+- **Worker dispatch** — executes `exec` and `webhook` workers, materializes results as `worker://` source facts
+- **Delivery retry** — outcomes route to handlers (webhook, slack, exec, grpc, audit, stdout) with durable retry journal
+- **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
+- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats)
+
+Build:
+
+```bash
+go build -tags grammar_blobs_external -o arbiter-runtime ./cmd/arbiter-runtime
+```
+
 ## Architecture
 
 ```text
@@ -1120,11 +1142,10 @@ What you can rely on today:
 
 What is evolving:
 
-- Continuous arbiter runtime (poll-based and chained execution works locally via the `workflow/` package; streaming and scheduled triggers are language-level declarations that need a host process to drive them)
-- Worker execution (declarations are parsed and validated; the host process dispatches to the declared handler target)
+- Continuous arbiter runtime (`arbiter-runtime` handles poll-based loops, source polling, worker dispatch, and delivery retry; streaming and scheduled triggers beyond poll are in progress)
+- Worker dispatch (`arbiter-runtime` executes `exec` and `webhook` workers; `grpc` and `slack` handlers log-only for now)
 - Fact source and sink plugin ecosystem (CSV, JSON, JSONL, HTTP, Terraform, and Google Sheets are shipped; additional connectors are straightforward to add via the `Loader`/`Saver` interfaces)
-- SDK coverage (Node, Python, and Rust gRPC stubs are generated; idiomatic wrapper libraries are not yet built)
-- Multi-arbiter workflow chaining (functional and tested; production deployment patterns are still forming)
+- SDK coverage (Node, Python, Rust gRPC stubs + TypeScript WASM SDK shipped; idiomatic wrapper libraries are not yet built)
 
 Arbiter is maintained by a solo author. Contributions, feedback, and design-partner conversations are welcome.
 
