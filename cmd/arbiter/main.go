@@ -10,7 +10,7 @@
 //	arbiter replay <rules.arb> --audit decisions.jsonl [--request-id id] [--limit N] [--json] — replay audited rule decisions
 //	arbiter expert <file.arb> --envelope '{...}' [--facts '[...]'] — run one expert session
 //	arbiter test [file.test.arb] [--verbose] — test rules, flags, and scenarios against expected outcomes
-//	arbiter bundle <file.arb> [-o output.arbb] [--obfuscate] — export pre-compiled binary bundle for edge/browser
+//	arbiter bundle <file.arb> [-o output.arbb] [--force] — export obfuscated binary bundle for edge/browser (fails if business logic detected unless --force)
 //	arbiter import <file.json> [-o output.arb] — decompile Arishem JSON to .arb
 //	arbiter serve [--grpc :8081] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
@@ -755,11 +755,11 @@ func importRules(rules []importRuleJSON, outPath string) error {
 
 func runBundle(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter bundle <file.arb> [-o output.arbb] [--obfuscate]")
+		return usageError("Usage: arbiter bundle <file.arb> [-o output.arbb] [--force]")
 	}
 	path := args[0]
 	outPath := ""
-	obfuscate := false
+	force := false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "-o":
@@ -767,8 +767,8 @@ func runBundle(args []string) error {
 				outPath = args[i+1]
 				i++
 			}
-		case "--obfuscate":
-			obfuscate = true
+		case "--force":
+			force = true
 		}
 	}
 	rs, err := arbiter.CompileFile(path)
@@ -778,18 +778,22 @@ func runBundle(args []string) error {
 
 	// Lint for business-logic patterns that shouldn't ship to edge/browser.
 	warnings := bundle.LintForEdge(rs)
+	hasWarns := false
 	for _, w := range warnings {
+		if w.Severity == "warn" {
+			hasWarns = true
+		}
 		fmt.Fprintf(os.Stderr, "[%s] %s\n", w.Severity, w.Message)
 	}
+	if hasWarns && !force {
+		return fmt.Errorf("bundle contains business logic that should not ship to edge/browser — use --force to override")
+	}
 
-	opts := bundle.ObfuscateOptions{}
-	if obfuscate {
-		opts = bundle.ObfuscateOptions{
-			HashRuleNames:       true,
-			HashSegmentNames:    true,
-			StripRolloutDetails: true,
-			StripPrereqs:        true,
-		}
+	opts := bundle.ObfuscateOptions{
+		HashRuleNames:       true,
+		HashSegmentNames:    true,
+		StripRolloutDetails: true,
+		StripPrereqs:        true,
 	}
 	blob, err := bundle.MarshalObfuscated(rs, opts)
 	if err != nil {
@@ -801,10 +805,6 @@ func runBundle(args []string) error {
 	if err := os.WriteFile(outPath, blob, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", outPath, err)
 	}
-	fmt.Fprintf(os.Stderr, "wrote %s (%d rules, %d bytes", outPath, len(rs.Rules), len(blob))
-	if obfuscate {
-		fmt.Fprint(os.Stderr, ", obfuscated")
-	}
-	fmt.Fprintln(os.Stderr, ")")
+	fmt.Fprintf(os.Stderr, "wrote %s (%d rules, %d bytes, obfuscated)\n", outPath, len(rs.Rules), len(blob))
 	return nil
 }
