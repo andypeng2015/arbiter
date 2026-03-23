@@ -4,6 +4,7 @@ package vm
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 
 	dec "github.com/odvcencio/arbiter/decimal"
 	"github.com/odvcencio/arbiter/units"
@@ -11,20 +12,28 @@ import (
 
 // StringPool holds interned strings. It is initialized from the constant pool
 // but can grow at runtime when data values contain strings not seen at compile time.
+// All methods are safe for concurrent use.
 type StringPool struct {
+	mu    sync.RWMutex
 	strs  []string
 	index map[string]uint16
 }
 
 func NewStringPool(strs []string) *StringPool {
-	idx := make(map[string]uint16, len(strs))
-	for i, s := range strs {
+	// Copy the input slice so the pool owns its backing array.
+	// The caller may pass a shared slice (e.g. intern.Pool.Strings()).
+	owned := make([]string, len(strs))
+	copy(owned, strs)
+	idx := make(map[string]uint16, len(owned))
+	for i, s := range owned {
 		idx[s] = uint16(i)
 	}
-	return &StringPool{strs: strs, index: idx}
+	return &StringPool{strs: owned, index: idx}
 }
 
 func (sp *StringPool) Get(idx uint16) string {
+	sp.mu.RLock()
+	defer sp.mu.RUnlock()
 	if int(idx) >= len(sp.strs) {
 		return ""
 	}
@@ -33,6 +42,16 @@ func (sp *StringPool) Get(idx uint16) string {
 
 // Intern returns the index for a string, adding it to the pool if not present.
 func (sp *StringPool) Intern(s string) uint16 {
+	sp.mu.RLock()
+	if idx, ok := sp.index[s]; ok {
+		sp.mu.RUnlock()
+		return idx
+	}
+	sp.mu.RUnlock()
+
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	// Double-check after acquiring write lock.
 	if idx, ok := sp.index[s]; ok {
 		return idx
 	}

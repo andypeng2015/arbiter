@@ -229,6 +229,66 @@ func (v *programValidator) validate() error {
 			return err
 		}
 	}
+	if err := v.validateRolloutNamespaces(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *programValidator) validateRolloutNamespaces() error {
+	type nsOrigin struct {
+		scope string
+		span  ir.Span
+	}
+	seen := make(map[string]nsOrigin)
+
+	checkRollout := func(rollout *ir.Rollout, scope string) error {
+		if rollout == nil || !rollout.HasBps {
+			return nil
+		}
+		ns := rollout.Namespace
+		if !rollout.HasNamespace {
+			ns = "arbiter:" + scope
+		}
+		if prev, ok := seen[ns]; ok && prev.scope != scope {
+			return spanError(rollout.Span,
+				"rollout namespace %q collides with %s — rollouts will be correlated; use explicit namespace to separate them",
+				ns, prev.scope)
+		}
+		seen[ns] = nsOrigin{scope: scope, span: rollout.Span}
+		return nil
+	}
+
+	for i := range v.program.Rules {
+		rule := &v.program.Rules[i]
+		if err := checkRollout(rule.Rollout, "rule:"+rule.Name); err != nil {
+			return err
+		}
+	}
+	for i := range v.program.Strategies {
+		strat := &v.program.Strategies[i]
+		for j := range strat.Candidates {
+			c := &strat.Candidates[j]
+			if err := checkRollout(c.Rollout, "strategy:"+strat.Name+":candidate:"+c.Label); err != nil {
+				return err
+			}
+		}
+	}
+	for i := range v.program.Flags {
+		flag := &v.program.Flags[i]
+		for j := range flag.Rules {
+			fr := &flag.Rules[j]
+			if err := checkRollout(fr.Rollout, "flag:"+flag.Name+":rule:"+fmt.Sprintf("%d", j)); err != nil {
+				return err
+			}
+		}
+	}
+	for i := range v.program.Expert {
+		rule := &v.program.Expert[i]
+		if err := checkRollout(rule.Rollout, "expert:"+rule.Name); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -238,6 +238,7 @@ func CompileParsed(parsed *ParsedSource) (*compiler.CompiledRuleset, error) {
 	if err := validateProgram(program); err != nil {
 		return nil, err
 	}
+	ir.FoldConstants(program)
 	return compiler.CompileIR(program)
 }
 
@@ -253,6 +254,7 @@ func CompileFullParsed(parsed *ParsedSource) (*CompileResult, error) {
 	if err := validateProgram(program); err != nil {
 		return nil, err
 	}
+	ir.FoldConstants(program)
 	rs, err := compiler.CompileIR(program)
 	if err != nil {
 		return nil, err
