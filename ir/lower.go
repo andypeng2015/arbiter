@@ -1,6 +1,7 @@
 package ir
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -28,8 +29,9 @@ func Lower(root *gotreesitter.Node, source []byte, lang *gotreesitter.Language) 
 	}
 
 	l.collectConstNames(root)
-	if err := l.lowerSourceFile(root); err != nil {
-		return nil, err
+	l.lowerSourceFile(root)
+	if len(l.errs) > 0 {
+		return nil, errors.Join(l.errs...)
 	}
 	l.program.rebuildIndexes()
 	return l.program, nil
@@ -41,6 +43,7 @@ type lowerer struct {
 
 	program    *Program
 	constNames map[string]struct{}
+	errs       []error
 }
 
 type scope struct {
@@ -85,7 +88,7 @@ func (l *lowerer) collectConstNames(root *gotreesitter.Node) {
 	}
 }
 
-func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) error {
+func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) {
 	for i := 0; i < int(root.NamedChildCount()); i++ {
 		child := root.NamedChild(i)
 		switch child.Type(l.lang) {
@@ -100,7 +103,8 @@ func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) error {
 		case "strategy_declaration":
 			strategy, err := l.lowerStrategy(child)
 			if err != nil {
-				return err
+				l.errs = append(l.errs, err)
+				continue
 			}
 			l.program.Strategies = append(l.program.Strategies, strategy)
 		case "worker_declaration":
@@ -109,36 +113,40 @@ func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) error {
 		case "segment_declaration":
 			segment, err := l.lowerSegment(child)
 			if err != nil {
-				return err
+				l.errs = append(l.errs, err)
+				continue
 			}
 			l.program.Segments = append(l.program.Segments, segment)
 		case "rule_declaration":
 			rule, err := l.lowerRule(child)
 			if err != nil {
-				return err
+				l.errs = append(l.errs, err)
+				continue
 			}
 			l.program.Rules = append(l.program.Rules, rule)
 		case "flag_declaration":
 			flag, err := l.lowerFlag(child)
 			if err != nil {
-				return err
+				l.errs = append(l.errs, err)
+				continue
 			}
 			l.program.Flags = append(l.program.Flags, flag)
 		case "expert_rule_declaration":
 			rule, err := l.lowerExpertRule(child)
 			if err != nil {
-				return err
+				l.errs = append(l.errs, err)
+				continue
 			}
 			l.program.Expert = append(l.program.Expert, rule)
 		case "arbiter_declaration":
 			arbiter, err := l.lowerArbiter(child)
 			if err != nil {
-				return err
+				l.errs = append(l.errs, err)
+				continue
 			}
 			l.program.Arbiters = append(l.program.Arbiters, arbiter)
 		}
 	}
-	return nil
 }
 
 func (l *lowerer) lowerConst(n *gotreesitter.Node) Const {

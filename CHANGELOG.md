@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.11.0
+
+### Multi-Error Recovery
+
+- **Lowering and validation now report all errors in one pass** — previously the compiler stopped at the first error. Now `ir.Lower` and `validateProgram` accumulate errors across declarations and return them all via `errors.Join`. The CLI outputs each diagnostic on its own line. The VS Code extension already parses multi-line diagnostics, so all errors now appear in the editor at once.
+
+### WASM Target
+
+- **`cmd/arbiter-wasm`** — new WASM build target. `GOOS=js GOARCH=wasm go build ./cmd/arbiter-wasm` produces a WASM module that exposes `arbiterCompile`, `arbiterEval`, `arbiterEvalGoverned`, and `arbiterEvalStrategy` to JavaScript. Includes `loader.js` for Node.js and browser environments. 29MB uncompressed / 17MB gzipped. WASM build added to CI.
+
+### Include Resolver Interface
+
+- **`IncludeResolver` interface** — include resolution is no longer hardcoded to the filesystem. `LoadFileUnitWithResolver(path, resolver)` accepts any implementation of `IncludeResolver`, which takes an include path and base directory and returns source bytes + resolved path. `DefaultResolver()` returns the filesystem resolver. This enables HTTP, registry, or in-memory include resolution.
+
+---
+
 ## v0.10.0
 
 ### Concurrency Safety

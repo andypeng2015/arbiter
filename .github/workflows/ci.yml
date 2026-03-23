@@ -28,5 +28,8 @@ jobs:
       - name: Build Agent
         run: go build -o /dev/null ./cmd/arbiter-agent
 
+      - name: Build WASM
+        run: GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/arbiter-wasm
+
       - name: Check grammar
         run: go run ./cmd/arbiter check testdata/fraud.arb

@@ -138,7 +138,24 @@ func IsDiagnosticError(err error) bool {
 }
 
 // WrapFileError remaps a generated-source error back to the original included file.
+// For joined errors (from multi-error recovery), each sub-error is mapped individually.
 func WrapFileError(unit *SourceUnit, err error) error {
+	if unit == nil || err == nil {
+		return err
+	}
+	// Handle joined errors — unwrap each and remap individually.
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		subs := joined.Unwrap()
+		mapped := make([]error, 0, len(subs))
+		for _, sub := range subs {
+			mapped = append(mapped, wrapSingleFileError(unit, sub))
+		}
+		return errors.Join(mapped...)
+	}
+	return wrapSingleFileError(unit, err)
+}
+
+func wrapSingleFileError(unit *SourceUnit, err error) error {
 	if unit == nil || err == nil {
 		return err
 	}
@@ -158,9 +175,48 @@ func WrapFileError(unit *SourceUnit, err error) error {
 	return err
 }
 
+// IncludeResolver resolves include paths to source content. The default
+// implementation reads from the filesystem. Provide a custom resolver
+// to support HTTP, registry, or in-memory includes.
+type IncludeResolver interface {
+	// Resolve returns the source bytes for the given path.
+	// The path is as-declared in the include statement (may be relative).
+	// The basePath is the directory of the file containing the include.
+	Resolve(path string, basePath string) ([]byte, string, error)
+}
+
+type fsResolver struct{}
+
+func (fsResolver) Resolve(includePath string, basePath string) ([]byte, string, error) {
+	resolved := includePath
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(basePath, includePath)
+	}
+	resolved, err := filepath.Abs(resolved)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve include %s: %w", includePath, err)
+	}
+	resolved = filepath.Clean(resolved)
+	source, err := os.ReadFile(resolved)
+	if err != nil {
+		return nil, "", fmt.Errorf("read %s: %w", resolved, err)
+	}
+	return source, resolved, nil
+}
+
+// DefaultResolver returns the filesystem-based include resolver.
+func DefaultResolver() IncludeResolver {
+	return fsResolver{}
+}
+
 // LoadFileUnit reads a root .arb file, resolves top-level include statements,
 // and returns the merged compilation unit.
 func LoadFileUnit(path string) (*SourceUnit, error) {
+	return LoadFileUnitWithResolver(path, DefaultResolver())
+}
+
+// LoadFileUnitWithResolver reads a root .arb file using the given resolver for includes.
+func LoadFileUnitWithResolver(path string, resolver IncludeResolver) (*SourceUnit, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", path, err)
@@ -173,6 +229,7 @@ func LoadFileUnit(path string) (*SourceUnit, error) {
 
 	loader := &sourceUnitLoader{
 		lang:     lang,
+		resolver: resolver,
 		seen:     make(map[string]struct{}),
 		decls:    make(map[string]SourceOrigin),
 		stackPos: make(map[string]int),
@@ -313,12 +370,22 @@ func CompileFullFile(path string) (*CompileResult, error) {
 
 type sourceUnitLoader struct {
 	lang     *gotreesitter.Language
+	resolver IncludeResolver
 	files    []string
 	origins  []SourceOrigin
 	stack    []string
 	seen     map[string]struct{}
 	decls    map[string]SourceOrigin
 	stackPos map[string]int
+}
+
+func (l *sourceUnitLoader) readSource(path string) ([]byte, error) {
+	// For the root file and already-resolved paths, read directly.
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return source, nil
 }
 
 func (l *sourceUnitLoader) expand(path string) ([]byte, error) {
@@ -339,7 +406,7 @@ func (l *sourceUnitLoader) expandInto(path string, out *strings.Builder, generat
 		return fmt.Errorf("include cycle: %s", strings.Join(cycle, " -> "))
 	}
 
-	source, err := os.ReadFile(path)
+	source, err := l.readSource(path)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
@@ -367,15 +434,11 @@ func (l *sourceUnitLoader) expandInto(path string, out *strings.Builder, generat
 			if includePath == "" {
 				return fmt.Errorf("%s: include path is empty", path)
 			}
-			resolved := includePath
-			if !filepath.IsAbs(resolved) {
-				resolved = filepath.Join(filepath.Dir(path), includePath)
-			}
-			resolved, err = filepath.Abs(resolved)
+			_, resolved, err := l.resolver.Resolve(includePath, filepath.Dir(path))
 			if err != nil {
-				return fmt.Errorf("%s: resolve include %s: %w", path, includePath, err)
+				return fmt.Errorf("%s: %w", path, err)
 			}
-			if err := l.expandInto(filepath.Clean(resolved), out, generatedLine); err != nil {
+			if err := l.expandInto(resolved, out, generatedLine); err != nil {
 				return err
 			}
 			continue

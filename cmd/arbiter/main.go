@@ -301,10 +301,40 @@ func formatCLIError(err error) string {
 	if err == nil {
 		return ""
 	}
+	// Check for multi-error (joined errors). Collect all diagnostic lines.
+	if multi := collectDiagnostics(err); len(multi) > 0 {
+		return strings.Join(multi, "\n")
+	}
 	if msg, ok := diagnosticString(err); ok {
 		return msg
 	}
 	return fmt.Sprintf("error: %v", err)
+}
+
+func collectDiagnostics(err error) []string {
+	// Walk the full error chain looking for joined errors.
+	type unwrapMulti interface{ Unwrap() []error }
+	if joined, ok := findJoined(err); ok {
+		subs := joined.Unwrap()
+		var lines []string
+		for _, sub := range subs {
+			if msg, ok := diagnosticString(sub); ok {
+				lines = append(lines, msg)
+			}
+		}
+		return lines
+	}
+	return nil
+}
+
+func findJoined(err error) (interface{ Unwrap() []error }, bool) {
+	for cur := err; cur != nil; {
+		if j, ok := cur.(interface{ Unwrap() []error }); ok {
+			return j, true
+		}
+		cur = errors.Unwrap(cur)
+	}
+	return nil, false
 }
 
 func diagnosticString(err error) (string, bool) {

@@ -1,6 +1,7 @@
 package arbiter
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -188,51 +189,52 @@ func validateFieldType(fieldType ir.FieldType, span ir.Span, context string) err
 }
 
 func (v *programValidator) validate() error {
+	var errs []error
 	env := newValidationEnv()
 	for i := range v.program.Consts {
 		if _, err := v.validateExpr(v.program.Consts[i].Value, env); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	for i := range v.program.Segments {
 		if err := v.validateCondition(v.program.Segments[i].Condition, env, "segment "+v.program.Segments[i].Name); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	for i := range v.program.Rules {
 		if err := v.validateRule(&v.program.Rules[i]); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	for i := range v.program.Strategies {
 		if err := v.validateStrategy(&v.program.Strategies[i]); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	for i := range v.program.Workers {
 		if err := v.validateWorker(&v.program.Workers[i]); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	for i := range v.program.Flags {
 		if err := v.validateFlag(&v.program.Flags[i]); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	for i := range v.program.Expert {
 		if err := v.validateExpertRule(&v.program.Expert[i]); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	for i := range v.program.Arbiters {
 		if err := v.validateArbiter(&v.program.Arbiters[i]); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 	if err := v.validateRolloutNamespaces(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (v *programValidator) validateRolloutNamespaces() error {
