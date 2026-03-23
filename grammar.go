@@ -47,6 +47,7 @@ func ArbiterGrammar() *Grammar {
 		Sym("fact_declaration"),
 		Sym("outcome_declaration"),
 		Sym("strategy_declaration"),
+		Sym("worker_declaration"),
 		Sym("const_declaration"),
 		Sym("arbiter_declaration"),
 		Sym("rule_declaration"),
@@ -141,6 +142,40 @@ func ArbiterGrammar() *Grammar {
 		Str("}"),
 	))
 
+	g.Define("worker_declaration", Seq(
+		Str("worker"),
+		Field("name", Sym("identifier")),
+		Str("{"),
+		Field("input", Sym("worker_input_clause")),
+		Field("output", Sym("worker_output_clause")),
+		Field("runtime", Sym("worker_runtime_clause")),
+		Str("}"),
+	))
+
+	g.Define("worker_input_clause", Seq(
+		Str("input"),
+		Field("schema", Sym("identifier")),
+	))
+
+	g.Define("worker_output_clause", Seq(
+		Str("output"),
+		Field("schema", Sym("identifier")),
+	))
+
+	g.Define("worker_runtime_clause", Seq(
+		Field("kind", Sym("worker_handler_kind")),
+		Optional(Field("target", Sym("arbiter_target"))),
+	))
+
+	g.Define("worker_handler_kind", Choice(
+		Str("webhook"),
+		Str("slack"),
+		Str("exec"),
+		Str("grpc"),
+		Str("audit"),
+		Str("stdout"),
+	))
+
 	g.Define("type_name", Choice(
 		Str("number"),
 		Str("string"),
@@ -231,6 +266,7 @@ func ArbiterGrammar() *Grammar {
 		Str("slack"),
 		Str("chain"),
 		Str("exec"),
+		Str("worker"),
 		Str("grpc"),
 		Str("audit"),
 		Str("stdout"),

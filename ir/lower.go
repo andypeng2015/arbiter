@@ -103,6 +103,9 @@ func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) error {
 				return err
 			}
 			l.program.Strategies = append(l.program.Strategies, strategy)
+		case "worker_declaration":
+			worker := l.lowerWorker(child)
+			l.program.Workers = append(l.program.Workers, worker)
 		case "segment_declaration":
 			segment, err := l.lowerSegment(child)
 			if err != nil {
@@ -818,6 +821,34 @@ func (l *lowerer) lowerArbiter(n *gotreesitter.Node) (Arbiter, error) {
 		arbiter.Clauses = append(arbiter.Clauses, clause)
 	}
 	return arbiter, nil
+}
+
+func (l *lowerer) lowerWorker(n *gotreesitter.Node) Worker {
+	worker := Worker{
+		Span: spanForNode(n),
+	}
+	if nameNode := n.ChildByFieldName("name", l.lang); nameNode != nil {
+		worker.Name = l.text(nameNode)
+	}
+	if inputNode := n.ChildByFieldName("input", l.lang); inputNode != nil {
+		if schemaNode := inputNode.ChildByFieldName("schema", l.lang); schemaNode != nil {
+			worker.Input = l.text(schemaNode)
+		}
+	}
+	if outputNode := n.ChildByFieldName("output", l.lang); outputNode != nil {
+		if schemaNode := outputNode.ChildByFieldName("schema", l.lang); schemaNode != nil {
+			worker.Output = l.text(schemaNode)
+		}
+	}
+	if runtimeNode := n.ChildByFieldName("runtime", l.lang); runtimeNode != nil {
+		if kindNode := runtimeNode.ChildByFieldName("kind", l.lang); kindNode != nil {
+			worker.Kind = l.text(kindNode)
+		}
+		if targetNode := runtimeNode.ChildByFieldName("target", l.lang); targetNode != nil {
+			worker.Target = arbiterTarget(l.text(targetNode))
+		}
+	}
+	return worker
 }
 
 func (l *lowerer) lowerAction(n *gotreesitter.Node, scope *scope) Action {

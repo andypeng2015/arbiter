@@ -27,6 +27,7 @@ type CompileResult struct {
 	Ruleset    *compiler.CompiledRuleset
 	Segments   *govern.SegmentSet
 	Strategies *strategy.Strategies
+	Workers    map[string]WorkerDeclaration
 	Arbiters   []ArbiterDeclaration
 	Program    *ir.Program
 }

@@ -74,6 +74,7 @@ type SinkSnapshot struct {
 type Delivery struct {
 	ID            string                 `json:"id"`
 	Arbiter       string                 `json:"arbiter"`
+	Worker        string                 `json:"worker,omitempty"`
 	Handler       arbiter.ArbiterHandler `json:"handler"`
 	HandlerKey    string                 `json:"handler_key"`
 	Outcome       expert.Outcome         `json:"outcome"`
@@ -117,6 +118,7 @@ type compiledDispatchHandler struct {
 	spec       arbiter.ArbiterHandler
 	filter     *compiledOutcomeFilter
 	handlerKey string
+	worker     *arbiter.WorkerDeclaration
 }
 
 type sourceState struct {
@@ -290,18 +292,35 @@ func (r *Runner) compileDispatchers() error {
 				return fmt.Errorf("workflow arbiter %s: no runtime handler registered for %s", name, spec.Kind)
 			}
 			handlerKey := sinkHandlerKey(spec)
-			handlers = append(handlers, compiledDispatchHandler{
+			dispatch := compiledDispatchHandler{
 				spec:       spec,
 				filter:     filter,
 				handlerKey: handlerKey,
-			})
+			}
+			sinkAlias := runtimeAlias(firstNonEmpty(spec.Target, string(spec.Kind)))
+			sinkKind := string(spec.Kind)
+			sinkTarget := spec.Target
+			if spec.Kind == arbiter.ArbiterHandlerWorker {
+				worker, ok := r.workflow.workers[spec.Target]
+				if !ok {
+					return fmt.Errorf("workflow arbiter %s: unknown worker %q", name, spec.Target)
+				}
+				if !r.supportsHandler(worker.Kind) {
+					return fmt.Errorf("workflow arbiter %s: no runtime handler registered for worker %s (%s)", name, worker.Name, worker.Kind)
+				}
+				workerCopy := worker
+				dispatch.worker = &workerCopy
+				sinkAlias = runtimeAlias(worker.Name)
+				sinkTarget = worker.Target
+			}
+			handlers = append(handlers, dispatch)
 			if _, ok := r.sinks[handlerKey]; !ok {
 				r.sinks[handlerKey] = &sinkState{
 					SinkSnapshot: SinkSnapshot{
 						Key:       handlerKey,
-						Alias:     runtimeAlias(firstNonEmpty(spec.Target, string(spec.Kind))),
-						Kind:      string(spec.Kind),
-						Target:    spec.Target,
+						Alias:     sinkAlias,
+						Kind:      sinkKind,
+						Target:    sinkTarget,
 						Available: true,
 					},
 				}
@@ -315,6 +334,8 @@ func (r *Runner) compileDispatchers() error {
 func (r *Runner) supportsHandler(kind arbiter.ArbiterHandlerKind) bool {
 	switch kind {
 	case arbiter.ArbiterHandlerAudit, arbiter.ArbiterHandlerStdout:
+		return true
+	case arbiter.ArbiterHandlerWorker:
 		return true
 	default:
 		_, ok := r.handlers[kind]

@@ -209,6 +209,11 @@ func (v *programValidator) validate() error {
 			return err
 		}
 	}
+	for i := range v.program.Workers {
+		if err := v.validateWorker(&v.program.Workers[i]); err != nil {
+			return err
+		}
+	}
 	for i := range v.program.Flags {
 		if err := v.validateFlag(&v.program.Flags[i]); err != nil {
 			return err
@@ -387,6 +392,41 @@ func (v *programValidator) validateArbiter(arb *ir.Arbiter) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func (v *programValidator) validateWorker(worker *ir.Worker) error {
+	if worker == nil {
+		return nil
+	}
+	if worker.Name == "" {
+		return spanError(worker.Span, "worker declaration missing name")
+	}
+	if worker.Input == "" {
+		return spanError(worker.Span, "worker %s: input is required", worker.Name)
+	}
+	if _, ok := v.program.OutcomeSchemaByName(worker.Input); !ok {
+		return spanError(worker.Span, "worker %s: input %s must reference an outcome schema", worker.Name, worker.Input)
+	}
+	if worker.Output == "" {
+		return spanError(worker.Span, "worker %s: output is required", worker.Name)
+	}
+	if _, ok := v.program.OutcomeSchemaByName(worker.Output); !ok {
+		if _, ok := v.program.FactSchemaByName(worker.Output); !ok {
+			return spanError(worker.Span, "worker %s: output %s must reference a fact or outcome schema", worker.Name, worker.Output)
+		}
+	}
+
+	kind := ArbiterHandlerKind(worker.Kind)
+	if !workerRuntimeKindAllowed(kind) {
+		return spanError(worker.Span, "worker %s: unsupported runtime kind %s", worker.Name, worker.Kind)
+	}
+	if kind != ArbiterHandlerStdout && worker.Target == "" {
+		return spanError(worker.Span, "worker %s: runtime %s requires a target", worker.Name, kind)
+	}
+	if kind == ArbiterHandlerStdout && worker.Target != "" {
+		return spanError(worker.Span, "worker %s: runtime %s does not take a target", worker.Name, kind)
 	}
 	return nil
 }

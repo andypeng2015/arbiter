@@ -316,6 +316,89 @@ expert rule EmitAlerts priority 10 per_fact {
 	}
 }
 
+func TestRunnerDispatchesWorkersThroughUnderlyingCapability(t *testing.T) {
+	src := []byte(`
+outcome Qualified {
+	key: string
+}
+
+outcome ExecutionResult {
+	status: string
+}
+
+worker notify_sales {
+	input Qualified
+	output ExecutionResult
+	webhook https://hooks.internal/qualified
+}
+
+arbiter sales {
+	poll 1s
+	source https://feed.internal/facts
+	on Qualified worker notify_sales
+}
+
+expert rule QualifyLead priority 10 per_fact {
+	when {
+		any lead in facts.Lead { lead.score >= 90 }
+	}
+	then emit Qualified {
+		key: lead.key,
+	}
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	deliveries := 0
+	handler := OutcomeHandlerFunc(func(_ context.Context, delivery Delivery) error {
+		deliveries++
+		if delivery.Worker != "notify_sales" {
+			t.Fatalf("unexpected worker name %q", delivery.Worker)
+		}
+		if delivery.Handler.Kind != arbiter.ArbiterHandlerWebhook || delivery.Handler.Target != "https://hooks.internal/qualified" {
+			t.Fatalf("unexpected resolved handler: %+v", delivery.Handler)
+		}
+		if delivery.Outcome.Name != "Qualified" || delivery.Outcome.Params["key"] != "lead-1" {
+			t.Fatalf("unexpected outcome: %+v", delivery.Outcome)
+		}
+		return nil
+	})
+
+	runner, err := NewRunner(w, RunnerOptions{
+		Loader: func(_ context.Context, _ string) ([]expert.Fact, error) {
+			return []expert.Fact{{
+				Type: "Lead",
+				Key:  "lead-1",
+				Fields: map[string]any{
+					"score": float64(95),
+				},
+			}}, nil
+		},
+		Handlers: map[arbiter.ArbiterHandlerKind]OutcomeHandler{
+			arbiter.ArbiterHandlerWebhook: handler,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner: %v", err)
+	}
+
+	tick, err := runner.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if deliveries != 1 {
+		t.Fatalf("deliveries = %d, want 1", deliveries)
+	}
+	sink := tick.Sinks["worker\x00notify_sales"]
+	if sink.Kind != "worker" || sink.Target != "https://hooks.internal/qualified" || sink.Pending != 0 {
+		t.Fatalf("unexpected worker sink snapshot: %+v", sink)
+	}
+}
+
 func TestRunnerExposesSinkFailuresToRulesOnNextTick(t *testing.T) {
 	src := []byte(`
 arbiter sales {

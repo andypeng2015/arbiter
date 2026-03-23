@@ -10,6 +10,7 @@ type Program struct {
 	FactSchemas    []FactSchema
 	OutcomeSchemas []OutcomeSchema
 	Strategies     []Strategy
+	Workers        []Worker
 	Segments       []Segment
 	Rules          []Rule
 	Flags          []Flag
@@ -21,6 +22,7 @@ type Program struct {
 	factSchemaIndex    map[string]int
 	outcomeSchemaIndex map[string]int
 	strategyIndex      map[string]int
+	workerIndex        map[string]int
 	segmentIndex       map[string]int
 	ruleIndex          map[string]int
 	flagIndex          map[string]int
@@ -132,6 +134,16 @@ type StrategyCandidate struct {
 	Rollout      *Rollout
 	Params       []ActionParam
 	IsElse       bool
+}
+
+// Worker is one top-level worker capability declaration.
+type Worker struct {
+	Name   string
+	Input  string
+	Output string
+	Kind   string
+	Target string
+	Span   Span
 }
 
 // FlagType identifies the kind of flag declaration.
@@ -507,6 +519,17 @@ func (p *Program) StrategyByName(name string) (*Strategy, bool) {
 	return nil, false
 }
 
+// WorkerByName returns the named worker declaration.
+func (p *Program) WorkerByName(name string) (*Worker, bool) {
+	if p == nil || name == "" {
+		return nil, false
+	}
+	if idx, ok := p.workerIndex[name]; ok {
+		return &p.Workers[idx], true
+	}
+	return nil, false
+}
+
 // RuleByName returns the named rule declaration.
 func (p *Program) RuleByName(name string) (*Rule, bool) {
 	if p == nil || name == "" {
@@ -575,6 +598,10 @@ func (p *Program) rebuildIndexes() {
 	p.strategyIndex = make(map[string]int, len(p.Strategies))
 	for i := range p.Strategies {
 		p.strategyIndex[p.Strategies[i].Name] = i
+	}
+	p.workerIndex = make(map[string]int, len(p.Workers))
+	for i := range p.Workers {
+		p.workerIndex[p.Workers[i].Name] = i
 	}
 	p.segmentIndex = make(map[string]int, len(p.Segments))
 	for i := range p.Segments {

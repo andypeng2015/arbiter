@@ -43,6 +43,7 @@ type Workflow struct {
 	arbiters   map[string]*runtimeArbiter
 	external   map[string][]expert.Fact
 	sources    map[string]struct{}
+	workers    map[string]arbiter.WorkerDeclaration
 	mapOutcome OutcomeFactMapper
 }
 
@@ -256,8 +257,20 @@ func buildWorkflow(full *arbiter.CompileResult, program *expert.Program, opts Op
 		arbiters:   arbiters,
 		external:   make(map[string][]expert.Fact),
 		sources:    collectExternalSources(arbiters),
+		workers:    cloneWorkers(full.Workers),
 		mapOutcome: mapper,
 	}, nil
+}
+
+func cloneWorkers(in map[string]arbiter.WorkerDeclaration) map[string]arbiter.WorkerDeclaration {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]arbiter.WorkerDeclaration, len(in))
+	for name, worker := range in {
+		out[name] = worker
+	}
+	return out
 }
 
 func instantiateArbiters(decls []arbiter.ArbiterDeclaration, program *expert.Program, opts Options) map[string]*runtimeArbiter {

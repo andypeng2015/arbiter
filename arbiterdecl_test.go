@@ -136,3 +136,72 @@ arbiter trading {
 		t.Fatalf("expected duplicate arbiter error, got %v", err)
 	}
 }
+
+func TestCompileFullExtractsWorkers(t *testing.T) {
+	result, err := CompileFull([]byte(`
+outcome RiskAlert {
+	severity: string
+}
+
+outcome ExecutionResult {
+	status: string
+}
+
+worker kill_all_orders {
+	input RiskAlert
+	output ExecutionResult
+	exec "kill-all-orders"
+}
+
+arbiter trading_system {
+	poll 30s
+	on RiskAlert worker kill_all_orders
+}
+`))
+	if err != nil {
+		t.Fatalf("CompileFull: %v", err)
+	}
+	worker, ok := result.Workers["kill_all_orders"]
+	if !ok {
+		t.Fatalf("expected compiled worker, got %+v", result.Workers)
+	}
+	if worker.Input != "RiskAlert" || worker.Output != "ExecutionResult" || worker.Kind != ArbiterHandlerExec || worker.Target != "kill-all-orders" {
+		t.Fatalf("unexpected worker declaration: %+v", worker)
+	}
+	if len(result.Arbiters) != 1 || len(result.Arbiters[0].Handlers) != 1 {
+		t.Fatalf("unexpected arbiters: %+v", result.Arbiters)
+	}
+	if result.Arbiters[0].Handlers[0].Kind != ArbiterHandlerWorker || result.Arbiters[0].Handlers[0].Target != "kill_all_orders" {
+		t.Fatalf("unexpected worker handler: %+v", result.Arbiters[0].Handlers[0])
+	}
+}
+
+func TestCompileFullRejectsWorkerOutcomeMismatch(t *testing.T) {
+	_, err := CompileFull([]byte(`
+outcome Opportunity {
+	confidence: number
+}
+
+outcome RiskAlert {
+	severity: string
+}
+
+outcome ExecutionResult {
+	status: string
+}
+
+worker kill_all_orders {
+	input RiskAlert
+	output ExecutionResult
+	exec "kill-all-orders"
+}
+
+arbiter trading_system {
+	poll 30s
+	on Opportunity worker kill_all_orders
+}
+`))
+	if err == nil || err.Error() != "arbiter trading_system: worker kill_all_orders expects outcome RiskAlert, got Opportunity" {
+		t.Fatalf("expected worker mismatch error, got %v", err)
+	}
+}

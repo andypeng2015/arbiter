@@ -265,7 +265,11 @@ func CompileFullParsed(parsed *ParsedSource) (*CompileResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	arbiters, err := compileArbiters(program)
+	workers, err := compileWorkers(program)
+	if err != nil {
+		return nil, err
+	}
+	arbiters, err := compileArbiters(program, workers)
 	if err != nil {
 		return nil, err
 	}
@@ -273,6 +277,7 @@ func CompileFullParsed(parsed *ParsedSource) (*CompileResult, error) {
 		Ruleset:    rs,
 		Segments:   segs,
 		Strategies: strategies,
+		Workers:    workers,
 		Arbiters:   arbiters,
 		Program:    program,
 	}, nil
@@ -405,7 +410,7 @@ func declarationOrigin(node *gotreesitter.Node, source []byte, path string, gene
 
 func declarationKey(origin SourceOrigin) (string, bool) {
 	switch origin.Kind {
-	case "const_declaration", "segment_declaration", "rule_declaration", "expert_rule_declaration", "flag_declaration", "feature_declaration", "fact_declaration", "outcome_declaration", "strategy_declaration", "arbiter_declaration":
+	case "const_declaration", "segment_declaration", "rule_declaration", "expert_rule_declaration", "flag_declaration", "feature_declaration", "fact_declaration", "outcome_declaration", "strategy_declaration", "worker_declaration", "arbiter_declaration":
 		if origin.Name == "" {
 			return "", false
 		}
@@ -550,6 +555,9 @@ func (u *SourceUnit) mapNamedError(err error) (*DiagnosticError, bool) {
 		return diag, true
 	}
 	if diag, ok := u.namedDiagnostic(message, err, "strategy ", "strategy_declaration"); ok {
+		return diag, true
+	}
+	if diag, ok := u.namedDiagnostic(message, err, "worker ", "worker_declaration"); ok {
 		return diag, true
 	}
 	if diag, ok := u.namedDiagnostic(message, err, "compile segment ", "segment_declaration"); ok {

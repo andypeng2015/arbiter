@@ -47,6 +47,7 @@ const (
 	ArbiterHandlerSlack   ArbiterHandlerKind = "slack"
 	ArbiterHandlerChain   ArbiterHandlerKind = "chain"
 	ArbiterHandlerExec    ArbiterHandlerKind = "exec"
+	ArbiterHandlerWorker  ArbiterHandlerKind = "worker"
 	ArbiterHandlerGRPC    ArbiterHandlerKind = "grpc"
 	ArbiterHandlerAudit   ArbiterHandlerKind = "audit"
 	ArbiterHandlerStdout  ArbiterHandlerKind = "stdout"
@@ -60,14 +61,14 @@ type ArbiterHandler struct {
 	Target  string
 }
 
-func compileArbiters(program *ir.Program) ([]ArbiterDeclaration, error) {
+func compileArbiters(program *ir.Program, workers map[string]WorkerDeclaration) ([]ArbiterDeclaration, error) {
 	if program == nil {
 		return nil, nil
 	}
 	out := make([]ArbiterDeclaration, 0, len(program.Arbiters))
 	seen := make(map[string]struct{}, len(program.Arbiters))
 	for i := range program.Arbiters {
-		decl, err := compileArbiterDeclaration(program, &program.Arbiters[i])
+		decl, err := compileArbiterDeclaration(program, &program.Arbiters[i], workers)
 		if err != nil {
 			return nil, err
 		}
@@ -80,7 +81,7 @@ func compileArbiters(program *ir.Program) ([]ArbiterDeclaration, error) {
 	return out, nil
 }
 
-func compileArbiterDeclaration(program *ir.Program, declIR *ir.Arbiter) (ArbiterDeclaration, error) {
+func compileArbiterDeclaration(program *ir.Program, declIR *ir.Arbiter, workers map[string]WorkerDeclaration) (ArbiterDeclaration, error) {
 	if declIR == nil {
 		return ArbiterDeclaration{}, fmt.Errorf("nil arbiter declaration")
 	}
@@ -160,6 +161,21 @@ func compileArbiterDeclaration(program *ir.Program, declIR *ir.Arbiter) (Arbiter
 			}
 			if handler.Kind == ArbiterHandlerChain && !isArbiterIdentifier(handler.Target) {
 				return ArbiterDeclaration{}, fmt.Errorf("arbiter %s: chain target must be an arbiter identifier", decl.Name)
+			}
+			if handler.Kind == ArbiterHandlerWorker {
+				if !isArbiterIdentifier(handler.Target) {
+					return ArbiterDeclaration{}, fmt.Errorf("arbiter %s: worker target must be a worker identifier", decl.Name)
+				}
+				worker, ok := workers[handler.Target]
+				if !ok {
+					return ArbiterDeclaration{}, fmt.Errorf("arbiter %s: unknown worker %q", decl.Name, handler.Target)
+				}
+				if handler.Outcome == "*" {
+					return ArbiterDeclaration{}, fmt.Errorf("arbiter %s: worker %s requires an explicit outcome matching %s", decl.Name, handler.Target, worker.Input)
+				}
+				if handler.Outcome != worker.Input {
+					return ArbiterDeclaration{}, fmt.Errorf("arbiter %s: worker %s expects outcome %s, got %s", decl.Name, handler.Target, worker.Input, handler.Outcome)
+				}
 			}
 			decl.Handlers = append(decl.Handlers, handler)
 		}

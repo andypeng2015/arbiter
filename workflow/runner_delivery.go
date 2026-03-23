@@ -90,7 +90,7 @@ func handlerMatchesOutcome(arbiterName string, handler compiledDispatchHandler, 
 }
 
 func newDelivery(now time.Time, arbiterName string, handler compiledDispatchHandler, outcome expert.Outcome) Delivery {
-	return Delivery{
+	delivery := Delivery{
 		Arbiter:    arbiterName,
 		Handler:    handler.spec,
 		HandlerKey: handler.handlerKey,
@@ -101,6 +101,10 @@ func newDelivery(now time.Time, arbiterName string, handler compiledDispatchHand
 		},
 		EnqueuedAt: now,
 	}
+	if handler.worker != nil {
+		delivery.Worker = handler.worker.Name
+	}
+	return delivery
 }
 
 func (r *Runner) queueDelivery(delivery Delivery) error {
@@ -175,6 +179,8 @@ func (r *Runner) dispatch(ctx context.Context, delivery Delivery) error {
 		return r.deliverAudit(ctx, delivery)
 	case arbiter.ArbiterHandlerStdout:
 		return r.deliverStdout(ctx, delivery)
+	case arbiter.ArbiterHandlerWorker:
+		return r.dispatchWorker(ctx, delivery)
 	default:
 		handler := r.handlers[delivery.Handler.Kind]
 		if handler == nil {
@@ -182,6 +188,22 @@ func (r *Runner) dispatch(ctx context.Context, delivery Delivery) error {
 		}
 		return handler.Deliver(ctx, delivery)
 	}
+}
+
+func (r *Runner) dispatchWorker(ctx context.Context, delivery Delivery) error {
+	worker, ok := r.workflow.workers[delivery.Handler.Target]
+	if !ok {
+		return fmt.Errorf("unknown worker %q", delivery.Handler.Target)
+	}
+	resolved := delivery
+	resolved.Worker = worker.Name
+	resolved.Handler = arbiter.ArbiterHandler{
+		Outcome: delivery.Handler.Outcome,
+		Where:   delivery.Handler.Where,
+		Kind:    worker.Kind,
+		Target:  worker.Target,
+	}
+	return r.dispatch(ctx, resolved)
 }
 
 func (r *Runner) deliverAudit(ctx context.Context, delivery Delivery) error {
@@ -314,6 +336,9 @@ func (r *Runner) refreshSinkPendingCounts() {
 func sinkHandlerKey(spec arbiter.ArbiterHandler) string {
 	if spec.Kind == arbiter.ArbiterHandlerStdout {
 		return string(spec.Kind)
+	}
+	if spec.Kind == arbiter.ArbiterHandlerWorker {
+		return string(spec.Kind) + "\x00" + spec.Target
 	}
 	return string(spec.Kind) + "\x00" + spec.Target
 }

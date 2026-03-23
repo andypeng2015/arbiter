@@ -153,6 +153,28 @@ modify_action      = "modify" identifier "{"
 ## Continuous Arbiters
 
 ```ebnf
+worker_declaration  = "worker" identifier "{"
+                        worker_input_clause
+                        worker_output_clause
+                        worker_runtime_clause
+                      "}" ;
+
+worker_input_clause = "input" identifier ;
+worker_output_clause
+                   = "output" identifier ;
+
+worker_runtime_clause
+                   = "webhook" uri_literal
+                   | "slack" slack_channel
+                   | "exec" string_literal
+                   | "grpc" uri_literal
+                   | "audit" string_literal
+                   | "stdout" ;
+```
+
+## Continuous Arbiters
+
+```ebnf
 arbiter_declaration
                    = "arbiter" identifier "{"
                        { arbiter_clause }
@@ -179,6 +201,7 @@ handler_clause     = "on" outcome_selector
 outcome_selector   = "*" | identifier ;
 
 handler_target     = "chain" identifier
+                   | "worker" identifier
                    | "webhook" uri_literal
                    | "slack" slack_channel
                    | "exec" string_literal
