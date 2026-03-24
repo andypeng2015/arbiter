@@ -1,11 +1,52 @@
 package main
 
 import (
+	"net/url"
+	"strings"
+
 	arbiter "github.com/odvcencio/arbiter"
 	"github.com/odvcencio/arbiter/explore"
 	"github.com/odvcencio/arbiter/ir"
 )
 
+// compileForDiagnostics compiles source appropriate to the URI.
+// For file:// URIs it uses CompileFile so imports and input schema are resolved.
+// For untitled/in-memory URIs it falls back to Compile (no import support).
+// Returns the program (may be nil on error), any compile error, and any warnings.
+func compileForDiagnostics(uri string, source []byte) (*arbiter.Program, error, []arbiter.Diagnostic) {
+	if path, ok := uriToPath(uri); ok {
+		prog, err := arbiter.CompileFile(path)
+		if err != nil {
+			return nil, err, nil
+		}
+		return prog, nil, prog.Warnings
+	}
+	// Fall back to in-memory compile for unsaved/untitled buffers.
+	prog, err := arbiter.Compile(source)
+	if err != nil {
+		return nil, err, nil
+	}
+	return prog, nil, prog.Warnings
+}
+
+// uriToPath converts a file:// URI to an absolute filesystem path.
+// Returns ("", false) for non-file URIs.
+func uriToPath(uri string) (string, bool) {
+	if !strings.HasPrefix(uri, "file://") {
+		return "", false
+	}
+	u, err := url.Parse(uri)
+	if err != nil {
+		return "", false
+	}
+	path := u.Path
+	if path == "" {
+		return "", false
+	}
+	return path, true
+}
+
+// compileAndValidate compiles source in-memory (no import resolution).
 func compileAndValidate(source []byte) error {
 	_, err := arbiter.CompileFull(source)
 	return err
