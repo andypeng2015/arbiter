@@ -39,6 +39,8 @@ func Compile(source []byte, opts ...Option) (*Program, error) {
 }
 
 // CompileResult includes compiled rule/runtime artifacts for one .arb program.
+//
+// Deprecated: use *Program instead. Will be removed in v2.0.0.
 type CompileResult struct {
 	Ruleset    *compiler.CompiledRuleset
 	Segments   *govern.SegmentSet
@@ -49,6 +51,8 @@ type CompileResult struct {
 }
 
 // CompileFull compiles .arb source and extracts top-level segments.
+//
+// Deprecated: use Compile instead. Will be removed in v2.0.0.
 func CompileFull(source []byte) (*CompileResult, error) {
 	parsed, err := ParseSource(source)
 	if err != nil {
@@ -58,6 +62,8 @@ func CompileFull(source []byte) (*CompileResult, error) {
 }
 
 // CompileJSON compiles a single Arishem JSON rule.
+//
+// Deprecated: use Compile instead. Will be removed in v2.0.0.
 func CompileJSON(condJSON, actJSON string) (*compiler.CompiledRuleset, error) {
 	return compiler.CompileJSONRule("rule0", 0, condJSON, actJSON)
 }
@@ -66,6 +72,8 @@ func CompileJSON(condJSON, actJSON string) (*compiler.CompiledRuleset, error) {
 type JSONRule = compiler.JSONRuleInput
 
 // CompileJSONRules compiles a batch of Arishem JSON rules.
+//
+// Deprecated: use Compile instead. Will be removed in v2.0.0.
 func CompileJSONRules(rules []JSONRule) (*compiler.CompiledRuleset, error) {
 	return compiler.CompileJSONBatch(rules)
 }
