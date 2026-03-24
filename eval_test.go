@@ -20,20 +20,21 @@ rule HighValue priority 1 {
 }
 `)
 
-	rs, err := Compile(src)
+	prog, err := Compile(src)
 	if err != nil {
 		t.Fatalf("Compile: %v", err)
 	}
+	rs := prog.Ruleset
 	if len(rs.Rules) != 1 {
 		t.Fatalf("expected 1 rule, got %d", len(rs.Rules))
 	}
 
-	dc, err := DataFromJSON(`{"order":{"amount":200,"region":"US"}}`, rs)
+	dc, err := DataFromJSON(`{"order":{"amount":200,"region":"US"}}`, prog)
 	if err != nil {
 		t.Fatalf("DataFromJSON: %v", err)
 	}
 
-	matched, err := Eval(rs, dc)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatalf("Eval: %v", err)
 	}
@@ -66,18 +67,18 @@ rule FreeShipping priority 1 {
 }
 `)
 
-	rs, err := Compile(src)
+	prog, err := Compile(src)
 	if err != nil {
 		t.Fatalf("Compile: %v", err)
 	}
 
 	// cart.total = 20, should NOT match condition, should fire fallback
-	dc, err := DataFromJSON(`{"cart":{"total":20}}`, rs)
+	dc, err := DataFromJSON(`{"cart":{"total":20}}`, prog)
 	if err != nil {
 		t.Fatalf("DataFromJSON: %v", err)
 	}
 
-	matched, err := Eval(rs, dc)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatalf("Eval: %v", err)
 	}
@@ -108,12 +109,13 @@ func TestCompileJSONRulesAndEval(t *testing.T) {
 		t.Fatalf("expected 1 rule, got %d", len(rs.Rules))
 	}
 
-	dc, err := DataFromJSON(`{"fromId":"HuangShan","customerGroupId":"10549"}`, rs)
+	jsonProg := &Program{Ruleset: rs}
+	dc, err := DataFromJSON(`{"fromId":"HuangShan","customerGroupId":"10549"}`, jsonProg)
 	if err != nil {
 		t.Fatalf("DataFromJSON: %v", err)
 	}
 
-	matched, err := Eval(rs, dc)
+	matched, err := Eval(jsonProg, dc)
 	if err != nil {
 		t.Fatalf("Eval: %v", err)
 	}
@@ -142,12 +144,13 @@ func TestCompileJSONRulesAndEvalQuantifier(t *testing.T) {
 		t.Fatalf("CompileJSONRules: %v", err)
 	}
 
-	dc, err := DataFromJSON(`{"items":[-1,2]}`, rs)
+	jsonProg := &Program{Ruleset: rs}
+	dc, err := DataFromJSON(`{"items":[-1,2]}`, jsonProg)
 	if err != nil {
 		t.Fatalf("DataFromJSON: %v", err)
 	}
 
-	matched, err := Eval(rs, dc)
+	matched, err := Eval(jsonProg, dc)
 	if err != nil {
 		t.Fatalf("Eval: %v", err)
 	}
@@ -157,12 +160,12 @@ func TestCompileJSONRulesAndEvalQuantifier(t *testing.T) {
 }
 
 func TestEvalDebugUsesWrappedPool(t *testing.T) {
-	rs, err := Compile([]byte(`rule T { when { name == "alice" } then A {} }`))
+	prog, err := Compile([]byte(`rule T { when { name == "alice" } then A {} }`))
 	if err != nil {
 		t.Fatalf("Compile: %v", err)
 	}
 
-	dc := DataFromMap(map[string]any{"name": "bob"}, rs)
+	dc := DataFromMap(map[string]any{"name": "bob"}, prog)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -170,7 +173,7 @@ func TestEvalDebugUsesWrappedPool(t *testing.T) {
 		}
 	}()
 
-	debug := EvalDebug(rs, dc)
+	debug := EvalDebug(prog, dc)
 	if len(debug.Matched) != 0 {
 		t.Fatalf("expected 0 matches, got %d", len(debug.Matched))
 	}
@@ -190,10 +193,11 @@ func TestCompileTestdataRoundTrip(t *testing.T) {
 				t.Fatalf("read %s: %v", path, err)
 			}
 
-			rs, err := Compile(src)
+			prog, err := Compile(src)
 			if err != nil {
 				t.Fatalf("Compile(%s): %v", f, err)
 			}
+			rs := prog.Ruleset
 			if len(rs.Rules) == 0 {
 				t.Errorf("expected rules in %s, got 0", f)
 			}

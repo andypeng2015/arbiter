@@ -100,8 +100,9 @@ func runTestCase(test TestCase, full *arbiter.CompileResult, flagSet *flags.Flag
 		return result
 	}
 
-	dc := arbiter.DataFromMap(test.Given, full.Ruleset)
-	matched, _, err := arbiter.EvalGoverned(full.Ruleset, dc, full.Segments, test.Given)
+	prog := &arbiter.Program{Ruleset: full.Ruleset, Segments: full.Segments}
+	dc := arbiter.DataFromMap(test.Given, prog)
+	matched, _, err := arbiter.EvalGoverned(prog, dc, full.Segments, test.Given)
 	if err != nil {
 		result.Passed = false
 		result.Error = err.Error()

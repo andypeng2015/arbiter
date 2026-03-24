@@ -149,12 +149,12 @@ rule Calc {
 func TestConformance_NativeEval(t *testing.T) {
 	for _, tc := range ruleConformanceCases {
 		t.Run(tc.name, func(t *testing.T) {
-			rs, err := arbiter.Compile([]byte(tc.source))
+			prog, err := arbiter.Compile([]byte(tc.source))
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
-			dc := arbiter.DataFromMap(tc.context, rs)
-			matched, err := arbiter.Eval(rs, dc)
+			dc := arbiter.DataFromMap(tc.context, prog)
+			matched, err := arbiter.Eval(prog, dc)
 			if err != nil {
 				t.Fatalf("eval: %v", err)
 			}
@@ -170,8 +170,9 @@ func TestConformance_GovernedEval(t *testing.T) {
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
-			dc := arbiter.DataFromMap(tc.context, full.Ruleset)
-			matched, _, err := arbiter.EvalGoverned(full.Ruleset, dc, full.Segments, tc.context)
+			govProg := &arbiter.Program{Ruleset: full.Ruleset, Segments: full.Segments}
+			dc := arbiter.DataFromMap(tc.context, govProg)
+			matched, _, err := arbiter.EvalGoverned(govProg, dc, full.Segments, tc.context)
 			if err != nil {
 				t.Fatalf("eval: %v", err)
 			}
@@ -183,10 +184,11 @@ func TestConformance_GovernedEval(t *testing.T) {
 func TestConformance_BundleRoundTrip(t *testing.T) {
 	for _, tc := range ruleConformanceCases {
 		t.Run(tc.name, func(t *testing.T) {
-			rs, err := arbiter.Compile([]byte(tc.source))
+			prog, err := arbiter.Compile([]byte(tc.source))
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
+			rs := prog.Ruleset
 			blob, err := bundle.Marshal(rs)
 			if err != nil {
 				t.Fatalf("marshal: %v", err)
@@ -212,10 +214,11 @@ func TestConformance_ObfuscatedBundleRoundTrip(t *testing.T) {
 			if tc.name == "priority ordering" {
 				t.Skip("obfuscation hashes param values that share pool index with rule names — known limitation")
 			}
-			rs, err := arbiter.Compile([]byte(tc.source))
+			prog, err := arbiter.Compile([]byte(tc.source))
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
+			rs := prog.Ruleset
 			blob, err := bundle.MarshalObfuscated(rs, bundle.ObfuscateOptions{
 				HashRuleNames:       true,
 				StripRolloutDetails: true,
@@ -242,17 +245,17 @@ func TestConformance_ObfuscatedBundleRoundTrip(t *testing.T) {
 func TestConformance_JSONRoundTrip(t *testing.T) {
 	for _, tc := range ruleConformanceCases {
 		t.Run(tc.name, func(t *testing.T) {
-			rs, err := arbiter.Compile([]byte(tc.source))
+			prog, err := arbiter.Compile([]byte(tc.source))
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
 			// Serialize context to JSON and back.
 			jsonBytes, _ := json.Marshal(tc.context)
-			dc, err := arbiter.DataFromJSON(string(jsonBytes), rs)
+			dc, err := arbiter.DataFromJSON(string(jsonBytes), prog)
 			if err != nil {
 				t.Fatalf("json context: %v", err)
 			}
-			matched, err := arbiter.Eval(rs, dc)
+			matched, err := arbiter.Eval(prog, dc)
 			if err != nil {
 				t.Fatalf("eval: %v", err)
 			}

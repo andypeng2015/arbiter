@@ -92,7 +92,7 @@ func Analyze(rs *compiler.CompiledRuleset, policySource []byte) (AnalyzeResult, 
 	result := AnalyzeResult{Signals: signals}
 
 	// Evaluate each signal against the policy.
-	policyRS, err := arbiter.Compile(policySource)
+	policyProg, err := arbiter.Compile(policySource)
 	if err != nil {
 		return result, fmt.Errorf("compile edge export policy: %w", err)
 	}
@@ -105,8 +105,8 @@ func Analyze(rs *compiler.CompiledRuleset, policySource []byte) (AnalyzeResult, 
 				"count": float64(sig.Count),
 			},
 		}
-		dc := arbiter.DataFromMap(ctx, policyRS)
-		matched, err := arbiter.Eval(policyRS, dc)
+		dc := arbiter.DataFromMap(ctx, policyProg)
+		matched, err := arbiter.Eval(policyProg, dc)
 		if err != nil {
 			continue
 		}

@@ -9,7 +9,7 @@ import (
 )
 
 func TestRoundTripMarshalUnmarshal(t *testing.T) {
-	rs, err := arbiter.Compile([]byte(`
+	prog, err := arbiter.Compile([]byte(`
 rule FreeShipping {
 	when { order.total >= 100 }
 	then ApplyShipping { cost: 0, method: "free" }
@@ -23,6 +23,7 @@ rule StandardShipping {
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
+	rs := prog.Ruleset
 
 	blob, err := bundle.Marshal(rs)
 	if err != nil {
@@ -56,7 +57,7 @@ rule StandardShipping {
 }
 
 func TestObfuscatedBundle(t *testing.T) {
-	rs, err := arbiter.Compile([]byte(`
+	prog, err := arbiter.Compile([]byte(`
 segment vip { user.tier == "gold" }
 
 rule VIPOffer {
@@ -73,6 +74,7 @@ rule Default {
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
+	rs := prog.Ruleset
 
 	blob, err := bundle.MarshalObfuscated(rs, bundle.ObfuscateOptions{
 		HashRuleNames:       true,

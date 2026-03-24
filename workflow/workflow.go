@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/compiler"
 	"github.com/odvcencio/arbiter/expert"
 )
 
@@ -63,7 +62,7 @@ type compiledChainHandler struct {
 }
 
 type compiledOutcomeFilter struct {
-	ruleset *compiler.CompiledRuleset
+	prog *arbiter.Program
 }
 
 const workerSourceScheme = "worker://"
@@ -414,11 +413,11 @@ func compileOutcomeFilter(expr string) (*compiledOutcomeFilter, error) {
 		return nil, nil
 	}
 	source := fmt.Sprintf("rule __workflow_filter { when { %s } then Match {} }", expr)
-	ruleset, err := arbiter.Compile([]byte(source))
+	prog, err := arbiter.Compile([]byte(source))
 	if err != nil {
 		return nil, err
 	}
-	return &compiledOutcomeFilter{ruleset: ruleset}, nil
+	return &compiledOutcomeFilter{prog: prog}, nil
 }
 
 func (f *compiledOutcomeFilter) Match(outcome expert.Outcome) (bool, error) {
@@ -431,8 +430,8 @@ func (f *compiledOutcomeFilter) Match(outcome expert.Outcome) (bool, error) {
 	}
 	ctx["name"] = outcome.Name
 	ctx["rule"] = outcome.Rule
-	dc := arbiter.DataFromMap(ctx, f.ruleset)
-	matched, err := arbiter.Eval(f.ruleset, dc)
+	dc := arbiter.DataFromMap(ctx, f.prog)
+	matched, err := arbiter.Eval(f.prog, dc)
 	if err != nil {
 		return false, err
 	}

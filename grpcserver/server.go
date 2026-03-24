@@ -241,8 +241,9 @@ func (s *Server) EvaluateRules(ctx context.Context, req *arbiterv1.EvaluateRules
 	}
 
 	ctxMap := req.GetContext().AsMap()
-	dc := arbiter.DataFromMap(ctxMap, bundle.Compiled.Ruleset)
-	matched, trace, err := arbiter.EvalGovernedWithOverrides(bundle.Compiled.Ruleset, dc, bundle.Compiled.Segments, ctxMap, bundle.ID, s.overrides)
+	prog := &arbiter.Program{Ruleset: bundle.Compiled.Ruleset, Segments: bundle.Compiled.Segments}
+	dc := arbiter.DataFromMap(ctxMap, prog)
+	matched, trace, err := arbiter.EvalGovernedWithOverrides(prog, dc, bundle.Compiled.Segments, ctxMap, bundle.ID, s.overrides)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "evaluate rules: %v", err)
 	}
