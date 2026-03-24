@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 
 	dec "github.com/odvcencio/arbiter/decimal"
@@ -27,6 +28,7 @@ type irCompiler struct {
 	program *ir.Program
 	pool    *intern.Pool
 	err     error
+	rs      *CompiledRuleset
 
 	constStack map[string]bool
 }
@@ -35,6 +37,7 @@ func (c *irCompiler) compile() (*CompiledRuleset, error) {
 	rs := &CompiledRuleset{
 		Constants: c.pool,
 	}
+	c.rs = rs
 
 	for i := range c.program.Rules {
 		rule := &c.program.Rules[i]
@@ -381,6 +384,22 @@ func (c *irCompiler) compileBinary(code []byte, expr *ir.Expr) []byte {
 		code[jumpPos+2] = byte(dist)
 		code[jumpPos+3] = byte(dist >> 8)
 		return code
+	case ir.BinaryMatches:
+		code = c.compileExpr(code, expr.Left)
+		rightExpr := c.program.Expr(expr.Right)
+		code = c.compileExpr(code, expr.Right)
+		// If the right operand is a literal string with a pre-validated regex,
+		// record it in the ruleset for O(1) lookup at eval time.
+		if rightExpr != nil && rightExpr.Kind == ir.ExprStringLit {
+			if re, ok := c.program.ValidatedRegexes[rightExpr.String]; ok {
+				poolIdx := c.pool.String(rightExpr.String)
+				if c.rs.Regexes == nil {
+					c.rs.Regexes = make(map[uint16]*regexp.Regexp)
+				}
+				c.rs.Regexes[poolIdx] = re
+			}
+		}
+		return Emit(code, OpMatches, 0, 0)
 	default:
 		code = c.compileExpr(code, expr.Left)
 		code = c.compileExpr(code, expr.Right)

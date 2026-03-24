@@ -3,6 +3,7 @@ package arbiter
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -979,6 +980,21 @@ func (v *programValidator) validateBinary(expr *ir.Expr, env *validationEnv) (ex
 			return exprType{Base: schemaBaseNumber, Dimension: rightType.Dimension}, nil
 		}
 		return exprType{Base: schemaBaseNumber}, nil
+	case ir.BinaryMatches:
+		// When the right operand is a string literal, validate and pre-compile
+		// the regex at compile time so invalid patterns are caught early.
+		right := v.program.Expr(expr.Right)
+		if right != nil && right.Kind == ir.ExprStringLit {
+			re, err := regexp.Compile(right.String)
+			if err != nil {
+				return exprType{}, spanError(right.Span, "invalid regex pattern %q: %s", right.String, err.Error())
+			}
+			if v.program.ValidatedRegexes == nil {
+				v.program.ValidatedRegexes = make(map[string]*regexp.Regexp)
+			}
+			v.program.ValidatedRegexes[right.String] = re
+		}
+		return exprType{Base: schemaBaseBoolean}, nil
 	default:
 		return exprType{Base: schemaBaseBoolean}, nil
 	}

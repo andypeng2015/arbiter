@@ -1,7 +1,11 @@
 // compiler/ruleset.go
 package compiler
 
-import "github.com/odvcencio/arbiter/intern"
+import (
+	"regexp"
+
+	"github.com/odvcencio/arbiter/intern"
+)
 
 // CompiledRuleset is the output of compilation — everything the VM needs.
 type CompiledRuleset struct {
@@ -12,6 +16,10 @@ type CompiledRuleset struct {
 	Templates    []TemplateEntry
 	Prereqs      []uint16
 	Excludes     []uint16
+
+	// Regexes holds pre-compiled regexes for literal patterns validated at
+	// compile time. Key is the string pool index of the pattern.
+	Regexes map[uint16]*regexp.Regexp
 }
 
 // RuleHeader stores metadata for one rule within the compiled ruleset.

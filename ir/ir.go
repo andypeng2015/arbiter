@@ -1,5 +1,7 @@
 package ir
 
+import "regexp"
+
 // ExprID indexes into Program.Exprs.
 type ExprID uint32
 
@@ -19,6 +21,10 @@ type Program struct {
 	Expert         []ExpertRule
 	Arbiters       []Arbiter
 	Exprs          []Expr
+
+	// ValidatedRegexes holds pre-compiled regexes for literal string patterns
+	// validated at compile time. Keyed by pattern string.
+	ValidatedRegexes map[string]*regexp.Regexp
 
 	constIndex         map[string]int
 	factSchemaIndex    map[string]int

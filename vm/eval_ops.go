@@ -3,6 +3,7 @@ package vm
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"github.com/odvcencio/arbiter/compiler"
@@ -370,7 +371,15 @@ func (vm *VM) evalStringOp(ip uint32, op compiler.OpCode) (uint32, bool) {
 		vm.push(BoolVal(strings.HasSuffix(vm.toStr(a), vm.toStr(b))))
 	case compiler.OpMatches:
 		b, a := vm.pop(), vm.pop()
-		re := vm.regex(vm.toStr(b))
+		var re *regexp.Regexp
+		// Fast path: use the pre-compiled regex from the ruleset when the
+		// pattern was a compile-time string literal.
+		if b.Typ == TypeString && vm.rs != nil && vm.rs.Regexes != nil {
+			re = vm.rs.Regexes[b.Str]
+		}
+		if re == nil {
+			re = vm.regex(vm.toStr(b))
+		}
 		if re == nil {
 			vm.push(BoolVal(false))
 		} else {

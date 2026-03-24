@@ -57,6 +57,7 @@ type VM struct {
 	sp      int
 	pool    *intern.Pool
 	strPool *StringPool
+	rs      *compiler.CompiledRuleset
 	locals  map[string]any // iterator variable bindings
 	iters   []iterState
 	regexes map[string]*regexp.Regexp
@@ -69,6 +70,7 @@ func newVM(rs *compiler.CompiledRuleset, sp *StringPool) *VM {
 	return &VM{
 		pool:    rs.Constants,
 		strPool: sp,
+		rs:      rs,
 	}
 }
 
