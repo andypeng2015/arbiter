@@ -63,7 +63,7 @@ func getSummary(source []byte) *explore.Summary {
 // symbolLocation holds a declaration's name and source position.
 type symbolLocation struct {
 	name string
-	kind string // "rule", "fact", "outcome", "segment", "strategy", "expert", "const", "flag", "worker", "arbiter"
+	kind string // "rule", "fact", "outcome", "segment", "strategy", "expert", "const", "flag", "worker", "arbiter", "table"
 	span ir.Span
 }
 
@@ -105,6 +105,9 @@ func getSymbols(source []byte) []symbolLocation {
 	}
 	for _, a := range p.Arbiters {
 		syms = append(syms, symbolLocation{name: a.Name, kind: "arbiter", span: a.Span})
+	}
+	for _, t := range p.Tables {
+		syms = append(syms, symbolLocation{name: t.Name, kind: "table", span: t.Span})
 	}
 	return syms
 }

@@ -56,6 +56,7 @@ func ArbiterGrammar() *Grammar {
 		Sym("expert_rule_declaration"),
 		Sym("segment_declaration"),
 		Sym("flag_declaration"),
+		Sym("table_declaration"),
 	))
 
 	// --- Comments (extras — auto-skipped, full Unicode support) ---
@@ -459,7 +460,35 @@ func ArbiterGrammar() *Grammar {
 		Str("let"),
 		Field("name", Sym("identifier")),
 		Str("="),
-		Field("value", Sym("_expr")),
+		Field("value", Choice(Sym("lookup_expr"), Sym("_expr"))),
+	))
+
+	// --- Lookup expression (only valid as a let binding value) ---
+	g.Define("lookup_expr", Seq(
+		Str("lookup"),
+		Field("table", Sym("identifier")),
+		Optional(Field("where", Sym("lookup_where_clause"))),
+		Optional(Field("order", Sym("lookup_order_clause"))),
+		Optional(Field("else", Sym("lookup_else_clause"))),
+	))
+
+	g.Define("lookup_where_clause", Seq(
+		Str("where"),
+		Field("expr", Sym("_expr")),
+	))
+
+	g.Define("lookup_order_clause", Seq(
+		Str("order"),
+		Str("by"),
+		Field("column", Sym("identifier")),
+		Field("direction", Choice(Str("asc"), Str("desc"))),
+	))
+
+	g.Define("lookup_else_clause", Seq(
+		Str("else"),
+		Str("{"),
+		Repeat(Sym("param_assignment")),
+		Str("}"),
 	))
 
 	g.Define("expert_where_block", Seq(
@@ -473,6 +502,7 @@ func ArbiterGrammar() *Grammar {
 		Str("then"),
 		Field("action_name", Sym("identifier")),
 		Str("{"),
+		Repeat(Sym("let_binding")),
 		Repeat(Sym("param_assignment")),
 		Str("}"),
 	))
@@ -481,6 +511,7 @@ func ArbiterGrammar() *Grammar {
 		Str("otherwise"),
 		Field("action_name", Sym("identifier")),
 		Str("{"),
+		Repeat(Sym("let_binding")),
 		Repeat(Sym("param_assignment")),
 		Str("}"),
 	))
@@ -896,6 +927,43 @@ func ArbiterGrammar() *Grammar {
 	g.Define("slack_channel_literal", Token(Prec(1, Pat(`#[^\s{}"]+`))))
 	g.Define("resource_literal", Pat(`[^\s{}"#]+`))
 	g.Define("bool_literal", Choice(Str("true"), Str("false")))
+
+	// --- Table declaration ---
+	// table ladder {
+	//     height: number | bitrate: string | preset: string
+	//     1080           | "6500k"         | "p3"
+	// }
+	g.Define("table_column_header", Seq(
+		Field("name", Sym("identifier")),
+		Str(":"),
+		Field("type", Sym("schema_type_name")),
+	))
+
+	g.Define("table_header_row", Seq(
+		Sym("table_column_header"),
+		Repeat(Seq(Str("|"), Sym("table_column_header"))),
+	))
+
+	g.Define("table_data_row", Seq(
+		Field("value", Sym("_literal")),
+		Repeat(Seq(Str("|"), Field("value", Sym("_literal")))),
+	))
+
+	g.Define("_literal", Choice(
+		Sym("number_literal"),
+		Sym("string_literal"),
+		Sym("bool_literal"),
+		Sym("decimal_literal"),
+	))
+
+	g.Define("table_declaration", Seq(
+		Str("table"),
+		Field("name", Sym("identifier")),
+		Str("{"),
+		Field("header", Sym("table_header_row")),
+		Repeat(Field("row", Sym("table_data_row"))),
+		Str("}"),
+	))
 
 	// Extras: whitespace and comments
 	g.SetExtras(Pat(`[ \t\r\n]+`), Sym("comment"))

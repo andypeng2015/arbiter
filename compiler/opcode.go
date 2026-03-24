@@ -84,6 +84,10 @@ const (
 	OpAggAccum // pop value, accumulate
 	OpAggEnd   // push aggregate result, cleanup
 	OpSetLocal // pop value, store in locals
+
+	// Table lookup
+	OpLookup     // execute table lookup — arg is index into LookupMetas
+	OpTableField // pop table-row object, push named field — arg is field name string index
 )
 
 // Iterator flags for OpIterBegin.

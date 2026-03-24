@@ -1,5 +1,7 @@
 package ir
 
+import "regexp"
+
 // ExprID indexes into Program.Exprs.
 type ExprID uint32
 
@@ -18,7 +20,12 @@ type Program struct {
 	Flags          []Flag
 	Expert         []ExpertRule
 	Arbiters       []Arbiter
+	Tables         []Table
 	Exprs          []Expr
+
+	// ValidatedRegexes holds pre-compiled regexes for literal string patterns
+	// validated at compile time. Keyed by pattern string.
+	ValidatedRegexes map[string]*regexp.Regexp
 
 	constIndex         map[string]int
 	factSchemaIndex    map[string]int
@@ -30,6 +37,7 @@ type Program struct {
 	flagIndex          map[string]int
 	expertIndex        map[string]int
 	arbiterIndex       map[string]int
+	tableIndex         map[string]int
 }
 
 // Span stores byte and point ranges for a declaration or expression.
@@ -316,6 +324,7 @@ type LetBinding struct {
 type Action struct {
 	Name   string
 	Span   Span
+	Lets   []LetBinding
 	Params []ActionParam
 }
 
@@ -361,6 +370,7 @@ const (
 	ExprQuantifier  ExprKind = "quantifier"
 	ExprAggregate   ExprKind = "aggregate"
 	ExprBuiltinCall ExprKind = "builtin_call"
+	ExprLookup      ExprKind = "lookup"
 )
 
 // BinaryOpKind identifies a binary operator.
@@ -467,6 +477,14 @@ type Expr struct {
 
 	FuncName string
 	Args     []ExprID
+
+	// Lookup expression fields (ExprLookup)
+	TableName string
+	Where     ExprID // 0 if no where clause
+	SortCol   string
+	SortDesc  bool
+	ElseKeys  []string
+	ElseVals  []ExprID
 }
 
 // Expr returns the expression at id.
@@ -591,6 +609,17 @@ func (p *Program) ArbiterByName(name string) (*Arbiter, bool) {
 	return nil, false
 }
 
+// TableByName returns the named table declaration.
+func (p *Program) TableByName(name string) (*Table, bool) {
+	if p == nil || name == "" {
+		return nil, false
+	}
+	if idx, ok := p.tableIndex[name]; ok {
+		return &p.Tables[idx], true
+	}
+	return nil, false
+}
+
 // RebuildIndexes refreshes the internal declaration lookup tables.
 func (p *Program) RebuildIndexes() {
 	if p == nil {
@@ -639,5 +668,9 @@ func (p *Program) rebuildIndexes() {
 	p.arbiterIndex = make(map[string]int, len(p.Arbiters))
 	for i := range p.Arbiters {
 		p.arbiterIndex[p.Arbiters[i].Name] = i
+	}
+	p.tableIndex = make(map[string]int, len(p.Tables))
+	for i := range p.Tables {
+		p.tableIndex[p.Tables[i].Name] = i
 	}
 }

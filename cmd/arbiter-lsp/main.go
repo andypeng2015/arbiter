@@ -748,6 +748,8 @@ func symbolKind(kind string) int {
 		return 9 // Constructor
 	case "arbiter":
 		return 2 // Module
+	case "table":
+		return 16 // Array (closest LSP kind for a data table)
 	default:
 		return 1 // File
 	}

@@ -146,6 +146,44 @@ func MarshalObfuscated(rs *compiler.CompiledRuleset, opts ObfuscateOptions) ([]b
 		}
 	}
 
+	// Tables
+	writeU32(&buf, uint32(len(rs.Tables)))
+	for _, tbl := range rs.Tables {
+		writeString(&buf, tbl.Name)
+		writeU16(&buf, uint16(len(tbl.Columns)))
+		for _, col := range tbl.Columns {
+			writeString(&buf, col)
+		}
+		writeU32(&buf, uint32(len(tbl.Rows)))
+		for _, row := range tbl.Rows {
+			for _, pv := range row {
+				buf.WriteByte(pv.Typ)
+				writeF64(&buf, pv.Num)
+				writeU16(&buf, pv.Str)
+				writeBool(&buf, pv.Bool)
+				writeU16(&buf, pv.ListIdx)
+				writeU16(&buf, pv.ListLen)
+				writeU16(&buf, pv.Dec)
+			}
+		}
+	}
+
+	// LookupMetas
+	writeU32(&buf, uint32(len(rs.LookupMetas)))
+	for _, lm := range rs.LookupMetas {
+		writeU16(&buf, lm.TableIdx)
+		writeU32(&buf, lm.WhereOff)
+		writeU32(&buf, lm.WhereLen)
+		writeString(&buf, lm.SortCol)
+		writeBool(&buf, lm.SortDesc)
+		writeU32(&buf, lm.ElseOff)
+		writeU32(&buf, lm.ElseLen)
+		writeU16(&buf, uint16(len(lm.ElseKeys)))
+		for _, k := range lm.ElseKeys {
+			writeString(&buf, k)
+		}
+	}
+
 	return buf.Bytes(), nil
 }
 
@@ -245,6 +283,56 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 		excludes[i] = readU16(r)
 	}
 
+	// Tables
+	tableCount := readU32(r)
+	tables := make([]compiler.CompiledTable, tableCount)
+	for i := range tableCount {
+		tbl := compiler.CompiledTable{}
+		tbl.Name = readString(r)
+		colCount := readU16(r)
+		tbl.Columns = make([]string, colCount)
+		for j := range colCount {
+			tbl.Columns[j] = readString(r)
+		}
+		rowCount := readU32(r)
+		tbl.Rows = make([][]intern.PoolValue, rowCount)
+		for j := range rowCount {
+			tbl.Rows[j] = make([]intern.PoolValue, colCount)
+			for k := range colCount {
+				tbl.Rows[j][k] = intern.PoolValue{
+					Typ:     readU8(r),
+					Num:     readF64(r),
+					Str:     readU16(r),
+					Bool:    readBool(r),
+					ListIdx: readU16(r),
+					ListLen: readU16(r),
+					Dec:     readU16(r),
+				}
+			}
+		}
+		tables[i] = tbl
+	}
+
+	// LookupMetas
+	metaCount := readU32(r)
+	lookupMetas := make([]compiler.LookupMeta, metaCount)
+	for i := range metaCount {
+		lm := compiler.LookupMeta{}
+		lm.TableIdx = readU16(r)
+		lm.WhereOff = readU32(r)
+		lm.WhereLen = readU32(r)
+		lm.SortCol = readString(r)
+		lm.SortDesc = readBool(r)
+		lm.ElseOff = readU32(r)
+		lm.ElseLen = readU32(r)
+		keyCount := readU16(r)
+		lm.ElseKeys = make([]string, keyCount)
+		for j := range keyCount {
+			lm.ElseKeys[j] = readString(r)
+		}
+		lookupMetas[i] = lm
+	}
+
 	return &compiler.CompiledRuleset{
 		Constants:    pool,
 		Instructions: instructions,
@@ -252,6 +340,8 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 		Actions:      actions,
 		Prereqs:      prereqs,
 		Excludes:     excludes,
+		Tables:       tables,
+		LookupMetas:  lookupMetas,
 	}, nil
 }
 

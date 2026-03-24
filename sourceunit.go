@@ -296,7 +296,7 @@ func CompileParsed(parsed *ParsedSource) (*compiler.CompiledRuleset, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := validateProgram(program); err != nil {
+	if _, err := validateProgram(program); err != nil {
 		return nil, err
 	}
 	ir.FoldConstants(program)
@@ -427,7 +427,8 @@ func CompileFullFile(path string) (*CompileResult, error) {
 
 // compileProgram compiles a pre-lowered IR program through the standard pipeline.
 func compileProgram(program *ir.Program) (*Program, error) {
-	if err := validateProgram(program); err != nil {
+	warnings, err := validateProgram(program)
+	if err != nil {
 		return nil, err
 	}
 	ir.FoldConstants(program)
@@ -459,6 +460,7 @@ func compileProgram(program *ir.Program) (*Program, error) {
 		Workers:    workers,
 		Arbiters:   arbiters,
 		Input:      program.Input,
+		Warnings:   warnings,
 	}, nil
 }
 

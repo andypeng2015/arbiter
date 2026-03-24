@@ -84,7 +84,7 @@ func TestValidateStrategyRejectsGovernedElseArm(t *testing.T) {
 		},
 	}
 
-	err := validateProgram(program)
+	_, err := validateProgram(program)
 	if err == nil {
 		t.Fatal("expected validation error")
 	}

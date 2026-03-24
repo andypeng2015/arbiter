@@ -674,6 +674,85 @@ rule EnhancedRiskCheck priority 1 {
 }
 
 // =============================================================================
+// TABLE / LOOKUP / LET-IN-ACTION TESTS
+// =============================================================================
+
+func TestParseTableDeclaration(t *testing.T) {
+	sexp := parseArb(t, "table t {\n    x: number | y: string\n    1 | \"a\"\n    2 | \"b\"\n}")
+	if !strings.Contains(sexp, "table_declaration") {
+		t.Errorf("expected table_declaration, got: %s", sexp)
+	}
+	if !strings.Contains(sexp, "table_header_row") {
+		t.Errorf("expected table_header_row, got: %s", sexp)
+	}
+	if strings.Count(sexp, "table_data_row") != 2 {
+		t.Errorf("expected 2 table_data_row nodes, got: %s", sexp)
+	}
+	if strings.Count(sexp, "table_column_header") != 2 {
+		t.Errorf("expected 2 table_column_header nodes, got: %s", sexp)
+	}
+}
+
+func TestParseLookupInLet(t *testing.T) {
+	sexp := parseArb(t, "rule R { when { true } then A { let row = lookup t where x > 0 order by x desc else { x: 0, y: \"\" }\nval: row.y } }")
+	if !strings.Contains(sexp, "lookup_expr") {
+		t.Errorf("expected lookup_expr, got: %s", sexp)
+	}
+	if !strings.Contains(sexp, "lookup_where_clause") {
+		t.Errorf("expected lookup_where_clause, got: %s", sexp)
+	}
+	if !strings.Contains(sexp, "lookup_order_clause") {
+		t.Errorf("expected lookup_order_clause, got: %s", sexp)
+	}
+	if !strings.Contains(sexp, "lookup_else_clause") {
+		t.Errorf("expected lookup_else_clause, got: %s", sexp)
+	}
+}
+
+func TestParseLetInActionBlock(t *testing.T) {
+	sexp := parseArb(t, "rule R { when { true } then A { let x = 42\nvalue: x } }")
+	if !strings.Contains(sexp, "let_binding") {
+		t.Errorf("expected let_binding in action block, got: %s", sexp)
+	}
+	if !strings.Contains(sexp, "param_assignment") {
+		t.Errorf("expected param_assignment, got: %s", sexp)
+	}
+}
+
+func TestParseLookupWithoutWhere(t *testing.T) {
+	sexp := parseArb(t, "rule R { when { true } then A { let row = lookup t order by x desc\nval: row.x } }")
+	if !strings.Contains(sexp, "lookup_expr") {
+		t.Errorf("expected lookup_expr, got: %s", sexp)
+	}
+	if strings.Contains(sexp, "lookup_where_clause") {
+		t.Errorf("unexpected lookup_where_clause, got: %s", sexp)
+	}
+	if !strings.Contains(sexp, "lookup_order_clause") {
+		t.Errorf("expected lookup_order_clause, got: %s", sexp)
+	}
+}
+
+func TestParseLookupWithoutOrder(t *testing.T) {
+	sexp := parseArb(t, "rule R { when { true } then A { let row = lookup t where x > 0\nval: row.x } }")
+	if !strings.Contains(sexp, "lookup_expr") {
+		t.Errorf("expected lookup_expr, got: %s", sexp)
+	}
+	if !strings.Contains(sexp, "lookup_where_clause") {
+		t.Errorf("expected lookup_where_clause, got: %s", sexp)
+	}
+	if strings.Contains(sexp, "lookup_order_clause") {
+		t.Errorf("unexpected lookup_order_clause, got: %s", sexp)
+	}
+}
+
+func TestParseLookupMinimal(t *testing.T) {
+	sexp := parseArb(t, "rule R { when { true } then A { let row = lookup t\nval: row.x } }")
+	if !strings.Contains(sexp, "lookup_expr") {
+		t.Errorf("expected lookup_expr, got: %s", sexp)
+	}
+}
+
+// =============================================================================
 // TRANSPILE TESTS
 // =============================================================================
 

@@ -153,6 +153,13 @@ func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) {
 			} else {
 				l.program.Input = l.lowerInputSchema(child)
 			}
+		case "table_declaration":
+			tbl, err := l.lowerTable(child)
+			if err != nil {
+				l.errs = append(l.errs, err)
+				continue
+			}
+			l.program.Tables = append(l.program.Tables, tbl)
 		}
 	}
 }
@@ -306,6 +313,56 @@ func (l *lowerer) lowerSchemaField(n *gotreesitter.Node) SchemaField {
 	return field
 }
 
+func (l *lowerer) lowerTable(n *gotreesitter.Node) (Table, error) {
+	tbl := Table{
+		Span: spanForNode(n),
+	}
+	if nameNode := n.ChildByFieldName("name", l.lang); nameNode != nil {
+		tbl.Name = l.text(nameNode)
+	}
+
+	// Parse header row to get columns.
+	headerNode := n.ChildByFieldName("header", l.lang)
+	if headerNode != nil {
+		for i := 0; i < int(headerNode.NamedChildCount()); i++ {
+			child := headerNode.NamedChild(i)
+			if child.Type(l.lang) != "table_column_header" {
+				continue
+			}
+			col := TableColumn{}
+			if nameNode := child.ChildByFieldName("name", l.lang); nameNode != nil {
+				col.Name = l.text(nameNode)
+			}
+			if typeNode := child.ChildByFieldName("type", l.lang); typeNode != nil {
+				col.Type = parseSchemaFieldType(l.text(typeNode))
+			}
+			tbl.Columns = append(tbl.Columns, col)
+		}
+	}
+
+	// Parse data rows.
+	colCount := len(tbl.Columns)
+	for i := 0; i < int(n.NamedChildCount()); i++ {
+		child := n.NamedChild(i)
+		if child.Type(l.lang) != "table_data_row" {
+			continue
+		}
+		row := TableRow{
+			Span: spanForNode(child),
+		}
+		for j := 0; j < int(child.NamedChildCount()); j++ {
+			valNode := child.NamedChild(j)
+			row.Values = append(row.Values, l.lowerExpr(valNode, nil))
+		}
+		if colCount > 0 && len(row.Values) != colCount {
+			return Table{}, fmt.Errorf("table %s: row has %d values, expected %d columns", tbl.Name, len(row.Values), colCount)
+		}
+		tbl.Rows = append(tbl.Rows, row)
+	}
+
+	return tbl, nil
+}
+
 func (l *lowerer) lowerSegment(n *gotreesitter.Node) (Segment, error) {
 	nameNode := n.ChildByFieldName("name", l.lang)
 	conditionNode := n.ChildByFieldName("condition", l.lang)
@@ -363,10 +420,16 @@ func (l *lowerer) lowerRule(n *gotreesitter.Node) (Rule, error) {
 			if nameNode == nil || valueNode == nil {
 				continue
 			}
+			var valueID ExprID
+			if valueNode.Type(l.lang) == "lookup_expr" {
+				valueID = l.lowerLookupExpr(valueNode, ruleScope)
+			} else {
+				valueID = l.lowerExpr(valueNode, ruleScope)
+			}
 			binding := LetBinding{
 				Name:  l.text(nameNode),
 				Span:  spanForNode(child),
-				Value: l.lowerExpr(valueNode, ruleScope),
+				Value: valueID,
 			}
 			rule.Lets = append(rule.Lets, binding)
 			ruleScope.define(binding.Name)
@@ -457,10 +520,16 @@ func (l *lowerer) lowerStrategyWhenCandidate(n *gotreesitter.Node) (StrategyCand
 			if nameNode == nil || valueNode == nil {
 				continue
 			}
+			var valueID ExprID
+			if valueNode.Type(l.lang) == "lookup_expr" {
+				valueID = l.lowerLookupExpr(valueNode, actionScope)
+			} else {
+				valueID = l.lowerExpr(valueNode, actionScope)
+			}
 			binding := LetBinding{
 				Name:  l.text(nameNode),
 				Span:  spanForNode(child),
-				Value: l.lowerExpr(valueNode, actionScope),
+				Value: valueID,
 			}
 			candidate.Lets = append(candidate.Lets, binding)
 			actionScope.define(binding.Name)
@@ -727,10 +796,16 @@ func (l *lowerer) lowerExpertWhen(n *gotreesitter.Node) (string, []LetBinding, E
 		if nameNode == nil || valueNode == nil {
 			continue
 		}
+		var valueID ExprID
+		if valueNode.Type(l.lang) == "lookup_expr" {
+			valueID = l.lowerLookupExpr(valueNode, baseScope)
+		} else {
+			valueID = l.lowerExpr(valueNode, baseScope)
+		}
 		binding := LetBinding{
 			Name:  l.text(nameNode),
 			Span:  spanForNode(child),
-			Value: l.lowerExpr(valueNode, baseScope),
+			Value: valueID,
 		}
 		lets = append(lets, binding)
 		baseScope.define(binding.Name)
@@ -935,23 +1010,90 @@ func (l *lowerer) lowerAction(n *gotreesitter.Node, scope *scope) Action {
 	if nameNode := n.ChildByFieldName("action_name", l.lang); nameNode != nil {
 		action.Name = l.text(nameNode)
 	}
+
+	// Build a local scope for let bindings inside the action block.
+	actionScope := newScope(scope)
+
 	for i := 0; i < int(n.NamedChildCount()); i++ {
 		child := n.NamedChild(i)
-		if child.Type(l.lang) != "param_assignment" {
-			continue
+		switch child.Type(l.lang) {
+		case "let_binding":
+			nameNode := child.ChildByFieldName("name", l.lang)
+			valueNode := child.ChildByFieldName("value", l.lang)
+			if nameNode == nil || valueNode == nil {
+				continue
+			}
+			var valueID ExprID
+			if valueNode.Type(l.lang) == "lookup_expr" {
+				valueID = l.lowerLookupExpr(valueNode, actionScope)
+			} else {
+				valueID = l.lowerExpr(valueNode, actionScope)
+			}
+			binding := LetBinding{
+				Name:  l.text(nameNode),
+				Span:  spanForNode(child),
+				Value: valueID,
+			}
+			action.Lets = append(action.Lets, binding)
+			actionScope.define(binding.Name)
+		case "param_assignment":
+			keyNode := child.ChildByFieldName("key", l.lang)
+			valueNode := child.ChildByFieldName("value", l.lang)
+			if keyNode == nil || valueNode == nil {
+				continue
+			}
+			action.Params = append(action.Params, ActionParam{
+				Key:   l.text(keyNode),
+				Span:  spanForNode(child),
+				Value: l.lowerExpr(valueNode, actionScope),
+			})
 		}
-		keyNode := child.ChildByFieldName("key", l.lang)
-		valueNode := child.ChildByFieldName("value", l.lang)
-		if keyNode == nil || valueNode == nil {
-			continue
-		}
-		action.Params = append(action.Params, ActionParam{
-			Key:   l.text(keyNode),
-			Span:  spanForNode(child),
-			Value: l.lowerExpr(valueNode, scope),
-		})
 	}
 	return action
+}
+
+func (l *lowerer) lowerLookupExpr(n *gotreesitter.Node, scope *scope) ExprID {
+	expr := Expr{
+		Kind: ExprLookup,
+		Span: spanForNode(n),
+	}
+
+	if tableNode := n.ChildByFieldName("table", l.lang); tableNode != nil {
+		expr.TableName = l.text(tableNode)
+	}
+
+	if whereNode := n.ChildByFieldName("where", l.lang); whereNode != nil {
+		if exprNode := whereNode.ChildByFieldName("expr", l.lang); exprNode != nil {
+			expr.Where = l.lowerExpr(exprNode, scope)
+		}
+	}
+
+	if orderNode := n.ChildByFieldName("order", l.lang); orderNode != nil {
+		if colNode := orderNode.ChildByFieldName("column", l.lang); colNode != nil {
+			expr.SortCol = l.text(colNode)
+		}
+		if dirNode := orderNode.ChildByFieldName("direction", l.lang); dirNode != nil {
+			expr.SortDesc = l.text(dirNode) == "desc"
+		}
+	}
+
+	if elseNode := n.ChildByFieldName("else", l.lang); elseNode != nil {
+		for i := 0; i < int(elseNode.NamedChildCount()); i++ {
+			child := elseNode.NamedChild(i)
+			if child.Type(l.lang) != "param_assignment" {
+				continue
+			}
+			keyNode := child.ChildByFieldName("key", l.lang)
+			valueNode := child.ChildByFieldName("value", l.lang)
+			if keyNode == nil || valueNode == nil {
+				continue
+			}
+			expr.ElseKeys = append(expr.ElseKeys, l.text(keyNode))
+			expr.ElseVals = append(expr.ElseVals, l.lowerExpr(valueNode, scope))
+		}
+	}
+
+	return l.addExpr(expr)
 }
 
 func (l *lowerer) lowerParamAssignments(n *gotreesitter.Node, scope *scope) []ActionParam {

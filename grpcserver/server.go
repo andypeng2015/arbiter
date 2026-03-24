@@ -3,6 +3,7 @@ package grpcserver
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	arbiter "github.com/odvcencio/arbiter"
@@ -10,8 +11,10 @@ import (
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/flags"
 	"github.com/odvcencio/arbiter/govern"
+	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/overrides"
 	"github.com/odvcencio/arbiter/vm"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -25,10 +28,16 @@ type Server struct {
 	sessions  *SessionStore
 	overrides *overrides.Store
 	audit     audit.Sink
+	logger    *slog.Logger
 }
 
 // NewServer creates a gRPC service server.
 func NewServer(registry *Registry, store *overrides.Store, sink audit.Sink) *Server {
+	return NewServerWithLogger(registry, store, sink, nil)
+}
+
+// NewServerWithLogger creates a gRPC service server with a custom structured logger.
+func NewServerWithLogger(registry *Registry, store *overrides.Store, sink audit.Sink, logger *slog.Logger) *Server {
 	if registry == nil {
 		registry = NewRegistry()
 	}
@@ -38,11 +47,15 @@ func NewServer(registry *Registry, store *overrides.Store, sink audit.Sink) *Ser
 	if sink == nil {
 		sink = audit.NopSink{}
 	}
+	if logger == nil {
+		logger = observability.NewLogger(slog.LevelInfo)
+	}
 	return &Server{
 		registry:  registry,
 		sessions:  NewSessionStore(),
 		overrides: store,
 		audit:     sink,
+		logger:    logger,
 	}
 }
 
@@ -53,8 +66,15 @@ func (s *Server) PublishBundle(ctx context.Context, req *arbiterv1.PublishBundle
 	}
 	bundle, err := s.registry.Publish(req.GetName(), req.GetSource())
 	if err != nil {
+		s.logger.Error("bundle publish failed",
+			observability.KeyBundleName, req.GetName(),
+			observability.KeyError, err.Error())
 		return nil, status.Errorf(codes.InvalidArgument, "publish bundle: %v", err)
 	}
+	bundlePublishTotal.Inc()
+	s.logger.Info("bundle published",
+		observability.KeyBundleName, bundle.Name,
+		observability.KeyBundleID, bundle.ID)
 	_ = s.audit.WriteDecision(ctx, audit.DecisionEvent{
 		Timestamp: time.Now().UTC(),
 		BundleID:  bundle.ID,
@@ -96,8 +116,15 @@ func (s *Server) ActivateBundle(ctx context.Context, req *arbiterv1.ActivateBund
 	}
 	bundle, err := s.registry.Activate(req.GetName(), req.GetBundleId())
 	if err != nil {
+		s.logger.Error("bundle activate failed",
+			observability.KeyBundleName, req.GetName(),
+			observability.KeyBundleID, req.GetBundleId(),
+			observability.KeyError, err.Error())
 		return nil, status.Errorf(codes.InvalidArgument, "activate bundle: %v", err)
 	}
+	s.logger.Info("bundle activated",
+		observability.KeyBundleName, bundle.Name,
+		observability.KeyBundleID, bundle.ID)
 	_ = s.audit.WriteDecision(ctx, audit.DecisionEvent{
 		Timestamp: time.Now().UTC(),
 		BundleID:  bundle.ID,
@@ -119,8 +146,14 @@ func (s *Server) RollbackBundle(ctx context.Context, req *arbiterv1.RollbackBund
 	}
 	bundle, previous, err := s.registry.Rollback(req.GetName())
 	if err != nil {
+		s.logger.Error("bundle rollback failed",
+			observability.KeyBundleName, req.GetName(),
+			observability.KeyError, err.Error())
 		return nil, status.Errorf(codes.InvalidArgument, "rollback bundle: %v", err)
 	}
+	s.logger.Info("bundle rolled back",
+		observability.KeyBundleName, bundle.Name,
+		observability.KeyBundleID, bundle.ID)
 	_ = s.audit.WriteDecision(ctx, audit.DecisionEvent{
 		Timestamp: time.Now().UTC(),
 		BundleID:  bundle.ID,
@@ -240,13 +273,31 @@ func (s *Server) EvaluateRules(ctx context.Context, req *arbiterv1.EvaluateRules
 		return nil, status.Error(codes.FailedPrecondition, "bundle has no rules")
 	}
 
+	ctx, span := startEvalSpan(ctx, "arbiter.eval.governed", bundle.Name)
+	var matched []vm.MatchedRule
+	defer func() { endEvalSpan(span, len(matched), err) }()
+
+	start := time.Now()
 	ctxMap := req.GetContext().AsMap()
 	prog := &arbiter.Program{Ruleset: bundle.Compiled.Ruleset, Segments: bundle.Compiled.Segments}
 	dc := arbiter.DataFromMap(ctxMap, prog)
 	matched, trace, err := arbiter.EvalGovernedWithOverrides(prog, dc, bundle.Compiled.Segments, ctxMap, bundle.ID, s.overrides)
+	elapsed := time.Since(start)
+	evalStatus := "ok"
 	if err != nil {
+		evalStatus = "error"
+		evalTotal.WithLabelValues(bundle.Name, "rules", evalStatus).Inc()
+		evalDuration.WithLabelValues(bundle.Name, "rules", evalStatus).Observe(elapsed.Seconds())
+		s.logger.Error("evaluate rules failed",
+			observability.KeyBundleName, bundle.Name,
+			observability.KeyBundleID, bundle.ID,
+			observability.KeyRequestID, req.GetRequestId(),
+			observability.KeyError, err.Error())
 		return nil, status.Errorf(codes.Internal, "evaluate rules: %v", err)
 	}
+	evalTotal.WithLabelValues(bundle.Name, "rules", evalStatus).Inc()
+	evalDuration.WithLabelValues(bundle.Name, "rules", evalStatus).Observe(elapsed.Seconds())
+	ruleMatchesTotal.WithLabelValues(bundle.Name).Add(float64(len(matched)))
 
 	resp := &arbiterv1.EvaluateRulesResponse{
 		Matched: make([]*arbiterv1.RuleMatch, 0, len(matched)),
@@ -288,8 +339,22 @@ func (s *Server) ResolveFlag(ctx context.Context, req *arbiterv1.ResolveFlagRequ
 		return nil, status.Errorf(codes.NotFound, "flag %q not found", req.GetFlagKey())
 	}
 
+	ctx, span := startEvalSpan(ctx, "arbiter.flag.resolve", bundle.Name)
+	span.SetAttributes(attribute.String("arbiter.flag.name", req.GetFlagKey()))
+	var variant string
+	defer func() {
+		span.SetAttributes(attribute.String("arbiter.flag.variant", variant))
+		span.End()
+	}()
+
+	start := time.Now()
 	ctxMap := req.GetContext().AsMap()
 	eval := bundle.Flags.ExplainWithOverrides(bundle.ID, req.GetFlagKey(), ctxMap, s.overrides)
+	elapsed := time.Since(start)
+	evalTotal.WithLabelValues(bundle.Name, "governed", "ok").Inc()
+	evalDuration.WithLabelValues(bundle.Name, "governed", "ok").Observe(elapsed.Seconds())
+	flagResolvesTotal.WithLabelValues(bundle.Name, req.GetFlagKey()).Inc()
+
 	values, err := structpb.NewStruct(cleanMap(eval.Variant.Values))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "marshal values: %v", err)
@@ -328,6 +393,7 @@ func (s *Server) ResolveFlag(ctx context.Context, req *arbiterv1.ResolveFlagRequ
 
 	_ = s.audit.WriteDecision(ctx, event)
 
+	variant = eval.Variant.Name
 	return &arbiterv1.ResolveFlagResponse{
 		Variant:   eval.Variant.Name,
 		Values:    values,
@@ -350,11 +416,27 @@ func (s *Server) EvaluateStrategy(ctx context.Context, req *arbiterv1.EvaluateSt
 		return nil, status.Errorf(codes.NotFound, "strategy %q not found", req.GetStrategyName())
 	}
 
+	ctx, span := startEvalSpan(ctx, "arbiter.eval.strategy", bundle.Name)
+	span.SetAttributes(attribute.String("arbiter.strategy.name", req.GetStrategyName()))
+	var selectedLabel string
+	defer func() {
+		span.SetAttributes(attribute.String("arbiter.strategy.selected", selectedLabel))
+		span.End()
+	}()
+
+	start := time.Now()
 	ctxMap := req.GetContext().AsMap()
 	result, err := arbiter.EvalStrategyWithOverrides(bundle.Compiled, req.GetStrategyName(), ctxMap, bundle.ID, s.overrides)
+	elapsed := time.Since(start)
+	evalStatus := "ok"
 	if err != nil {
+		evalStatus = "error"
+		evalTotal.WithLabelValues(bundle.Name, "strategy", evalStatus).Inc()
+		evalDuration.WithLabelValues(bundle.Name, "strategy", evalStatus).Observe(elapsed.Seconds())
 		return nil, status.Errorf(codes.Internal, "evaluate strategy: %v", err)
 	}
+	evalTotal.WithLabelValues(bundle.Name, "strategy", evalStatus).Inc()
+	evalDuration.WithLabelValues(bundle.Name, "strategy", evalStatus).Observe(elapsed.Seconds())
 
 	params, err := structpb.NewStruct(cleanMap(result.Params))
 	if err != nil {
@@ -376,6 +458,7 @@ func (s *Server) EvaluateStrategy(ctx context.Context, req *arbiterv1.EvaluateSt
 		Trace: result.Trace.Steps,
 	})
 
+	selectedLabel = result.Selected
 	return &arbiterv1.EvaluateStrategyResponse{
 		Outcome:  result.Outcome,
 		Selected: result.Selected,

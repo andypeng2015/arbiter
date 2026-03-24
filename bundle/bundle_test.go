@@ -8,6 +8,67 @@ import (
 	"github.com/odvcencio/arbiter/vm"
 )
 
+func TestBundleTableRoundTrip(t *testing.T) {
+	src := []byte(`
+table ladder {
+    height: number | bitrate: string
+    1080 | "6500k"
+    720  | "3800k"
+}
+rule R {
+    when { true }
+    then A {
+        let row = lookup ladder where height <= 900 order by height desc else { height: 0, bitrate: "800k" }
+        bitrate: row.bitrate,
+    }
+}`)
+	prog, err := arbiter.Compile(src)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	rs := prog.Ruleset
+
+	if len(rs.Tables) == 0 {
+		t.Fatal("expected compiled ruleset to have tables")
+	}
+	if len(rs.LookupMetas) == 0 {
+		t.Fatal("expected compiled ruleset to have lookup metas")
+	}
+
+	data, err := bundle.Marshal(rs)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	t.Logf("bundle size: %d bytes", len(data))
+
+	restored, err := bundle.Unmarshal(data)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if len(restored.Tables) != len(rs.Tables) {
+		t.Fatalf("tables count: want %d, got %d", len(rs.Tables), len(restored.Tables))
+	}
+	if len(restored.LookupMetas) != len(rs.LookupMetas) {
+		t.Fatalf("lookup metas count: want %d, got %d", len(rs.LookupMetas), len(restored.LookupMetas))
+	}
+
+	// Evaluate the restored ruleset — height <= 900 matches 720 row (desc order picks it first).
+	sp := vm.NewStringPool(restored.Constants.Strings())
+	dc := vm.DataFromMap(map[string]any{}, sp)
+	matched, err := vm.EvalWithPool(restored, dc, sp)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	if len(matched) == 0 {
+		t.Fatal("no rule matched")
+	}
+	got := matched[0].Params["bitrate"]
+	if got != "3800k" {
+		t.Errorf("bitrate: want %q, got %v", "3800k", got)
+	}
+}
+
 func TestRoundTripMarshalUnmarshal(t *testing.T) {
 	prog, err := arbiter.Compile([]byte(`
 rule FreeShipping {

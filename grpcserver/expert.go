@@ -8,6 +8,7 @@ import (
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/expert"
+	"github.com/odvcencio/arbiter/observability"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -33,6 +34,11 @@ func (s *Server) StartSession(_ context.Context, req *arbiterv1.StartSessionRequ
 		Overrides: s.overrides,
 	})
 	handle := s.sessions.Create(bundle.ID, envelope, session)
+	activeSessions.WithLabelValues(bundle.Name).Inc()
+	s.logger.Info("expert session started",
+		observability.KeyBundleName, bundle.Name,
+		observability.KeyBundleID, bundle.ID,
+		"session_id", handle.ID)
 	return &arbiterv1.StartSessionResponse{
 		SessionId:       handle.ID,
 		ExpertRuleCount: uint32(bundle.ExpertRuleCount),
@@ -56,6 +62,15 @@ func (s *Server) RunSession(ctx context.Context, req *arbiterv1.RunSessionReques
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "marshal session result: %v", err)
 	}
+
+	// Record expert metrics using bundle name (bounded cardinality).
+	bundleName := handle.BundleID
+	if b, ok := s.registry.Get(handle.BundleID); ok {
+		bundleName = b.Name
+	}
+	expertRoundsTotal.WithLabelValues(bundleName).Add(float64(delta.Rounds))
+	expertMutationsTotal.WithLabelValues(bundleName).Add(float64(delta.Mutations))
+	evalTotal.WithLabelValues(bundleName, "expert", "ok").Inc()
 
 	_ = s.audit.WriteDecision(ctx, audit.DecisionEvent{
 		Timestamp: time.Now().UTC(),
@@ -124,7 +139,15 @@ func (s *Server) CloseSession(_ context.Context, req *arbiterv1.CloseSessionRequ
 		return nil, err
 	}
 	defer handle.mu.Unlock()
+	bundleName := handle.BundleID
+	if b, ok := s.registry.Get(handle.BundleID); ok {
+		bundleName = b.Name
+	}
 	s.sessions.Close(handle)
+	activeSessions.WithLabelValues(bundleName).Dec()
+	s.logger.Info("expert session closed",
+		observability.KeyBundleID, handle.BundleID,
+		"session_id", handle.ID)
 	return &arbiterv1.CloseSessionResponse{}, nil
 }
 

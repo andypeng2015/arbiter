@@ -1,5 +1,45 @@
 # Changelog
 
+## v1.2.0
+
+### Action Param Type Checking
+
+- **Rule actions validated against outcome schemas.** When a rule's `then` action name matches a declared `outcome`, field names, types, and required fields are checked at compile time. Unknown action names pass through unvalidated (backward compatible).
+
+### Compile-Time Regex
+
+- **Regex patterns validated and pre-compiled at compile time.** Invalid literal patterns in `matches` expressions are compile errors. Valid patterns are stored pre-compiled for O(1) lookup at eval time, eliminating first-eval latency. Variable patterns still compile at runtime via the existing per-VM cache.
+
+### Lookup Tables
+
+- **`table` declarations** — named, immutable, typed collections of rows. Pipe-separated header + data rows with compile-time type validation. Importable across modules.
+- **`lookup` expressions** — query tables with `where` filtering, `order by` sorting, and `else` fallback. Returns first matching row. Deterministic: ties resolve by declaration order.
+- **`let` in action blocks** — new semantic expansion. Local bindings in `then`/action blocks, evaluated top-to-bottom when the action fires. Enables `let row = lookup ... else {...}` pattern.
+- **Formatter auto-aligns table columns** — `arbiter fmt` and LSP formatting pad pipe-separated columns to consistent widths.
+- **Warnings** — `lookup` without `else` warns at compile time. Table column names that shadow input schema root fields warn.
+- **Bundle support** — tables serialize into the binary bundle format. v1.2.0 bundles are not backward-compatible with v1.1.0 consumers.
+
+### Observability
+
+- **Prometheus metrics** — `arbiter_eval_total`, `arbiter_eval_duration_seconds`, `arbiter_rule_matches_total`, `arbiter_expert_rounds_total`, `arbiter_expert_mutations_total`, `arbiter_flag_resolves_total`, `arbiter_bundle_publish_total`, `arbiter_active_sessions`. Cardinality-safe: `bundle_name` labels (not `bundle_id`), `status` labels (`ok`/`error`).
+- **Separate HTTP listener** — `/metrics`, `/healthz`, `/readyz`, `/status` on a dedicated HTTP port. gRPC port for API only.
+- **Structured logging (`slog`)** — JSON output by default. Standard field set: `bundle_name`, `bundle_id`, `mode`, `strategy`, `worker`, `arbiter`, `source`, `handler_kind`, `error`, `request_id`. Configurable via `--log-level` flag or `ARBITER_LOG_LEVEL` env var.
+- **OpenTelemetry trace propagation** — eval spans (`arbiter.eval.governed`, `arbiter.eval.strategy`, `arbiter.flag.resolve`) with `bundle_name`, `match_count`, `strategy.selected`, `flag.variant` attributes. Runtime spans (`arbiter.runtime.tick`, `arbiter.worker.dispatch`). One span per eval call — no per-rule spans. OTel dependency on server/runtime only, zero in core library.
+
+### LSP
+
+- **Table support** — table declarations appear in document symbols. Table/lookup validation errors and warnings surface as diagnostics. Table formatting via LSP auto-aligns columns.
+
+### Conformance
+
+- **Action type checking** — validates schema-gated programs reject invalid fields.
+- **Regex pre-compilation** — pre-compiled regex produces identical results to runtime-compiled across all surfaces.
+- **Table round-trip** — table programs produce identical results across native eval and bundle round-trip.
+- **Lookup determinism** — same table + context = identical results every time.
+- **Lookup null behavior** — null propagation and else fallback verified across surfaces.
+
+---
+
 ## v1.1.0
 
 ### Module System
