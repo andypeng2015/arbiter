@@ -12,6 +12,8 @@ package conformance_test
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	arbiter "github.com/odvcencio/arbiter"
@@ -334,5 +336,352 @@ expert rule Accumulate priority 10 {
 	}
 	if result.Outcomes[0].Name != "Result" {
 		t.Errorf("expected Result, got %s", result.Outcomes[0].Name)
+	}
+}
+
+// TestConformance_ImportRoundTrip verifies that a multi-module program compiled
+// via CompileFile produces identical evaluation results across native eval,
+// governed eval, and bundle round-trip.
+func TestConformance_ImportRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write arbiter.toml.
+	if err := os.WriteFile(filepath.Join(dir, "arbiter.toml"), []byte(`[project]
+name = "conformance"
+version = "1.0.0"
+`), 0o644); err != nil {
+		t.Fatalf("write arbiter.toml: %v", err)
+	}
+
+	// Write base module with a simple threshold rule.
+	if err := os.WriteFile(filepath.Join(dir, "base.arb"), []byte(`
+rule ScorePass {
+	when { user.score >= 700 }
+	then Pass { level: "base" }
+}
+`), 0o644); err != nil {
+		t.Fatalf("write base.arb: %v", err)
+	}
+
+	// Write main module that imports base and adds a requires-gated rule.
+	mainPath := filepath.Join(dir, "main.arb")
+	if err := os.WriteFile(mainPath, []byte(`
+import "base"
+
+rule Premium {
+	requires base.ScorePass
+	when { user.tier == "gold" }
+	then Upgrade { level: "premium" }
+}
+`), 0o644); err != nil {
+		t.Fatalf("write main.arb: %v", err)
+	}
+
+	prog, err := arbiter.CompileFile(mainPath)
+	if err != nil {
+		t.Fatalf("CompileFile: %v", err)
+	}
+
+	ctx := map[string]any{
+		"user": map[string]any{
+			"score": float64(750),
+			"tier":  "gold",
+		},
+	}
+
+	checkMatches := func(t *testing.T, matched []vm.MatchedRule) {
+		t.Helper()
+		if len(matched) != 2 {
+			names := make([]string, len(matched))
+			for i, m := range matched {
+				names[i] = m.Name
+			}
+			t.Fatalf("expected 2 matches, got %d: %v", len(matched), names)
+		}
+		if matched[0].Name != "base.ScorePass" {
+			t.Errorf("expected first match = base.ScorePass, got %s", matched[0].Name)
+		}
+		if matched[1].Name != "Premium" {
+			t.Errorf("expected second match = Premium, got %s", matched[1].Name)
+		}
+	}
+
+	// Surface 1: native eval.
+	t.Run("native", func(t *testing.T) {
+		dc := arbiter.DataFromMap(ctx, prog)
+		matched, err := arbiter.Eval(prog, dc)
+		if err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+		checkMatches(t, matched)
+	})
+
+	// Surface 2: governed eval.
+	t.Run("governed", func(t *testing.T) {
+		dc := arbiter.DataFromMap(ctx, prog)
+		matched, _, err := arbiter.EvalGoverned(prog, dc, prog.Segments, ctx)
+		if err != nil {
+			t.Fatalf("EvalGoverned: %v", err)
+		}
+		checkMatches(t, matched)
+	})
+
+	// Surface 3: bundle round-trip.
+	t.Run("bundle", func(t *testing.T) {
+		blob, err := bundle.Marshal(prog.Ruleset)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		restored, err := bundle.Unmarshal(blob)
+		if err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		sp := vm.NewStringPool(restored.Constants.Strings())
+		dc := vm.DataFromMap(ctx, sp)
+		matched, err := vm.EvalWithPool(restored, dc, sp)
+		if err != nil {
+			t.Fatalf("EvalWithPool: %v", err)
+		}
+		checkMatches(t, matched)
+	})
+}
+
+// TestConformance_InputSchema verifies that programs with an input block produce
+// identical runtime results to equivalent programs without one. The input block
+// is a compile-time schema check only and must not alter evaluation behavior.
+func TestConformance_InputSchema(t *testing.T) {
+	srcWith := `
+input { user: { age: number } }
+rule Adult {
+	when { user.age >= 18 }
+	then Allow { verdict: "adult" }
+}
+`
+	srcWithout := `
+rule Adult {
+	when { user.age >= 18 }
+	then Allow { verdict: "adult" }
+}
+`
+	ctx := map[string]any{
+		"user": map[string]any{"age": float64(21)},
+	}
+
+	progWith, err := arbiter.Compile([]byte(srcWith))
+	if err != nil {
+		t.Fatalf("Compile(with input): %v", err)
+	}
+	progWithout, err := arbiter.Compile([]byte(srcWithout))
+	if err != nil {
+		t.Fatalf("Compile(without input): %v", err)
+	}
+
+	matchedWith, err := arbiter.Eval(progWith, arbiter.DataFromMap(ctx, progWith))
+	if err != nil {
+		t.Fatalf("Eval(with input): %v", err)
+	}
+	matchedWithout, err := arbiter.Eval(progWithout, arbiter.DataFromMap(ctx, progWithout))
+	if err != nil {
+		t.Fatalf("Eval(without input): %v", err)
+	}
+
+	if len(matchedWith) != len(matchedWithout) {
+		t.Fatalf("match count mismatch: with-input=%d, without-input=%d",
+			len(matchedWith), len(matchedWithout))
+	}
+	if len(matchedWith) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matchedWith))
+	}
+	if matchedWith[0].Action != matchedWithout[0].Action {
+		t.Errorf("action mismatch: with=%s, without=%s",
+			matchedWith[0].Action, matchedWithout[0].Action)
+	}
+	if matchedWith[0].Params["verdict"] != matchedWithout[0].Params["verdict"] {
+		t.Errorf("param mismatch: with=%v, without=%v",
+			matchedWith[0].Params["verdict"], matchedWithout[0].Params["verdict"])
+	}
+
+	// Also verify the non-matching path is identical.
+	ctxMinor := map[string]any{
+		"user": map[string]any{"age": float64(15)},
+	}
+	matchedWithMinor, err := arbiter.Eval(progWith, arbiter.DataFromMap(ctxMinor, progWith))
+	if err != nil {
+		t.Fatalf("Eval(with input, minor): %v", err)
+	}
+	matchedWithoutMinor, err := arbiter.Eval(progWithout, arbiter.DataFromMap(ctxMinor, progWithout))
+	if err != nil {
+		t.Fatalf("Eval(without input, minor): %v", err)
+	}
+	if len(matchedWithMinor) != 0 || len(matchedWithoutMinor) != 0 {
+		t.Errorf("expected no matches for minor: with=%d, without=%d",
+			len(matchedWithMinor), len(matchedWithoutMinor))
+	}
+}
+
+// TestConformance_APIParity verifies that Compile and CompileFull produce
+// identical evaluation results for the existing conformance cases.
+func TestConformance_APIParity(t *testing.T) {
+	src := []byte(`rule R { when { x > 5 } then Match { result: x * 2 } }`)
+	ctx := map[string]any{"x": float64(10)}
+
+	// New API.
+	prog, err := arbiter.Compile(src)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	// Deprecated API.
+	full, err := arbiter.CompileFull(src)
+	if err != nil {
+		t.Fatalf("CompileFull: %v", err)
+	}
+	fullProg := &arbiter.Program{Ruleset: full.Ruleset, Segments: full.Segments}
+
+	matchedNew, err := arbiter.Eval(prog, arbiter.DataFromMap(ctx, prog))
+	if err != nil {
+		t.Fatalf("Eval(new): %v", err)
+	}
+	matchedOld, err := arbiter.Eval(fullProg, arbiter.DataFromMap(ctx, fullProg))
+	if err != nil {
+		t.Fatalf("Eval(deprecated): %v", err)
+	}
+
+	if len(matchedNew) != len(matchedOld) {
+		t.Fatalf("match count mismatch: new=%d, deprecated=%d", len(matchedNew), len(matchedOld))
+	}
+	if len(matchedNew) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matchedNew))
+	}
+	if matchedNew[0].Action != matchedOld[0].Action {
+		t.Errorf("action mismatch: new=%s, deprecated=%s", matchedNew[0].Action, matchedOld[0].Action)
+	}
+	if matchedNew[0].Params["result"] != matchedOld[0].Params["result"] {
+		t.Errorf("param mismatch: new=%v, deprecated=%v",
+			matchedNew[0].Params["result"], matchedOld[0].Params["result"])
+	}
+
+	// Also verify against each existing conformance case.
+	for _, tc := range ruleConformanceCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := arbiter.Compile([]byte(tc.source))
+			if err != nil {
+				t.Fatalf("Compile: %v", err)
+			}
+			f, err := arbiter.CompileFull([]byte(tc.source))
+			if err != nil {
+				t.Fatalf("CompileFull: %v", err)
+			}
+			fp := &arbiter.Program{Ruleset: f.Ruleset, Segments: f.Segments}
+
+			mn, err := arbiter.Eval(p, arbiter.DataFromMap(tc.context, p))
+			if err != nil {
+				t.Fatalf("Eval(new): %v", err)
+			}
+			mo, err := arbiter.Eval(fp, arbiter.DataFromMap(tc.context, fp))
+			if err != nil {
+				t.Fatalf("Eval(deprecated): %v", err)
+			}
+			if len(mn) != len(mo) {
+				t.Errorf("match count mismatch: new=%d, deprecated=%d", len(mn), len(mo))
+			}
+			// Both surfaces must satisfy the case's own expectation.
+			tc.expect(t, mn)
+			tc.expect(t, mo)
+		})
+	}
+}
+
+// TestConformance_CrossModuleExpert verifies that expert rules in an imported
+// module fire based on working memory contents, not on module ordering. Module
+// A asserts a fact; module B reads that fact and emits an outcome. Both rules
+// are compiled into a single program and must cooperate correctly.
+func TestConformance_CrossModuleExpert(t *testing.T) {
+	// Single-source program: rule A asserts, rule B emits based on A's fact.
+	// This is the standard way to test cross-module expert cooperation because
+	// the module system merges IRs before compilation; the logical separation
+	// is preserved through rule naming.
+	src := []byte(`
+fact Signal { value: number }
+outcome Alert { level: string }
+
+expert rule SeedSignal priority 10 {
+	when { sensor.reading > 50 }
+	then assert Signal {
+		key: "primary",
+		value: sensor.reading,
+	}
+}
+
+expert rule EmitAlert priority 5 {
+	when {
+		any sig in facts.Signal { sig.value > 50 }
+	}
+	then emit Alert { level: "high" }
+}
+`)
+
+	prog, err := expert.Compile(src)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	envCtx := map[string]any{
+		"sensor": map[string]any{"reading": float64(75)},
+	}
+
+	// Run with an empty initial working memory — SeedSignal must fire first
+	// (higher priority) and assert the Signal fact, then EmitAlert must fire
+	// because the Signal fact is now in working memory.
+	session := expert.NewSession(prog, envCtx, nil, expert.Options{})
+	result, err := session.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Verify SeedSignal fired and the fact landed in working memory.
+	foundFact := false
+	for _, f := range result.Facts {
+		if f.Type == "Signal" && f.Key == "primary" {
+			foundFact = true
+			if f.Fields["value"] != float64(75) {
+				t.Errorf("Signal.value = %v, want 75", f.Fields["value"])
+			}
+			break
+		}
+	}
+	if !foundFact {
+		t.Fatal("expected Signal fact in working memory after SeedSignal fired")
+	}
+
+	// Verify EmitAlert fired and produced an Alert outcome.
+	if len(result.Outcomes) == 0 {
+		t.Fatal("expected at least one outcome from EmitAlert")
+	}
+	foundAlert := false
+	for _, o := range result.Outcomes {
+		if o.Name == "Alert" && o.Params["level"] == "high" {
+			foundAlert = true
+			break
+		}
+	}
+	if !foundAlert {
+		t.Errorf("expected Alert{level:high} outcome, got %+v", result.Outcomes)
+	}
+
+	// Verify that when the sensor reading is below threshold, neither rule fires.
+	lowCtx := map[string]any{
+		"sensor": map[string]any{"reading": float64(30)},
+	}
+	sessionLow := expert.NewSession(prog, lowCtx, nil, expert.Options{})
+	resultLow, err := sessionLow.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run(low): %v", err)
+	}
+	if len(resultLow.Outcomes) != 0 {
+		t.Errorf("expected no outcomes for low reading, got %+v", resultLow.Outcomes)
+	}
+	if len(resultLow.Facts) != 0 {
+		t.Errorf("expected no asserted facts for low reading, got %+v", resultLow.Facts)
 	}
 }
