@@ -52,6 +52,9 @@ func (vm *VM) dispatchConditionOp(instrs []byte, end, ip uint32, op compiler.OpC
 	if nextIP, handled := vm.evalLocalOp(ip, op, arg); handled {
 		return nextIP, true, false, false
 	}
+	if nextIP, handled := vm.evalTableOp(instrs, end, ip, op, flags, arg, dc); handled {
+		return nextIP, true, false, false
+	}
 	if op == compiler.OpRuleMatch {
 		if vm.sp > 0 {
 			return 0, true, vm.peek().AsBool(), true

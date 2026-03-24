@@ -39,6 +39,12 @@ func (c *irCompiler) compile() (*CompiledRuleset, error) {
 	}
 	c.rs = rs
 
+	// Compile table declarations first so lookups can reference them.
+	for i := range c.program.Tables {
+		ct := c.compileTable(&c.program.Tables[i])
+		rs.Tables = append(rs.Tables, ct)
+	}
+
 	for i := range c.program.Rules {
 		rule := &c.program.Rules[i]
 		rh, err := c.compileRule(rule, rs)
@@ -52,6 +58,33 @@ func (c *irCompiler) compile() (*CompiledRuleset, error) {
 	}
 
 	return rs, nil
+}
+
+func (c *irCompiler) compileTable(table *ir.Table) CompiledTable {
+	ct := CompiledTable{
+		Name:    table.Name,
+		Columns: make([]string, len(table.Columns)),
+	}
+	for i, col := range table.Columns {
+		ct.Columns[i] = col.Name
+	}
+	for _, row := range table.Rows {
+		vals := make([]intern.PoolValue, len(row.Values))
+		for j, exprID := range row.Values {
+			vals[j] = c.exprToPoolValue(exprID)
+		}
+		ct.Rows = append(ct.Rows, vals)
+	}
+	return ct
+}
+
+func (c *irCompiler) findTableIndex(name string) (uint16, bool) {
+	for i, t := range c.rs.Tables {
+		if t.Name == name {
+			return uint16(i), true
+		}
+	}
+	return 0, false
 }
 
 func (c *irCompiler) compileRule(rule *ir.Rule, rs *CompiledRuleset) (RuleHeader, error) {
@@ -127,9 +160,20 @@ func (c *irCompiler) compileAction(action ir.Action, rs *CompiledRuleset) Action
 		NameIdx: c.pool.String(action.Name),
 	}
 
-	for _, param := range action.Params {
+	// Compile let bindings in action blocks. These are prepended to
+	// the first param's bytecode so they execute before param evaluation.
+	var letCode []byte
+	for _, binding := range action.Lets {
+		letCode = c.compileLet(letCode, binding)
+	}
+
+	for i, param := range action.Params {
 		paramOff := uint32(len(rs.Instructions))
 		var code []byte
+		// Prepend let bindings to the first param so locals are set up.
+		if i == 0 && len(letCode) > 0 {
+			code = append(code, letCode...)
+		}
 		code = c.compileExpr(code, param.Value)
 		rs.Instructions = append(rs.Instructions, code...)
 		entry.Params = append(entry.Params, ActionParam{
@@ -215,6 +259,8 @@ func (c *irCompiler) compileExpr(code []byte, exprID ir.ExprID) []byte {
 		return c.compileAggregate(code, expr)
 	case ir.ExprBuiltinCall:
 		return c.compileBuiltin(code, expr)
+	case ir.ExprLookup:
+		return c.compileLookup(code, expr)
 	default:
 		return Emit(code, OpLoadNull, 0, 0)
 	}
@@ -352,6 +398,52 @@ func (c *irCompiler) compileBuiltin(code []byte, expr *ir.Expr) []byte {
 	default:
 		return Emit(code, OpLoadNull, 0, 0)
 	}
+}
+
+func (c *irCompiler) compileLookup(code []byte, expr *ir.Expr) []byte {
+	tableIdx, ok := c.findTableIndex(expr.TableName)
+	if !ok {
+		if c.err == nil {
+			c.err = fmt.Errorf("unknown table %q", expr.TableName)
+		}
+		return Emit(code, OpLoadNull, 0, 0)
+	}
+
+	meta := LookupMeta{
+		TableIdx: tableIdx,
+		SortCol:  expr.SortCol,
+		SortDesc: expr.SortDesc,
+	}
+
+	// Compile the where clause into the instruction stream.
+	if expr.Where != 0 {
+		whereOff := uint32(len(c.rs.Instructions))
+		var whereCode []byte
+		whereCode = c.compileExpr(whereCode, expr.Where)
+		c.rs.Instructions = append(c.rs.Instructions, whereCode...)
+		meta.WhereOff = whereOff
+		meta.WhereLen = uint32(len(whereCode))
+	}
+
+	// Compile else values. Each else key/value pair is compiled so the VM
+	// can build a row map from the evaluated results.
+	if len(expr.ElseKeys) > 0 {
+		meta.ElseKeys = make([]string, len(expr.ElseKeys))
+		copy(meta.ElseKeys, expr.ElseKeys)
+		elseOff := uint32(len(c.rs.Instructions))
+		var elseCode []byte
+		for _, valExpr := range expr.ElseVals {
+			elseCode = c.compileExpr(elseCode, valExpr)
+		}
+		c.rs.Instructions = append(c.rs.Instructions, elseCode...)
+		meta.ElseOff = elseOff
+		meta.ElseLen = uint32(len(elseCode))
+	}
+
+	metaIdx := uint16(len(c.rs.LookupMetas))
+	c.rs.LookupMetas = append(c.rs.LookupMetas, meta)
+
+	return Emit(code, OpLookup, 0, metaIdx)
 }
 
 func compileTimestampLiteral(text string) (float64, error) {
