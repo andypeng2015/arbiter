@@ -43,8 +43,9 @@ func Evaluate(compiled *arbiter.CompileResult, req Request) (Decision, error) {
 	}
 
 	ctx := BuildContext(req)
-	dc := arbiter.DataFromMap(ctx, compiled.Ruleset)
-	matched, trace, err := arbiter.EvalGoverned(compiled.Ruleset, dc, compiled.Segments, ctx)
+	prog := &arbiter.Program{Ruleset: compiled.Ruleset, Segments: compiled.Segments}
+	dc := arbiter.DataFromMap(ctx, prog)
+	matched, trace, err := arbiter.EvalGoverned(prog, dc, compiled.Segments, ctx)
 	if err != nil {
 		return Decision{}, err
 	}

@@ -25,13 +25,14 @@ func BenchmarkLatencySplit(b *testing.B) {
 		if err != nil {
 			b.Fatalf("CompileFull: %v", err)
 		}
-		dc := DataFromMap(ctxMap, full.Ruleset)
+		prog := &Program{Ruleset: full.Ruleset, Segments: full.Segments}
+		dc := DataFromMap(ctxMap, prog)
 
 		b.ReportAllocs()
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			matched, _, err := EvalGoverned(full.Ruleset, dc, full.Segments, ctxMap)
+			matched, _, err := EvalGoverned(prog, dc, full.Segments, ctxMap)
 			if err != nil {
 				b.Fatalf("EvalGoverned: %v", err)
 			}

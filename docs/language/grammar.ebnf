@@ -29,9 +29,18 @@ top_level_declaration
                    | expert_rule_declaration
                    | worker_declaration
                    | arbiter_declaration
-                   | include_declaration ;
+                   | include_declaration
+                   | import_declaration
+                   | input_declaration ;
 
 include_declaration = "include" string_literal ;
+
+import_declaration = "import" string_literal [ "as" identifier ] ;
+
+input_declaration  = "input" "{" { input_field } "}" ;
+input_field        = identifier [ "?" ] ":" ( field_type | "{" { input_field } "}" ) ;
+
+qualified_name     = identifier [ "." identifier ] ;
 
 const_declaration  = "const" identifier "=" expression ;
 
@@ -122,10 +131,10 @@ rule_block         = "{"
 priority_clause    = "priority" integer_literal ;
 
 kill_switch_clause = "kill_switch" ;
-requires_clause    = "requires" identifier ;
-excludes_clause    = "excludes" identifier ;
+requires_clause    = "requires" qualified_name ;
+excludes_clause    = "excludes" qualified_name ;
 
-when_clause        = "when" [ "segment" identifier ] "{" { let_binding } expression "}" ;
+when_clause        = "when" [ "segment" qualified_name ] "{" { let_binding } expression "}" ;
 
 then_clause        = "then" action_block ;
 otherwise_clause   = "otherwise" action_block ;
@@ -147,7 +156,7 @@ flag_declaration   = "flag" identifier
 
 flag_metadata      = identifier ":" string_literal ;
 
-flag_requires      = "requires" identifier ;
+flag_requires      = "requires" qualified_name ;
 
 variant_declaration = "variant" string_literal "{" { param_assignment } "}" ;
 

@@ -250,25 +250,48 @@ func (s *server) publishDiagnostics(uri string) []rpcMessage {
 	content := f.content
 	s.mu.Unlock()
 
-	diags := compileDiagnostics(content)
+	diags := compileDiagnostics(uri, content)
 	return []rpcMessage{s.diagnosticNotification(uri, diags)}
 }
 
-func compileDiagnostics(source string) []map[string]any {
-	_, err := compileSource([]byte(source))
-	if err == nil {
-		return nil
-	}
+func compileDiagnostics(uri, source string) []map[string]any {
+	_, err, warnings := compileForDiagnostics(uri, []byte(source))
 
 	var diags []map[string]any
-	for _, line := range strings.Split(err.Error(), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+
+	// Surface compile errors (severity 1 = Error).
+	if err != nil {
+		for _, line := range strings.Split(err.Error(), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			d := parseDiagnosticLine(line)
+			diags = append(diags, d)
 		}
-		d := parseDiagnosticLine(line)
-		diags = append(diags, d)
 	}
+
+	// Surface compiler warnings (severity 2 = Warning).
+	for _, w := range warnings {
+		lineNum := w.Line
+		col := w.Col
+		if lineNum > 0 {
+			lineNum-- // LSP is 0-based
+		}
+		if col > 0 {
+			col-- // LSP is 0-based
+		}
+		diags = append(diags, map[string]any{
+			"range": map[string]any{
+				"start": map[string]any{"line": lineNum, "character": col},
+				"end":   map[string]any{"line": lineNum, "character": col + 1},
+			},
+			"severity": 2, // Warning
+			"source":   "arbiter",
+			"message":  w.Message,
+		})
+	}
+
 	return diags
 }
 
@@ -774,29 +797,6 @@ func (s *server) handleFormatting(msg rpcMessage) rpcMessage {
 }
 
 // --- Helpers ---
-
-func compileSource(source []byte) (any, error) {
-	_, err := compileForLSP(source)
-	return nil, err
-}
-
-func compileForLSP(source []byte) (*lspCompileResult, error) {
-	full, err := fullCompile(source)
-	if err != nil {
-		return nil, err
-	}
-	return &lspCompileResult{full: full}, nil
-}
-
-type lspCompileResult struct {
-	full any
-}
-
-func fullCompile(source []byte) (any, error) {
-	// Import arbiter at function level to avoid circular import issues.
-	// The LSP binary links against the arbiter package.
-	return nil, compileAndValidate(source)
-}
 
 func wordAtPosition(content string, line, col int) string {
 	lines := strings.Split(content, "\n")

@@ -254,8 +254,9 @@ func main() {
 			},
 		}
 
-		dc := arbiter.DataFromMap(ctx, result.Ruleset)
-		matched, trace, evalErr := arbiter.EvalGoverned(result.Ruleset, dc, result.Segments, ctx)
+		prog := &arbiter.Program{Ruleset: result.Ruleset, Segments: result.Segments}
+		dc := arbiter.DataFromMap(ctx, prog)
+		matched, trace, evalErr := arbiter.EvalGoverned(prog, dc, result.Segments, ctx)
 		if evalErr != nil {
 			log.Printf("eval error: %v", evalErr)
 			w.WriteHeader(http.StatusOK) // fail open

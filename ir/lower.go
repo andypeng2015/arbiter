@@ -145,6 +145,14 @@ func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) {
 				continue
 			}
 			l.program.Arbiters = append(l.program.Arbiters, arbiter)
+		case "import_declaration":
+			l.program.Imports = append(l.program.Imports, l.lowerImport(child))
+		case "input_declaration":
+			if l.program.Input != nil {
+				l.errs = append(l.errs, fmt.Errorf("duplicate input declaration"))
+			} else {
+				l.program.Input = l.lowerInputSchema(child)
+			}
 		}
 	}
 }
@@ -158,6 +166,67 @@ func (l *lowerer) lowerConst(n *gotreesitter.Node) Const {
 		Span:  spanForNode(n),
 		Value: valueID,
 	}
+}
+
+func (l *lowerer) lowerImport(n *gotreesitter.Node) Import {
+	imp := Import{Span: spanForNode(n)}
+	if pathNode := n.ChildByFieldName("path", l.lang); pathNode != nil {
+		imp.Path = parseutil.StripQuotes(l.text(pathNode))
+	}
+	if aliasNode := n.ChildByFieldName("alias", l.lang); aliasNode != nil {
+		imp.Alias = l.text(aliasNode)
+	}
+	return imp
+}
+
+func (l *lowerer) lowerInputSchema(n *gotreesitter.Node) *InputSchema {
+	schema := &InputSchema{Span: spanForNode(n)}
+	for i := 0; i < int(n.NamedChildCount()); i++ {
+		child := n.NamedChild(i)
+		if child.Type(l.lang) == "input_field" {
+			schema.Fields = append(schema.Fields, l.lowerInputField(child))
+		}
+	}
+	return schema
+}
+
+func (l *lowerer) lowerInputField(n *gotreesitter.Node) SchemaField {
+	field := SchemaField{
+		Span:     spanForNode(n),
+		Required: true,
+	}
+	if nameNode := n.ChildByFieldName("name", l.lang); nameNode != nil {
+		field.Name = l.text(nameNode)
+	}
+	if n.ChildByFieldName("optional", l.lang) != nil {
+		field.Required = false
+	}
+	if typeNode := n.ChildByFieldName("type", l.lang); typeNode != nil {
+		field.Type = parseInputFieldType(l.text(typeNode))
+	}
+	// Collect nested input_field children (object body).
+	for i := 0; i < int(n.NamedChildCount()); i++ {
+		child := n.NamedChild(i)
+		if child.Type(l.lang) == "input_field" {
+			field.Children = append(field.Children, l.lowerInputField(child))
+		}
+	}
+	if len(field.Children) > 0 {
+		field.Type = FieldType{Base: "object"}
+	}
+	return field
+}
+
+func parseInputFieldType(text string) FieldType {
+	text = strings.TrimSpace(text)
+	// list<T>
+	if strings.HasPrefix(text, "list<") && strings.HasSuffix(text, ">") {
+		inner := text[len("list<") : len(text)-1]
+		elem := parseInputFieldType(inner)
+		return FieldType{Base: "list", Element: &elem}
+	}
+	// Delegate to existing parser for number<D>, decimal<D>, and simple types.
+	return parseSchemaFieldType(text)
 }
 
 func (l *lowerer) lowerFeature(n *gotreesitter.Node) Feature {

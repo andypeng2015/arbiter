@@ -79,8 +79,10 @@ func MiddlewareWithOptions(compiled *CompileResult, next http.Handler, opts HTTP
 			ctxMap = map[string]any{}
 		}
 
-		dc := DataFromMap(ctxMap, compiled.Ruleset)
-		matched, trace, err := EvalGoverned(compiled.Ruleset, dc, compiled.Segments, ctxMap)
+		// Build a temporary Program wrapper for the new Eval/DataFromMap API.
+		prog := &Program{Ruleset: compiled.Ruleset, Segments: compiled.Segments}
+		dc := DataFromMap(ctxMap, prog)
+		matched, trace, err := EvalGoverned(prog, dc, compiled.Segments, ctxMap)
 		if err != nil {
 			onEvalError(w, r, err)
 			return

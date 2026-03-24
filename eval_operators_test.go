@@ -14,12 +14,12 @@ import (
 // Returns true if any rule matched (non-fallback).
 func evalRule(t *testing.T, source string, data map[string]any) bool {
 	t.Helper()
-	rs, err := Compile([]byte(source))
+	prog, err := Compile([]byte(source))
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	dc := DataFromMap(data, rs)
-	matched, err := Eval(rs, dc)
+	dc := DataFromMap(data, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatalf("eval: %v", err)
 	}
@@ -158,14 +158,14 @@ func TestEvalStringNeq(t *testing.T) {
 
 func TestEvalStringConcat(t *testing.T) {
 	src := `rule T { when { true } then Act { message: "Hello " + user.name } }`
-	rs, err := Compile([]byte(src))
+	prog, err := Compile([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	dc := DataFromMap(map[string]any{
 		"user": map[string]any{"name": "World"},
-	}, rs)
-	matched, err := Eval(rs, dc)
+	}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestEvalStringConcat(t *testing.T) {
 
 func TestEvalQuantityComparison(t *testing.T) {
 	src := `rule T { when { sensor.temp > 28 C } then A {} }`
-	rs, err := Compile([]byte(src))
+	prog, err := Compile([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,8 +187,8 @@ func TestEvalQuantityComparison(t *testing.T) {
 		"sensor": map[string]any{
 			"temp": units.Quantity{Value: 86, Unit: "F"},
 		},
-	}, rs)
-	matched, err := Eval(rs, dc)
+	}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -660,14 +660,14 @@ func TestEvalFallbackAction(t *testing.T) {
     then High {}
     otherwise Low {}
 }`
-	rs, err := Compile([]byte(src))
+	prog, err := Compile([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// x > 100 -> High (not fallback)
-	dc := DataFromMap(map[string]any{"x": 200.0}, rs)
-	matched, err := Eval(rs, dc)
+	dc := DataFromMap(map[string]any{"x": 200.0}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -682,8 +682,8 @@ func TestEvalFallbackAction(t *testing.T) {
 	}
 
 	// x <= 100 -> Low (fallback)
-	dc = DataFromMap(map[string]any{"x": 50.0}, rs)
-	matched, err = Eval(rs, dc)
+	dc = DataFromMap(map[string]any{"x": 50.0}, prog)
+	matched, err = Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -702,12 +702,12 @@ func TestEvalFallbackAction(t *testing.T) {
 
 func TestEvalActionParams(t *testing.T) {
 	src := `rule T { when { true } then Act { level: "admin", ttl: 3600 } }`
-	rs, err := Compile([]byte(src))
+	prog, err := Compile([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
-	dc := DataFromMap(map[string]any{}, rs)
-	matched, err := Eval(rs, dc)
+	dc := DataFromMap(map[string]any{}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -738,8 +738,9 @@ func TestEvalSetLocalBytecode(t *testing.T) {
 	code = compiler.Emit(code, compiler.OpRuleMatch, 0, 0)
 
 	rs := makeBytecodeRuleSet(pool, code, "SetLocal")
-	dc := DataFromMap(map[string]any{}, rs)
-	matched, err := Eval(rs, dc)
+	prog := &Program{Ruleset: rs}
+	dc := DataFromMap(map[string]any{}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -767,13 +768,14 @@ func TestEvalAggregateBytecode(t *testing.T) {
 	code = compiler.Emit(code, compiler.OpRuleMatch, 0, 0)
 
 	rs := makeBytecodeRuleSet(pool, code, "AggSum")
+	prog := &Program{Ruleset: rs}
 	dc := DataFromMap(map[string]any{
 		"items": []any{
 			map[string]any{"price": 50.0},
 			map[string]any{"price": 60.0},
 		},
-	}, rs)
-	matched, err := Eval(rs, dc)
+	}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -801,10 +803,11 @@ func TestEvalAggregateCountAndAvgBytecode(t *testing.T) {
 	countCode = compiler.Emit(countCode, compiler.OpRuleMatch, 0, 0)
 
 	countRS := makeBytecodeRuleSet(pool, countCode, "AggCount")
+	countProg := &Program{Ruleset: countRS}
 	countDC := DataFromMap(map[string]any{
 		"values": []any{1.0, 2.0, 3.0},
-	}, countRS)
-	countMatched, err := Eval(countRS, countDC)
+	}, countProg)
+	countMatched, err := Eval(countProg, countDC)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -825,14 +828,15 @@ func TestEvalAggregateCountAndAvgBytecode(t *testing.T) {
 	avgCode = compiler.Emit(avgCode, compiler.OpRuleMatch, 0, 0)
 
 	avgRS := makeBytecodeRuleSet(pool, avgCode, "AggAvg")
+	avgProg := &Program{Ruleset: avgRS}
 	avgDC := DataFromMap(map[string]any{
 		"values": []any{
 			map[string]any{"score": 8.0},
 			map[string]any{"score": 9.0},
 			map[string]any{"score": 6.0},
 		},
-	}, avgRS)
-	avgMatched, err := Eval(avgRS, avgDC)
+	}, avgProg)
+	avgMatched, err := Eval(avgProg, avgDC)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -869,12 +873,12 @@ rule Low priority 10 { when { true } then Low {} }
 rule High priority 1 { when { true } then High {} }
 rule Mid priority 5 { when { true } then Mid {} }
 `
-	rs, err := Compile([]byte(src))
+	prog, err := Compile([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
-	dc := DataFromMap(map[string]any{}, rs)
-	matched, err := Eval(rs, dc)
+	dc := DataFromMap(map[string]any{}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -898,14 +902,14 @@ rule A { when { x > 10 } then ActionA {} }
 rule B { when { x > 20 } then ActionB {} }
 rule C { when { x > 30 } then ActionC {} }
 `
-	rs, err := Compile([]byte(src))
+	prog, err := Compile([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// x=25 should match A and B but not C
-	dc := DataFromMap(map[string]any{"x": 25.0}, rs)
-	matched, err := Eval(rs, dc)
+	dc := DataFromMap(map[string]any{"x": 25.0}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1062,14 +1066,14 @@ rule FreeShipping priority 1 {
     }
 }`
 	// Qualifies for free shipping
-	rs, err := Compile([]byte(src))
+	prog, err := Compile([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	dc := DataFromMap(map[string]any{
 		"user": map[string]any{"cart_total": 50.0, "region": "US"},
-	}, rs)
-	matched, err := Eval(rs, dc)
+	}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1086,8 +1090,8 @@ rule FreeShipping priority 1 {
 	// Below threshold -> fallback
 	dc = DataFromMap(map[string]any{
 		"user": map[string]any{"cart_total": 20.0, "region": "US"},
-	}, rs)
-	matched, err = Eval(rs, dc)
+	}, prog)
+	matched, err = Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1145,7 +1149,7 @@ rule Invoice {
 	}
 }
 `
-	rs, err := Compile([]byte(src))
+	prog, err := Compile([]byte(src))
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -1154,8 +1158,8 @@ rule Invoice {
 			"price": dec.MustParse("49.99", "USD"),
 			"qty":   dec.MustParse("3", ""),
 		},
-	}, rs)
-	matched, err := Eval(rs, dc)
+	}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatalf("eval: %v", err)
 	}

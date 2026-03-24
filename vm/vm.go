@@ -100,11 +100,19 @@ func (vm *VM) peek() Value {
 
 // Eval evaluates all rules in the compiled ruleset against the data context.
 func Eval(rs *compiler.CompiledRuleset, dc DataContext) ([]MatchedRule, error) {
-	return EvalWithPool(rs, dc, NewStringPool(rs.Constants.Strings()))
+	return evalWithPool(rs, dc, NewStringPool(rs.Constants.Strings()))
 }
 
 // EvalWithPool evaluates using a shared StringPool (for runtime-interned strings).
+//
+// Deprecated: The string pool is now managed internally by Program. Use the
+// root-package Eval function with a *Program instead.
 func EvalWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) ([]MatchedRule, error) {
+	return evalWithPool(rs, dc, sp)
+}
+
+// evalWithPool is the internal implementation of EvalWithPool.
+func evalWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) ([]MatchedRule, error) {
 	if rs == nil {
 		return nil, fmt.Errorf("nil ruleset")
 	}
@@ -160,11 +168,19 @@ func EvalWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) 
 
 // EvalDebug evaluates with full tracing.
 func EvalDebug(rs *compiler.CompiledRuleset, dc DataContext) DebugResult {
-	return EvalDebugWithPool(rs, dc, NewStringPool(rs.Constants.Strings()))
+	return evalDebugWithPool(rs, dc, NewStringPool(rs.Constants.Strings()))
 }
 
 // EvalDebugWithPool evaluates with full tracing using a shared StringPool.
+//
+// Deprecated: The string pool is now managed internally by Program. Use the
+// root-package EvalDebug function with a *Program instead.
 func EvalDebugWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) DebugResult {
+	return evalDebugWithPool(rs, dc, sp)
+}
+
+// evalDebugWithPool is the internal implementation of EvalDebugWithPool.
+func evalDebugWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) DebugResult {
 	start := time.Now()
 	vm := newVM(rs, sp)
 	var result DebugResult

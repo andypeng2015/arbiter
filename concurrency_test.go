@@ -6,7 +6,7 @@ import (
 )
 
 func TestConcurrentEval(t *testing.T) {
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule HighValue {
 	when { order.total > 100 }
 	then Flag { level: "high" }
@@ -27,8 +27,8 @@ rule LowValue {
 		go func(n int) {
 			defer wg.Done()
 			total := float64(n * 10)
-			dc := DataFromMap(map[string]any{"order": map[string]any{"total": total}}, rs)
-			matched, err := Eval(rs, dc)
+			dc := DataFromMap(map[string]any{"order": map[string]any{"total": total}}, prog)
+			matched, err := Eval(prog, dc)
 			if err != nil {
 				t.Errorf("goroutine %d: %v", n, err)
 				return
@@ -82,8 +82,9 @@ rule StandardOffer {
 					"id":         float64(n),
 				},
 			}
-			dc := DataFromMap(ctx, full.Ruleset)
-			matched, _, err := EvalGoverned(full.Ruleset, dc, full.Segments, ctx)
+			prog := &Program{Ruleset: full.Ruleset, Segments: full.Segments}
+			dc := DataFromMap(ctx, prog)
+			matched, _, err := EvalGoverned(prog, dc, full.Segments, ctx)
 			if err != nil {
 				t.Errorf("goroutine %d: %v", n, err)
 				return

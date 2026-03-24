@@ -424,17 +424,17 @@ func compileCmd(path string) error {
 }
 
 func evalCmd(path, dataJSON string) error {
-	rs, err := arbiter.CompileFile(path)
+	prog, err := arbiter.CompileFile(path)
 	if err != nil {
 		return fmt.Errorf("compile %s: %w", path, err)
 	}
 
-	dc, err := arbiter.DataFromJSON(dataJSON, rs)
+	dc, err := arbiter.DataFromJSON(dataJSON, prog)
 	if err != nil {
 		return fmt.Errorf("parse data: %w", err)
 	}
 
-	matched, err := arbiter.Eval(rs, dc)
+	matched, err := arbiter.Eval(prog, dc)
 	if err != nil {
 		return fmt.Errorf("eval: %w", err)
 	}
@@ -853,7 +853,7 @@ func runBundle(args []string) error {
 			force = true
 		}
 	}
-	rs, err := arbiter.CompileFile(path)
+	prog, err := arbiter.CompileFile(path)
 	if err != nil {
 		return fmt.Errorf("bundle %s: %w", path, err)
 	}
@@ -866,7 +866,7 @@ func runBundle(args []string) error {
 			return fmt.Errorf("read risk policy %s: %w", riskPolicyPath, err)
 		}
 	}
-	result, err := bundle.Analyze(rs, policySource)
+	result, err := bundle.Analyze(prog.Ruleset, policySource)
 	if err != nil {
 		return fmt.Errorf("analyze %s: %w", path, err)
 	}
@@ -892,7 +892,7 @@ func runBundle(args []string) error {
 		StripRolloutDetails: true,
 		StripPrereqs:        true,
 	}
-	blob, err := bundle.MarshalObfuscated(rs, opts)
+	blob, err := bundle.MarshalObfuscated(prog.Ruleset, opts)
 	if err != nil {
 		return fmt.Errorf("bundle %s: %w", path, err)
 	}
@@ -916,7 +916,7 @@ func runBundle(args []string) error {
 	if err := os.WriteFile(outPath, blob, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", outPath, err)
 	}
-	fmt.Fprintf(os.Stderr, "wrote %s (%d rules, %d bytes, obfuscated)\n", outPath, len(rs.Rules), len(blob))
+	fmt.Fprintf(os.Stderr, "wrote %s (%d rules, %d bytes, obfuscated)\n", outPath, len(prog.Ruleset.Rules), len(blob))
 	return nil
 }
 

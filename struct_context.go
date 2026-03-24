@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/odvcencio/arbiter/compiler"
 	"github.com/odvcencio/arbiter/vm"
 )
 
@@ -34,12 +33,12 @@ var mappingCache sync.Map
 //
 // The function accepts both struct values and pointers to structs.
 // It panics if v is not a struct or pointer-to-struct.
-func DataFromStruct[T any](v T, rs *compiler.CompiledRuleset) vm.DataContext {
+func DataFromStruct[T any](v T, prog *Program) vm.DataContext {
 	rv := reflect.ValueOf(v)
 	// Dereference pointer.
 	for rv.Kind() == reflect.Ptr {
 		if rv.IsNil() {
-			pool := vm.NewStringPool(rs.Constants.Strings())
+			pool := prog.stringPool()
 			dc := vm.DataFromMap(map[string]any{}, pool)
 			return &evalContextWrapper{inner: dc, pool: pool}
 		}
@@ -58,7 +57,7 @@ func DataFromStruct[T any](v T, rs *compiler.CompiledRuleset) vm.DataContext {
 		setNested(data, fe.segments, fieldVal)
 	}
 
-	pool := vm.NewStringPool(rs.Constants.Strings())
+	pool := prog.stringPool()
 	dc := vm.DataFromMap(data, pool)
 	return &evalContextWrapper{inner: dc, pool: pool}
 }

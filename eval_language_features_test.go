@@ -3,7 +3,7 @@ package arbiter
 import "testing"
 
 func TestAggregateSum(t *testing.T) {
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule T {
 	when { sum(item.price for item in cart.items) > 100 }
 	then Match { total: sum(item.price for item in cart.items) }
@@ -19,8 +19,8 @@ rule T {
 				map[string]any{"price": 60.0},
 			},
 		},
-	}, rs)
-	matched, err := Eval(rs, dc)
+	}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ rule T {
 }
 
 func TestAggregateCount(t *testing.T) {
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule T {
 	when { count(item in cart.items) > 1 }
 	then Match {}
@@ -49,8 +49,8 @@ rule T {
 				map[string]any{"name": "b"},
 			},
 		},
-	}, rs)
-	matched, err := Eval(rs, dc)
+	}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ rule T {
 }
 
 func TestAggregateAvg(t *testing.T) {
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule T {
 	when { avg(score.value for score in scores) > 7 }
 	then Match {}
@@ -75,8 +75,8 @@ rule T {
 			map[string]any{"value": 9.0},
 			map[string]any{"value": 6.0},
 		},
-	}, rs)
-	matched, err := Eval(rs, dc)
+	}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ rule T {
 }
 
 func TestLetBinding(t *testing.T) {
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule T {
 	when {
 		let total = income.wages + income.interest
@@ -103,8 +103,8 @@ rule T {
 			"wages":    40000.0,
 			"interest": 15000.0,
 		},
-	}, rs)
-	matched, err := Eval(rs, dc)
+	}, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -45,20 +45,19 @@ func FuzzEval(f *testing.F) {
 	f.Add(`{"x": null}`)
 	f.Add(`{"deep": {"nested": {"value": 42}}}`)
 
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule High { when { order.total > 100 } then Flag { level: "high" } }
 rule Low { when { order.total <= 100 } then Flag { level: "low" } }
 `))
 	if err != nil {
 		f.Fatalf("compile: %v", err)
 	}
-
 	f.Fuzz(func(t *testing.T, jsonStr string) {
-		dc, err := DataFromJSON(jsonStr, rs)
+		dc, err := DataFromJSON(jsonStr, prog)
 		if err != nil {
 			return // Invalid JSON is expected.
 		}
 		// Must not panic on any valid JSON context.
-		Eval(rs, dc)
+		Eval(prog, dc)
 	})
 }

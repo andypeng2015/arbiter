@@ -1,5 +1,43 @@
 # Changelog
 
+## v1.1.0
+
+### Module System
+
+- **`import "path"` / `import "path" as alias`** — namespaced module imports. Declarations in imported files are accessed via `namespace.Name` (e.g., `requires scoring.BaseRule`, `segment scoring.HighRisk`). Last path segment is the default namespace; `as` provides an explicit alias.
+- **`arbiter.toml`** — project manifest at the project root. Import paths resolve relative to the manifest directory. Presence of `arbiter.toml` marks the project root, like `go.mod` for Go.
+- **Qualified references everywhere** — `requires`, `excludes`, `segment`, and `flag requires` all accept dotted names. Cross-module prerequisites use the result cache, not module evaluation order.
+- **Cycle detection, diamond dedup, namespace collision detection** — circular imports error, shared dependencies compile once, duplicate namespaces error with guidance to use aliasing.
+- **`include` deprecated** — still works in v1.1.0 with a compiler warning. A file cannot use both `import` and `include`. Removed in v2.0.0.
+
+### Input Schema Validation
+
+- **`input { ... }` block** — declares the expected shape of request data. Supports nested objects, optional fields (`name?: type`), `list<T>`, all existing scalar and dimensioned types. One `input` block per module.
+- **Compile-time path validation** — when `input` is declared, all path references in rules are checked against the schema. Unknown paths and type mismatches are compile errors. Absent `input` preserves v1.0.0 behavior (runtime null coercion).
+- **Cross-module scoping** — each module validates against its own `input` schema. Type conflicts on overlapping paths across imported modules are compile errors.
+
+### Compile API
+
+- **`Compile(src, ...Option) → *Program`** — single entry point replacing `Compile`, `CompileFull`. Returns a unified `Program` with Ruleset, Segments, Strategies, Expert, IR, Input, and Warnings.
+- **`CompileFile(path, ...Option) → *Program`** — file-based compilation with automatic `arbiter.toml` discovery and import resolution. Functional options: `WithManifest`, `WithResolver`.
+- **String pool sealed** — `DataFromMap`, `DataFromJSON`, `DataFromStruct`, and all `Eval*` functions accept `*Program`. Pool management is internal. `vm.EvalWithPool`/`vm.EvalDebugWithPool` deprecated.
+- **`ConvertJSON` / `ConvertJSONRules`** — permanent bridge functions converting Arishem JSON to `.arb` source bytes for programmatic migration.
+- **All v1.0 functions deprecated** — `CompileFull`, `CompileFullFile`, `CompileJSON`, `CompileJSONRules`, `CompileStrategies*`, `CompileResult` type retained as thin wrappers. Removed in v2.0.0.
+
+### LSP
+
+- **Import resolution in diagnostics** — LSP uses `CompileFile` for on-disk files, enabling import path resolution and input schema validation in the editor.
+- **Compiler warnings** — `include` deprecation warnings surface as LSP warning-severity diagnostics.
+
+### Conformance
+
+- **Import round-trip** — cross-module programs produce identical results across native eval, governed eval, and bundle round-trip.
+- **Input schema parity** — programs with `input` blocks produce identical runtime results to equivalent programs without.
+- **API parity** — `Compile` and deprecated `CompileFull` produce identical eval results across all conformance cases.
+- **Cross-module expert inference** — expert rules fire based on working memory regardless of module boundaries.
+
+---
+
 ## v1.0.0
 
 ### Language Specification (Frozen Contract)

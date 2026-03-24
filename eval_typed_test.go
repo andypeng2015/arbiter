@@ -27,11 +27,11 @@ rule LowCount priority 5 {
     }
 }
 `)
-	rs, err := Compile(src)
+	prog, err := Compile(src)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	matched, err := EvalTyped(rs, evalTestFacts{Count: 10, Status: "active"})
+	matched, err := EvalTyped(prog, evalTestFacts{Count: 10, Status: "active"})
 	if err != nil {
 		t.Fatalf("eval: %v", err)
 	}

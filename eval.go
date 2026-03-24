@@ -13,16 +13,34 @@ import (
 	"github.com/odvcencio/arbiter/vm"
 )
 
-// Compile compiles .arb source into a CompiledRuleset.
-func Compile(source []byte) (*compiler.CompiledRuleset, error) {
+// Compile compiles .arb source into a Program containing all evaluation artifacts.
+func Compile(source []byte, opts ...Option) (*Program, error) {
 	parsed, err := ParseSource(source)
 	if err != nil {
 		return nil, err
 	}
-	return CompileParsed(parsed)
+	program, err := ir.Lower(parsed.Root, parsed.Source, parsed.Lang)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for imports — error if present without resolver.
+	if len(program.Imports) > 0 {
+		var o compileOptions
+		for _, opt := range opts {
+			opt(&o)
+		}
+		if o.resolver == nil {
+			return nil, fmt.Errorf("import requires file context or explicit resolver")
+		}
+	}
+
+	return compileProgram(program)
 }
 
 // CompileResult includes compiled rule/runtime artifacts for one .arb program.
+//
+// Deprecated: use *Program instead. Will be removed in v2.0.0.
 type CompileResult struct {
 	Ruleset    *compiler.CompiledRuleset
 	Segments   *govern.SegmentSet
@@ -33,6 +51,8 @@ type CompileResult struct {
 }
 
 // CompileFull compiles .arb source and extracts top-level segments.
+//
+// Deprecated: use Compile instead. Will be removed in v2.0.0.
 func CompileFull(source []byte) (*CompileResult, error) {
 	parsed, err := ParseSource(source)
 	if err != nil {
@@ -42,6 +62,8 @@ func CompileFull(source []byte) (*CompileResult, error) {
 }
 
 // CompileJSON compiles a single Arishem JSON rule.
+//
+// Deprecated: use Compile instead. Will be removed in v2.0.0.
 func CompileJSON(condJSON, actJSON string) (*compiler.CompiledRuleset, error) {
 	return compiler.CompileJSONRule("rule0", 0, condJSON, actJSON)
 }
@@ -50,6 +72,8 @@ func CompileJSON(condJSON, actJSON string) (*compiler.CompiledRuleset, error) {
 type JSONRule = compiler.JSONRuleInput
 
 // CompileJSONRules compiles a batch of Arishem JSON rules.
+//
+// Deprecated: use Compile instead. Will be removed in v2.0.0.
 func CompileJSONRules(rules []JSONRule) (*compiler.CompiledRuleset, error) {
 	return compiler.CompileJSONBatch(rules)
 }
@@ -61,8 +85,12 @@ type EvalContext struct {
 	Pool *vm.StringPool
 }
 
-// Eval evaluates a compiled ruleset against a data context.
-func Eval(rs *compiler.CompiledRuleset, dc vm.DataContext) ([]vm.MatchedRule, error) {
+// Eval evaluates a compiled program against a data context.
+func Eval(prog *Program, dc vm.DataContext) ([]vm.MatchedRule, error) {
+	if prog == nil {
+		return nil, fmt.Errorf("nil program")
+	}
+	rs := prog.Ruleset
 	if rs == nil {
 		return nil, fmt.Errorf("nil ruleset")
 	}
@@ -75,7 +103,11 @@ func Eval(rs *compiler.CompiledRuleset, dc vm.DataContext) ([]vm.MatchedRule, er
 }
 
 // EvalDebug evaluates with full debug trace.
-func EvalDebug(rs *compiler.CompiledRuleset, dc vm.DataContext) vm.DebugResult {
+func EvalDebug(prog *Program, dc vm.DataContext) vm.DebugResult {
+	if prog == nil {
+		return vm.DebugResult{Error: fmt.Errorf("nil program")}
+	}
+	rs := prog.Ruleset
 	if rs == nil {
 		return vm.DebugResult{Error: fmt.Errorf("nil ruleset")}
 	}
@@ -85,13 +117,17 @@ func EvalDebug(rs *compiler.CompiledRuleset, dc vm.DataContext) vm.DebugResult {
 	return vm.EvalDebug(rs, dc)
 }
 
-// EvalGoverned evaluates a compiled ruleset with rule governance enabled.
-func EvalGoverned(rs *compiler.CompiledRuleset, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any) ([]vm.MatchedRule, *govern.Trace, error) {
-	return EvalGovernedWithOverrides(rs, dc, segments, ctx, "", nil)
+// EvalGoverned evaluates a compiled program with rule governance enabled.
+func EvalGoverned(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any) ([]vm.MatchedRule, *govern.Trace, error) {
+	return EvalGovernedWithOverrides(prog, dc, segments, ctx, "", nil)
 }
 
-// EvalGovernedWithOverrides evaluates a ruleset while applying runtime overrides.
-func EvalGovernedWithOverrides(rs *compiler.CompiledRuleset, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View) ([]vm.MatchedRule, *govern.Trace, error) {
+// EvalGovernedWithOverrides evaluates a program while applying runtime overrides.
+func EvalGovernedWithOverrides(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View) ([]vm.MatchedRule, *govern.Trace, error) {
+	if prog == nil {
+		return nil, &govern.Trace{}, fmt.Errorf("nil program")
+	}
+	rs := prog.Ruleset
 	if rs == nil {
 		return nil, &govern.Trace{}, fmt.Errorf("nil ruleset")
 	}
@@ -113,15 +149,15 @@ func (w *evalContextWrapper) Get(key string) vm.Value {
 
 // DataFromMap creates a DataContext from a Go map.
 // The returned DataContext shares a StringPool with the evaluator.
-func DataFromMap(m map[string]any, rs *compiler.CompiledRuleset) vm.DataContext {
-	pool := vm.NewStringPool(rs.Constants.Strings())
+func DataFromMap(m map[string]any, prog *Program) vm.DataContext {
+	pool := prog.stringPool()
 	dc := vm.DataFromMap(m, pool)
 	return &evalContextWrapper{inner: dc, pool: pool}
 }
 
 // DataFromJSON creates a DataContext from JSON.
-func DataFromJSON(jsonStr string, rs *compiler.CompiledRuleset) (vm.DataContext, error) {
-	pool := vm.NewStringPool(rs.Constants.Strings())
+func DataFromJSON(jsonStr string, prog *Program) (vm.DataContext, error) {
+	pool := prog.stringPool()
 	dc, err := vm.DataFromJSON(jsonStr, pool)
 	if err != nil {
 		return nil, err

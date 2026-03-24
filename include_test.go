@@ -63,8 +63,8 @@ include "phase2.arb"
 			"score": 710.0,
 		},
 	}
-	dc := DataFromMap(ctx, result.Ruleset)
-	matched, _, err := EvalGoverned(result.Ruleset, dc, result.Segments, ctx)
+	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
+	matched, _, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}
@@ -233,6 +233,26 @@ include "second.arb"
 	}
 	if origin.File != second || origin.SourceLine != 1 || origin.Name != "LIMIT" {
 		t.Fatalf("unexpected origin for line 5: %+v", origin)
+	}
+}
+
+func TestIncludeEmitsDeprecationWarning(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "other.arb"), []byte(`rule Y { when { true } then B {} }`), 0644)
+	os.WriteFile(filepath.Join(dir, "main.arb"), []byte("include \"other.arb\"\nrule X { when { true } then A {} }\n"), 0644)
+
+	result, err := CompileFile(filepath.Join(dir, "main.arb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w.Message, "deprecated") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected deprecation warning for include")
 	}
 }
 

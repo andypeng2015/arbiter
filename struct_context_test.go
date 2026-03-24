@@ -43,7 +43,7 @@ func TestDataFromStruct_FlatFields(t *testing.T) {
 		Active: true,
 	}
 
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule Check {
     when { name != "" }
     then Match {}
@@ -53,7 +53,8 @@ rule Check {
 		t.Fatalf("Compile: %v", err)
 	}
 
-	dc := DataFromStruct(s, rs)
+
+	dc := DataFromStruct(s, prog)
 
 	v := dc.Get("name")
 	if v.IsNull() {
@@ -86,7 +87,7 @@ func TestDataFromStruct_DotNotation(t *testing.T) {
 		UserName: "bob",
 	}
 
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule Check {
     when { task.type != "" }
     then Match {}
@@ -96,7 +97,8 @@ rule Check {
 		t.Fatalf("Compile: %v", err)
 	}
 
-	dc := DataFromStruct(s, rs)
+
+	dc := DataFromStruct(s, prog)
 
 	v := dc.Get("task.type")
 	if v.IsNull() {
@@ -120,7 +122,7 @@ func TestDataFromStruct_PointerInput(t *testing.T) {
 		Active: false,
 	}
 
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule Check {
     when { name != "" }
     then Match {}
@@ -130,7 +132,8 @@ rule Check {
 		t.Fatalf("Compile: %v", err)
 	}
 
-	dc := DataFromStruct(s, rs)
+
+	dc := DataFromStruct(s, prog)
 
 	v := dc.Get("name")
 	if v.IsNull() {
@@ -141,7 +144,7 @@ rule Check {
 func TestDataFromStruct_NoArb_TagsSkipped(t *testing.T) {
 	s := noTagStruct{Ignored: "value"}
 
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule Check {
     when { x != "" }
     then Match {}
@@ -151,7 +154,8 @@ rule Check {
 		t.Fatalf("Compile: %v", err)
 	}
 
-	dc := DataFromStruct(s, rs)
+
+	dc := DataFromStruct(s, prog)
 
 	v := dc.Get("Ignored")
 	if !v.IsNull() {
@@ -162,7 +166,7 @@ rule Check {
 func TestDataFromStruct_MixedTags(t *testing.T) {
 	s := mixedStruct{Tagged: "hello", Untagged: "world"}
 
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule Check {
     when { label != "" }
     then Match {}
@@ -172,7 +176,8 @@ rule Check {
 		t.Fatalf("Compile: %v", err)
 	}
 
-	dc := DataFromStruct(s, rs)
+
+	dc := DataFromStruct(s, prog)
 
 	v := dc.Get("label")
 	if v.IsNull() {
@@ -188,7 +193,7 @@ rule Check {
 func TestDataFromStruct_SliceField(t *testing.T) {
 	s := sliceStruct{Tags: []string{"go", "rules"}}
 
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule Check {
     when { tags contains "go" }
     then Match {}
@@ -198,7 +203,8 @@ rule Check {
 		t.Fatalf("Compile: %v", err)
 	}
 
-	dc := DataFromStruct(s, rs)
+
+	dc := DataFromStruct(s, prog)
 
 	v := dc.Get("tags")
 	if v.IsNull() {
@@ -224,15 +230,15 @@ rule HighValue priority 1 {
     }
 }
 `)
-	rs, err := Compile(src)
+	prog, err := Compile(src)
 	if err != nil {
 		t.Fatalf("Compile: %v", err)
 	}
 
 	order := Order{Amount: 200, Region: "US"}
-	dc := DataFromStruct(order, rs)
+	dc := DataFromStruct(order, prog)
 
-	matched, err := Eval(rs, dc)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatalf("Eval: %v", err)
 	}
@@ -245,9 +251,9 @@ rule HighValue priority 1 {
 
 	// Non-matching case
 	orderLow := Order{Amount: 50, Region: "US"}
-	dcLow := DataFromStruct(orderLow, rs)
+	dcLow := DataFromStruct(orderLow, prog)
 
-	matched, err = Eval(rs, dcLow)
+	matched, err = Eval(prog, dcLow)
 	if err != nil {
 		t.Fatalf("Eval low: %v", err)
 	}
@@ -262,7 +268,7 @@ func TestDataFromStruct_CacheHit(t *testing.T) {
 		Value string `arb:"item.value"`
 	}
 
-	rs, err := Compile([]byte(`
+	prog, err := Compile([]byte(`
 rule Check {
     when { item.value != "" }
     then Match {}
@@ -272,8 +278,9 @@ rule Check {
 		t.Fatalf("Compile: %v", err)
 	}
 
-	dc1 := DataFromStruct(Item{Value: "first"}, rs)
-	dc2 := DataFromStruct(Item{Value: "second"}, rs)
+
+	dc1 := DataFromStruct(Item{Value: "first"}, prog)
+	dc2 := DataFromStruct(Item{Value: "second"}, prog)
 
 	v1 := dc1.Get("item.value")
 	v2 := dc2.Get("item.value")

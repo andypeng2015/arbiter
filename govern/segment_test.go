@@ -8,10 +8,11 @@ import (
 )
 
 func TestCompiledSegmentEval(t *testing.T) {
-	rs, err := arbiter.Compile([]byte(`rule seg { when { user.plan == "enterprise" } then Match {} }`))
+	prog, err := arbiter.Compile([]byte(`rule seg { when { user.plan == "enterprise" } then Match {} }`))
 	if err != nil {
 		t.Fatalf("Compile: %v", err)
 	}
+	rs := prog.Ruleset
 
 	seg := &govern.CompiledSegment{
 		Name:    "enterprise",

@@ -1024,3 +1024,70 @@ func TestTranspileFullModeration(t *testing.T) {
 		t.Error("missing AutoBlock rule")
 	}
 }
+
+// =============================================================================
+// GRAMMAR V1.1 TESTS — import, input, qualified_name
+// =============================================================================
+
+func TestParseImportDeclaration(t *testing.T) {
+	sexp := parseArb(t, `import "fraud/scoring"`)
+	if !strings.Contains(sexp, "import_declaration") {
+		t.Error("expected import_declaration")
+	}
+}
+
+func TestParseImportDeclarationWithAlias(t *testing.T) {
+	sexp := parseArb(t, `import "fraud/scoring" as fs`)
+	if !strings.Contains(sexp, "import_declaration") {
+		t.Error("expected import_declaration")
+	}
+	if !strings.Contains(sexp, `"as"`) && !strings.Contains(sexp, "(as)") {
+		// alias is captured via field; check identifier fs is present
+		if !strings.Contains(sexp, "identifier") {
+			t.Error("expected alias identifier in import_declaration")
+		}
+	}
+}
+
+func TestParseRuleWithQualifiedRequires(t *testing.T) {
+	sexp := parseArb(t, `rule X { requires scoring.BaseRule when { true } then A {} }`)
+	if !strings.Contains(sexp, "rule_declaration") {
+		t.Error("expected rule_declaration")
+	}
+	if !strings.Contains(sexp, "rule_requires") {
+		t.Error("expected rule_requires node")
+	}
+	if !strings.Contains(sexp, "qualified_name") {
+		t.Error("expected qualified_name node for scoring.BaseRule")
+	}
+}
+
+func TestParseRuleWithQualifiedSegment(t *testing.T) {
+	sexp := parseArb(t, `rule X { when segment scoring.Active { true } then A {} }`)
+	if !strings.Contains(sexp, "rule_declaration") {
+		t.Error("expected rule_declaration")
+	}
+	if !strings.Contains(sexp, "qualified_name") {
+		t.Error("expected qualified_name node for scoring.Active segment reference")
+	}
+}
+
+func TestParseInputDeclaration(t *testing.T) {
+	sexp := parseArb(t, `input { user: { id: string age: number tier?: string balance: decimal<USD> } request: { amount: decimal<USD> } }`)
+	if !strings.Contains(sexp, "input_declaration") {
+		t.Error("expected input_declaration")
+	}
+	if !strings.Contains(sexp, "input_field") {
+		t.Error("expected input_field nodes")
+	}
+}
+
+func TestParseInputAndWorkerCoexist(t *testing.T) {
+	sexp := parseArb(t, `input { user: { id: string } } worker W { input UserSchema output ResultSchema exec "cmd" }`)
+	if !strings.Contains(sexp, "input_declaration") {
+		t.Error("expected input_declaration")
+	}
+	if !strings.Contains(sexp, "worker_declaration") {
+		t.Error("expected worker_declaration")
+	}
+}

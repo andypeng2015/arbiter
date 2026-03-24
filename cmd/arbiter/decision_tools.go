@@ -172,8 +172,9 @@ func evaluateGoverned(full *arbiter.CompileResult, ctx map[string]any) ([]audit.
 	if full == nil || full.Ruleset == nil {
 		return nil, fmt.Errorf("nil compile result")
 	}
-	dc := arbiter.DataFromMap(ctx, full.Ruleset)
-	matched, _, err := arbiter.EvalGoverned(full.Ruleset, dc, full.Segments, ctx)
+	prog := &arbiter.Program{Ruleset: full.Ruleset, Segments: full.Segments}
+	dc := arbiter.DataFromMap(ctx, prog)
+	matched, _, err := arbiter.EvalGoverned(prog, dc, full.Segments, ctx)
 	if err != nil {
 		return nil, err
 	}
