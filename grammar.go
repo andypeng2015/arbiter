@@ -43,6 +43,8 @@ func ArbiterGrammar() *Grammar {
 
 	g.Define("_declaration", Choice(
 		Sym("include_declaration"),
+		Sym("import_declaration"),
+		Sym("input_declaration"),
 		Sym("feature_declaration"),
 		Sym("fact_declaration"),
 		Sym("outcome_declaration"),
@@ -66,6 +68,16 @@ func ArbiterGrammar() *Grammar {
 	g.Define("include_declaration", Seq(
 		Str("include"),
 		Field("path", Sym("string_literal")),
+	))
+
+	g.Define("import_declaration", Choice(
+		Seq(Str("import"), Field("path", Sym("string_literal")), Str("as"), Field("alias", Sym("identifier"))),
+		Seq(Str("import"), Field("path", Sym("string_literal"))),
+	))
+
+	g.Define("qualified_name", Choice(
+		Seq(Sym("identifier"), Str("."), Sym("identifier")),
+		Sym("identifier"),
 	))
 
 	// --- Feature declaration ---
@@ -194,6 +206,36 @@ func ArbiterGrammar() *Grammar {
 		Str("timestamp"),
 	))
 
+	// --- Input declaration ---
+	g.Define("input_declaration", Seq(
+		Str("input"),
+		Str("{"),
+		Repeat(Sym("input_field")),
+		Str("}"),
+	))
+
+	g.Define("input_field", Seq(
+		Field("name", Sym("identifier")),
+		Optional(Field("optional", Str("?"))),
+		Str(":"),
+		Choice(
+			Seq(Str("{"), Repeat(Sym("input_field")), Str("}")),
+			Field("type", Sym("input_field_type")),
+		),
+	))
+
+	g.Define("input_field_type", Choice(
+		Sym("parameterized_number_type"),
+		Sym("parameterized_decimal_type"),
+		Seq(Str("list"), Str("<"), Sym("input_field_type"), Str(">")),
+		Str("number"),
+		Str("decimal"),
+		Str("string"),
+		Str("bool"),
+		Str("boolean"),
+		Str("timestamp"),
+	))
+
 	// --- Const declaration ---
 	g.Define("const_declaration", Seq(
 		Str("const"),
@@ -292,12 +334,12 @@ func ArbiterGrammar() *Grammar {
 
 	g.Define("rule_requires", Seq(
 		Str("requires"),
-		Field("name", Sym("identifier")),
+		Field("name", Sym("qualified_name")),
 	))
 
 	g.Define("rule_excludes", Seq(
 		Str("excludes"),
-		Field("name", Sym("identifier")),
+		Field("name", Sym("qualified_name")),
 	))
 
 	g.Define("rule_rollout", Seq(
@@ -357,7 +399,7 @@ func ArbiterGrammar() *Grammar {
 		Str("when"),
 		Optional(Seq(
 			Str("segment"),
-			Field("segment", Sym("identifier")),
+			Field("segment", Sym("qualified_name")),
 		)),
 		Str("{"),
 		Repeat(Sym("let_binding")),
@@ -369,7 +411,7 @@ func ArbiterGrammar() *Grammar {
 		Str("when"),
 		Optional(Seq(
 			Str("segment"),
-			Field("segment", Sym("identifier")),
+			Field("segment", Sym("qualified_name")),
 		)),
 		Str("{"),
 		Repeat(Sym("let_binding")),
@@ -532,7 +574,7 @@ func ArbiterGrammar() *Grammar {
 	// requires payments_enabled
 	g.Define("flag_requires", Seq(
 		Str("requires"),
-		Field("flag_name", Sym("identifier")),
+		Field("flag_name", Sym("qualified_name")),
 	))
 
 	// when segment_name [rollout N] then "variant"
