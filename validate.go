@@ -307,11 +307,11 @@ func (v *programValidator) validateRule(rule *ir.Rule) error {
 			return err
 		}
 	}
-	if err := v.validateParams(rule.Action.Params, env); err != nil {
+	if err := v.validateRuleAction(rule, &rule.Action, env); err != nil {
 		return err
 	}
 	if rule.Fallback != nil {
-		if err := v.validateParams(rule.Fallback.Params, env); err != nil {
+		if err := v.validateRuleAction(rule, rule.Fallback, env); err != nil {
 			return err
 		}
 	}
@@ -644,6 +644,38 @@ func (v *programValidator) validateStrategyOutcomeParams(strategy *ir.Strategy, 
 	for _, field := range schema.Fields {
 		if _, ok := required[field.Name]; ok {
 			return spanError(candidate.Span, "strategy %s candidate %s: missing required field %q for %s", strategy.Name, candidate.Label, field.Name, strategy.Returns)
+		}
+	}
+	return nil
+}
+
+func (v *programValidator) validateRuleAction(rule *ir.Rule, action *ir.Action, env *validationEnv) error {
+	if err := v.validateParams(action.Params, env); err != nil {
+		return err
+	}
+	schema, ok := v.program.OutcomeSchemaByName(action.Name)
+	if !ok || schema == nil {
+		return nil
+	}
+	required := make(map[string]struct{}, len(schema.Fields))
+	for _, field := range schema.Fields {
+		if field.Required {
+			required[field.Name] = struct{}{}
+		}
+	}
+	for _, param := range action.Params {
+		field, ok := outcomeSchemaField(schema, param.Key)
+		if !ok {
+			return spanError(param.Span, "rule %s action %s: unknown field %q", rule.Name, action.Name, param.Key)
+		}
+		if err := v.validateAssignedType(param.Value, field, env, rule.Name, "action", action.Name); err != nil {
+			return err
+		}
+		delete(required, param.Key)
+	}
+	for _, field := range schema.Fields {
+		if _, ok := required[field.Name]; ok {
+			return spanError(action.Span, "rule %s action %s: missing required field %q", rule.Name, action.Name, field.Name)
 		}
 	}
 	return nil
