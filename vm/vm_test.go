@@ -70,7 +70,7 @@ func TestEvalNoMatch(t *testing.T) {
 	sp := NewStringPool(pool.Strings())
 	dc := DataFromMap(map[string]any{"name": "bob"}, sp)
 
-	matched, err := EvalWithPool(rs, dc, sp)
+	matched, err := evalWithPool(rs, dc, sp)
 	if err != nil {
 		t.Fatal(err)
 	}
