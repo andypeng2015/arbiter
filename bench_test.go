@@ -79,7 +79,8 @@ func BenchmarkEval5KRules(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	dc, err := DataFromJSON(`{"fromId":"HuangShan","customerGroupId":"10549"}`, rs)
+	prog := &Program{Ruleset: rs}
+	dc, err := DataFromJSON(`{"fromId":"HuangShan","customerGroupId":"10549"}`, prog)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -88,7 +89,7 @@ func BenchmarkEval5KRules(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		matched, err := Eval(rs, dc)
+		matched, err := Eval(prog, dc)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -104,11 +105,12 @@ func BenchmarkEvalSingleRule(b *testing.B) {
 		Action:    `{"ActionName":"Greeting"}`,
 	}}
 	rs, _ := CompileJSONRules(rules)
-	dc := DataFromMap(map[string]any{"fromId": "HuangShan", "customerGroupId": "10549"}, rs)
+	prog := &Program{Ruleset: rs}
+	dc := DataFromMap(map[string]any{"fromId": "HuangShan", "customerGroupId": "10549"}, prog)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		Eval(rs, dc)
+		Eval(prog, dc)
 	}
 }
 
@@ -123,11 +125,12 @@ func BenchmarkEval100Rules(b *testing.B) {
 		}
 	}
 	rs, _ := CompileJSONRules(rules)
-	dc := DataFromMap(map[string]any{"fromId": "HuangShan", "customerGroupId": "10549"}, rs)
+	prog := &Program{Ruleset: rs}
+	dc := DataFromMap(map[string]any{"fromId": "HuangShan", "customerGroupId": "10549"}, prog)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		Eval(rs, dc)
+		Eval(prog, dc)
 	}
 }
 
@@ -142,10 +145,11 @@ func BenchmarkEval10KRules(b *testing.B) {
 		}
 	}
 	rs, _ := CompileJSONRules(rules)
-	dc := DataFromMap(map[string]any{"fromId": "HuangShan", "customerGroupId": "10549"}, rs)
+	prog := &Program{Ruleset: rs}
+	dc := DataFromMap(map[string]any{"fromId": "HuangShan", "customerGroupId": "10549"}, prog)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		Eval(rs, dc)
+		Eval(prog, dc)
 	}
 }

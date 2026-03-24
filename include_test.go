@@ -63,8 +63,8 @@ include "phase2.arb"
 			"score": 710.0,
 		},
 	}
-	dc := DataFromMap(ctx, result.Ruleset)
-	matched, _, err := EvalGoverned(result.Ruleset, dc, result.Segments, ctx)
+	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
+	matched, _, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}

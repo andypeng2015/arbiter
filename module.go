@@ -359,9 +359,19 @@ func offsetExprIDs(prog *ir.Program, offset ir.ExprID) {
 
 // mergeModules merges all module IRs into a single program, with imported
 // modules in dependency order followed by the root program's declarations.
-func mergeModules(tree *moduleTree) *ir.Program {
+// Returns an error if cross-module input schema type conflicts are detected.
+func mergeModules(tree *moduleTree) (*ir.Program, error) {
 	merged := &ir.Program{}
 	exprOffset := ir.ExprID(0)
+
+	// Check for input schema type conflicts between the root module and each
+	// imported module that also declares an input block.
+	for _, ns := range tree.order {
+		mod := tree.modules[ns]
+		if err := checkInputSchemaConflicts(tree.root.Input, mod.Input); err != nil {
+			return nil, fmt.Errorf("import %q: %w", ns, err)
+		}
+	}
 
 	// Add modules in dependency order (imports first).
 	for _, ns := range tree.order {
@@ -403,5 +413,5 @@ func mergeModules(tree *moduleTree) *ir.Program {
 	merged.Input = tree.root.Input
 
 	merged.RebuildIndexes()
-	return merged
+	return merged, nil
 }

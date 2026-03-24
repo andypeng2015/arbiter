@@ -308,20 +308,61 @@ func CompileFullParsed(parsed *ParsedSource) (*CompileResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return compileProgram(program)
+	prog, err := compileProgram(program)
+	if err != nil {
+		return nil, err
+	}
+	return prog.toCompileResult(), nil
 }
 
-// CompileFile compiles a file-backed .arb program with include resolution.
-func CompileFile(path string) (*compiler.CompiledRuleset, error) {
+// CompileFile compiles a file-backed .arb program with include resolution,
+// returning a Program with all evaluation artifacts.
+func CompileFile(path string, opts ...Option) (*Program, error) {
 	unit, parsed, err := LoadFileParsed(path)
 	if err != nil {
 		return nil, err
 	}
-	rs, err := CompileParsed(parsed)
+
+	program, err := ir.Lower(parsed.Root, parsed.Source, parsed.Lang)
 	if err != nil {
 		return nil, WrapFileError(unit, err)
 	}
-	return rs, nil
+
+	// If the program has imports, use the module system.
+	if len(program.Imports) > 0 {
+		// Import and include are mutually exclusive.
+		if len(unit.Files) > 1 {
+			return nil, fmt.Errorf("cannot use import and include in the same file")
+		}
+
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %s: %w", path, err)
+		}
+		manifest, err := findManifest(absPath)
+		if err != nil {
+			return nil, err
+		}
+		root := filepath.Dir(absPath)
+		if manifest != nil {
+			root = manifest.dir
+		}
+		resolver := newModuleResolver(root)
+		tree, err := loadModuleTree(program, absPath, resolver)
+		if err != nil {
+			return nil, err
+		}
+		program, err = mergeModules(tree)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	prog, err := compileProgram(program)
+	if err != nil {
+		return nil, WrapFileError(unit, err)
+	}
+	return prog, nil
 }
 
 // CompileFullFile compiles a file-backed .arb program with include resolution.
@@ -362,18 +403,21 @@ func CompileFullFile(path string) (*CompileResult, error) {
 		if err != nil {
 			return nil, err
 		}
-		program = mergeModules(tree)
+		program, err = mergeModules(tree)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	full, err := compileProgram(program)
+	prog, err := compileProgram(program)
 	if err != nil {
 		return nil, WrapFileError(unit, err)
 	}
-	return full, nil
+	return prog.toCompileResult(), nil
 }
 
 // compileProgram compiles a pre-lowered IR program through the standard pipeline.
-func compileProgram(program *ir.Program) (*CompileResult, error) {
+func compileProgram(program *ir.Program) (*Program, error) {
 	if err := validateProgram(program); err != nil {
 		return nil, err
 	}
@@ -398,13 +442,14 @@ func compileProgram(program *ir.Program) (*CompileResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &CompileResult{
+	return &Program{
 		Ruleset:    rs,
 		Segments:   segs,
 		Strategies: strategies,
+		IR:         program,
 		Workers:    workers,
 		Arbiters:   arbiters,
-		Program:    program,
+		Input:      program.Input,
 	}, nil
 }
 

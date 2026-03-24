@@ -76,9 +76,9 @@ rule EnhancedRiskCheck priority 1 {
 			"amount": 6000.0,
 		},
 	}
-	dc := DataFromMap(ctx, result.Ruleset)
+	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
 
-	matched, trace, err := EvalGoverned(result.Ruleset, dc, result.Segments, ctx)
+	matched, trace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}
@@ -129,8 +129,8 @@ rule WithFallback {
 	}
 
 	ctx := map[string]any{}
-	dc := DataFromMap(ctx, result.Ruleset)
-	matched, trace, err := EvalGoverned(result.Ruleset, dc, result.Segments, ctx)
+	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
+	matched, trace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}
@@ -180,8 +180,8 @@ rule SlowRoll {
 	}
 
 	ctx := map[string]any{"user.id": blockedUser}
-	dc := DataFromMap(ctx, result.Ruleset)
-	matched, trace, err := EvalGoverned(result.Ruleset, dc, result.Segments, ctx)
+	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
+	matched, trace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}

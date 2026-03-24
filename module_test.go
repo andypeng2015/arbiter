@@ -244,8 +244,8 @@ rule Detail {
 			"tier":  "gold",
 		},
 	}
-	dc := DataFromMap(ctx, result.Ruleset)
-	matched, _, err := EvalGoverned(result.Ruleset, dc, result.Segments, ctx)
+	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
+	matched, _, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}
@@ -293,8 +293,9 @@ rule MainRule {
 			"active": true,
 		},
 	}
-	dc := DataFromMap(ctx, result.Ruleset)
-	matched, err := Eval(result.Ruleset, dc)
+	prog := &Program{Ruleset: result.Ruleset, Segments: result.Segments}
+	dc := DataFromMap(ctx, prog)
+	matched, err := Eval(prog, dc)
 	if err != nil {
 		t.Fatalf("Eval: %v", err)
 	}

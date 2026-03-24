@@ -809,6 +809,26 @@ func (v *programValidator) validateVarRef(expr *ir.Expr, env *validationEnv) (ex
 		}
 		return exprType{}, nil
 	}
+
+	// Input schema validation (only when an input block is declared).
+	// Bindings from any/all/bind take precedence over input fields, so check
+	// the binding environment first.
+	if _, boundInEnv := env.lookup(parts[0]); !boundInEnv && v.program.Input != nil {
+		resolved, err := resolveInputPath(v.program.Input, expr.Path)
+		if err != nil {
+			return exprType{}, spanError(expr.Span, "%s", err.Error())
+		}
+		if resolved != nil {
+			// Path resolved against input schema — return its type.
+			return exprType{
+				Base:      resolved.typ.Base,
+				Dimension: resolved.typ.Dimension,
+				Optional:  resolved.optional,
+			}, nil
+		}
+		// Path doesn't match any input root field — fall through.
+	}
+
 	binding, ok := env.lookup(parts[0])
 	if !ok {
 		return exprType{}, nil
