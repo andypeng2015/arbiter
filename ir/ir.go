@@ -5,6 +5,8 @@ type ExprID uint32
 
 // Program is the lowered in-process representation of a parsed `.arb` source.
 type Program struct {
+	Imports        []Import
+	Input          *InputSchema
 	Consts         []Const
 	Features       []Feature
 	FactSchemas    []FactSchema
@@ -81,13 +83,28 @@ type SchemaField struct {
 	Name     string
 	Type     FieldType
 	Required bool
+	Children []SchemaField // for nested objects in input schemas
 	Span     Span
 }
 
 // FieldType is one schema field type.
 type FieldType struct {
-	Base      string
-	Dimension string
+	Base      string     // "string", "number", "decimal", "boolean", "timestamp", "list", "object"
+	Dimension string     // for number<D>, decimal<D>
+	Element   *FieldType // for list<T> — element type; nil for non-list types
+}
+
+// InputSchema is the top-level input schema declaration.
+type InputSchema struct {
+	Fields []SchemaField
+	Span   Span
+}
+
+// Import is one top-level import declaration.
+type Import struct {
+	Path  string // e.g., "fraud/scoring"
+	Alias string // e.g., "fs", or empty for default (last path segment)
+	Span  Span
 }
 
 // Segment is one top-level segment declaration.
