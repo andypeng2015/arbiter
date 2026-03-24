@@ -345,6 +345,15 @@ func TestStringContentNotModified(t *testing.T) {
 	}
 }
 
+func TestFormatTableAlignment(t *testing.T) {
+	input := "table t {\nheight: number|bitrate: string|preset: string\n1080|\"6500k\"|\"p3\"\n720|\"3800k\"|\"p3\"\n}\n"
+	expected := "table t {\n    height: number | bitrate: string | preset: string\n    1080           | \"6500k\"         | \"p3\"\n    720            | \"3800k\"         | \"p3\"\n}\n"
+	got := string(Format([]byte(input)))
+	if got != expected {
+		t.Fatalf("table alignment:\ngot:\n%s\nexpected:\n%s", got, expected)
+	}
+}
+
 // helpers
 
 func splitLines(s string) []string {

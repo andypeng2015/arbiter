@@ -42,12 +42,15 @@ func Format(src []byte) []byte {
 	// Pass 2: normalize spacing around operators and colons.
 	lines = normalizeSpacing(lines)
 
-	// Pass 3: trim trailing whitespace per line.
+	// Pass 3: align columns within table blocks.
+	lines = alignTableColumns(lines)
+
+	// Pass 4: trim trailing whitespace per line.
 	for i, line := range lines {
 		lines[i] = strings.TrimRight(line, " \t")
 	}
 
-	// Pass 4: ensure one blank line between top-level declarations,
+	// Pass 5: ensure one blank line between top-level declarations,
 	// and collapse multiple blank lines.
 	lines = normalizeBlankLines(lines)
 
@@ -230,10 +233,6 @@ func allWhitespace(s string) bool {
 	}
 	return true
 }
-
-// operatorRe matches comparison and arithmetic operators that should have
-// spaces around them. Carefully avoids matching inside strings or comments.
-var operatorRe = regexp.MustCompile(`([^\s><!:=])([><!]=?|==|!=)([^\s=])`)
 
 // colonAssignRe matches "key:value" param assignments (no space after colon)
 // but not URIs like "chain://".
@@ -483,6 +482,7 @@ func normalizeColonSpacing(code string) string {
 var topLevelDeclPrefixes = []string{
 	"rule ", "expert ", "segment ", "flag ", "const ", "feature ",
 	"fact ", "outcome ", "strategy ", "worker ", "arbiter ", "include ",
+	"table ",
 }
 
 // isTopLevelDecl returns true if the line (after stripping indent) begins
@@ -604,4 +604,117 @@ func lastNonBlankLine(out []string) int {
 		}
 	}
 	return -1
+}
+
+// alignTableColumns detects table blocks and aligns pipe-separated columns
+// so that each column has a uniform width across all pipe-containing rows.
+// Lines without pipes (e.g. comments, the opening/closing brace) are left as-is.
+func alignTableColumns(lines []string) []string {
+	out := make([]string, len(lines))
+	copy(out, lines)
+
+	i := 0
+	for i < len(out) {
+		// Detect the start of a table block: a line whose stripped form starts
+		// with "table " and contains an opening brace.
+		stripped := strings.TrimLeft(out[i], " \t")
+		if strings.HasPrefix(stripped, "table ") && strings.Contains(stripped, "{") {
+			// Find the matching closing brace. Track depth starting at 1 because
+			// the opening brace is on the current line.
+			start := i
+			depth := 1
+			j := i + 1
+			for j < len(out) && depth > 0 {
+				for _, ch := range out[j] {
+					if ch == '{' {
+						depth++
+					} else if ch == '}' {
+						depth--
+						if depth == 0 {
+							break
+						}
+					}
+				}
+				if depth > 0 {
+					j++
+				}
+			}
+			// j is now the index of the closing brace line.
+			end := j // exclusive body range: [start+1, end)
+
+			// Collect indices of pipe-containing lines within the body.
+			var pipeLines []int
+			for k := start + 1; k < end; k++ {
+				if strings.Contains(out[k], "|") {
+					pipeLines = append(pipeLines, k)
+				}
+			}
+
+			if len(pipeLines) >= 1 {
+				// Split each pipe line into segments and compute max width per column.
+				segments := make([][]string, len(pipeLines))
+				maxCols := 0
+				for pi, lineIdx := range pipeLines {
+					// Trim the indentation prefix; we will restore it later.
+					lineStr := out[lineIdx]
+					indent := lineStr[:len(lineStr)-len(strings.TrimLeft(lineStr, " \t"))]
+					content := strings.TrimLeft(lineStr, " \t")
+					parts := strings.Split(content, "|")
+					trimmed := make([]string, len(parts))
+					for ci, p := range parts {
+						trimmed[ci] = strings.TrimSpace(p)
+					}
+					// Store indent as the first "virtual" element; pack it away.
+					segments[pi] = append([]string{indent}, trimmed...)
+					if len(trimmed) > maxCols {
+						maxCols = len(trimmed)
+					}
+				}
+
+				// Compute maximum width for each column (index 0 = indent, skip it).
+				colWidths := make([]int, maxCols)
+				for _, segs := range segments {
+					// segs[0] is the indent prefix; segs[1..] are the columns.
+					for ci := 0; ci < maxCols; ci++ {
+						colIdx := ci + 1
+						if colIdx < len(segs) {
+							if len(segs[colIdx]) > colWidths[ci] {
+								colWidths[ci] = len(segs[colIdx])
+							}
+						}
+					}
+				}
+
+				// Reassemble each pipe line with padded columns.
+				for pi, lineIdx := range pipeLines {
+					segs := segments[pi]
+					indent := segs[0]
+					cols := segs[1:]
+					var sb strings.Builder
+					sb.WriteString(indent)
+					for ci, col := range cols {
+						if ci > 0 {
+							sb.WriteString(" | ")
+						}
+						// Pad all columns except the last.
+						if ci < len(cols)-1 {
+							sb.WriteString(col)
+							if colWidths[ci] > len(col) {
+								sb.WriteString(strings.Repeat(" ", colWidths[ci]-len(col)))
+							}
+						} else {
+							// Last column: no trailing padding (trim will handle it).
+							sb.WriteString(col)
+						}
+					}
+					out[lineIdx] = sb.String()
+				}
+			}
+
+			i = end + 1
+			continue
+		}
+		i++
+	}
+	return out
 }
