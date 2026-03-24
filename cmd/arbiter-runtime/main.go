@@ -24,6 +24,8 @@ import (
 	arbiter "github.com/odvcencio/arbiter"
 	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/workflow"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func main() {
@@ -70,12 +72,15 @@ type runtimeConfig struct {
 	deliveryLog   string
 }
 
+const runtimeTracerName = "arbiter.runtime"
+
 type runtime struct {
 	config  runtimeConfig
 	runner  *workflow.Runner
 	wf      *workflow.Workflow
 	full    *arbiter.CompileResult
 	logger  *slog.Logger
+	name    string
 
 	mu         sync.RWMutex
 	lastTick   time.Time
@@ -124,6 +129,7 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 		wf:     wf,
 		full:   full,
 		logger: logger,
+		name:   bundlePath,
 	}, nil
 }
 
@@ -158,6 +164,10 @@ func (rt *runtime) run(ctx context.Context) error {
 }
 
 func (rt *runtime) tick(ctx context.Context) {
+	ctx, span := otel.Tracer(runtimeTracerName).Start(ctx, "arbiter.runtime.tick")
+	span.SetAttributes(attribute.String("arbiter.arbiter_name", rt.name))
+	defer span.End()
+
 	start := time.Now()
 	result, err := rt.runner.Tick(ctx)
 
@@ -296,6 +306,13 @@ func deliverExec(ctx context.Context, d workflow.Delivery) error {
 }
 
 func executeWorkerExec(ctx context.Context, inv workflow.WorkerInvocation) (workflow.WorkerExecution, error) {
+	ctx, span := otel.Tracer(runtimeTracerName).Start(ctx, "arbiter.worker.dispatch")
+	span.SetAttributes(
+		attribute.String("arbiter.worker_name", inv.Worker.Name),
+		attribute.String("arbiter.handler_kind", string(inv.Worker.Kind)),
+	)
+	defer span.End()
+
 	payload, _ := json.Marshal(inv.Delivery)
 	output, err := runExecCommandOutput(ctx, inv.Worker.Target, payload)
 	if err != nil {
@@ -309,6 +326,13 @@ func executeWorkerExec(ctx context.Context, inv workflow.WorkerInvocation) (work
 }
 
 func executeWorkerWebhook(ctx context.Context, inv workflow.WorkerInvocation) (workflow.WorkerExecution, error) {
+	ctx, span := otel.Tracer(runtimeTracerName).Start(ctx, "arbiter.worker.dispatch")
+	span.SetAttributes(
+		attribute.String("arbiter.worker_name", inv.Worker.Name),
+		attribute.String("arbiter.handler_kind", string(inv.Worker.Kind)),
+	)
+	defer span.End()
+
 	payload, _ := json.Marshal(inv.Delivery)
 	req, err := http.NewRequestWithContext(ctx, "POST", inv.Worker.Target, jsonReader(payload))
 	if err != nil {

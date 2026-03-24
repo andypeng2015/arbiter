@@ -14,6 +14,7 @@ import (
 	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/overrides"
 	"github.com/odvcencio/arbiter/vm"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -272,6 +273,10 @@ func (s *Server) EvaluateRules(ctx context.Context, req *arbiterv1.EvaluateRules
 		return nil, status.Error(codes.FailedPrecondition, "bundle has no rules")
 	}
 
+	ctx, span := startEvalSpan(ctx, "arbiter.eval.governed", bundle.Name)
+	var matched []vm.MatchedRule
+	defer func() { endEvalSpan(span, len(matched), err) }()
+
 	start := time.Now()
 	ctxMap := req.GetContext().AsMap()
 	prog := &arbiter.Program{Ruleset: bundle.Compiled.Ruleset, Segments: bundle.Compiled.Segments}
@@ -334,6 +339,14 @@ func (s *Server) ResolveFlag(ctx context.Context, req *arbiterv1.ResolveFlagRequ
 		return nil, status.Errorf(codes.NotFound, "flag %q not found", req.GetFlagKey())
 	}
 
+	ctx, span := startEvalSpan(ctx, "arbiter.flag.resolve", bundle.Name)
+	span.SetAttributes(attribute.String("arbiter.flag.name", req.GetFlagKey()))
+	var variant string
+	defer func() {
+		span.SetAttributes(attribute.String("arbiter.flag.variant", variant))
+		span.End()
+	}()
+
 	start := time.Now()
 	ctxMap := req.GetContext().AsMap()
 	eval := bundle.Flags.ExplainWithOverrides(bundle.ID, req.GetFlagKey(), ctxMap, s.overrides)
@@ -380,6 +393,7 @@ func (s *Server) ResolveFlag(ctx context.Context, req *arbiterv1.ResolveFlagRequ
 
 	_ = s.audit.WriteDecision(ctx, event)
 
+	variant = eval.Variant.Name
 	return &arbiterv1.ResolveFlagResponse{
 		Variant:   eval.Variant.Name,
 		Values:    values,
@@ -401,6 +415,14 @@ func (s *Server) EvaluateStrategy(ctx context.Context, req *arbiterv1.EvaluateSt
 	if !bundle.Compiled.Strategies.Has(req.GetStrategyName()) {
 		return nil, status.Errorf(codes.NotFound, "strategy %q not found", req.GetStrategyName())
 	}
+
+	ctx, span := startEvalSpan(ctx, "arbiter.eval.strategy", bundle.Name)
+	span.SetAttributes(attribute.String("arbiter.strategy.name", req.GetStrategyName()))
+	var selectedLabel string
+	defer func() {
+		span.SetAttributes(attribute.String("arbiter.strategy.selected", selectedLabel))
+		span.End()
+	}()
 
 	start := time.Now()
 	ctxMap := req.GetContext().AsMap()
@@ -436,6 +458,7 @@ func (s *Server) EvaluateStrategy(ctx context.Context, req *arbiterv1.EvaluateSt
 		Trace: result.Trace.Steps,
 	})
 
+	selectedLabel = result.Selected
 	return &arbiterv1.EvaluateStrategyResponse{
 		Outcome:  result.Outcome,
 		Selected: result.Selected,

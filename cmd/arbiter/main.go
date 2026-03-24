@@ -43,6 +43,7 @@ import (
 	"github.com/odvcencio/arbiter/grpcserver"
 	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/overrides"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -709,7 +710,9 @@ func serveCmd(grpcAddr, auditFile, bundleFile, overridesFile, logLevel string) e
 		}
 	}
 
-	grpcSrv := grpc.NewServer()
+	grpcSrv := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
 	arbiterv1.RegisterArbiterServiceServer(grpcSrv, grpcserver.NewServerWithLogger(registry, store, sink, logger))
 
 	logger.Info("arbiter gRPC listening", "addr", grpcAddr)
