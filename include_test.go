@@ -236,6 +236,26 @@ include "second.arb"
 	}
 }
 
+func TestIncludeEmitsDeprecationWarning(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "other.arb"), []byte(`rule Y { when { true } then B {} }`), 0644)
+	os.WriteFile(filepath.Join(dir, "main.arb"), []byte("include \"other.arb\"\nrule X { when { true } then A {} }\n"), 0644)
+
+	result, err := CompileFile(filepath.Join(dir, "main.arb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w.Message, "deprecated") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected deprecation warning for include")
+	}
+}
+
 func writeTestFile(t *testing.T, dir, name, contents string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

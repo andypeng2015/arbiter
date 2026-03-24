@@ -17,9 +17,10 @@ import (
 
 // SourceUnit is one fully expanded .arb compilation unit loaded from disk.
 type SourceUnit struct {
-	Source  []byte
-	Files   []string
-	Origins []SourceOrigin
+	Source   []byte
+	Files    []string
+	Origins  []SourceOrigin
+	Warnings []Diagnostic // non-fatal diagnostics collected during include expansion
 }
 
 // SourceOrigin maps one generated declaration back to its source file and line.
@@ -239,9 +240,10 @@ func LoadFileUnitWithResolver(path string, resolver IncludeResolver) (*SourceUni
 		return nil, err
 	}
 	return &SourceUnit{
-		Source:  source,
-		Files:   append([]string(nil), loader.files...),
-		Origins: append([]SourceOrigin(nil), loader.origins...),
+		Source:   source,
+		Files:    append([]string(nil), loader.files...),
+		Origins:  append([]SourceOrigin(nil), loader.origins...),
+		Warnings: append([]Diagnostic(nil), loader.warnings...),
 	}, nil
 }
 
@@ -284,6 +286,8 @@ func ParseSource(source []byte) (*ParsedSource, error) {
 }
 
 // CompileParsed compiles a previously parsed source into a ruleset.
+//
+// Deprecated: use Compile instead. Will be removed in v2.0.0.
 func CompileParsed(parsed *ParsedSource) (*compiler.CompiledRuleset, error) {
 	if parsed == nil {
 		return nil, fmt.Errorf("nil parsed source")
@@ -300,6 +304,8 @@ func CompileParsed(parsed *ParsedSource) (*compiler.CompiledRuleset, error) {
 }
 
 // CompileFullParsed compiles a previously parsed source and extracts shared runtime artifacts.
+//
+// Deprecated: use Compile instead. Will be removed in v2.0.0.
 func CompileFullParsed(parsed *ParsedSource) (*CompileResult, error) {
 	if parsed == nil {
 		return nil, fmt.Errorf("nil parsed source")
@@ -362,12 +368,15 @@ func CompileFile(path string, opts ...Option) (*Program, error) {
 	if err != nil {
 		return nil, WrapFileError(unit, err)
 	}
+	prog.Warnings = append(prog.Warnings, unit.Warnings...)
 	return prog, nil
 }
 
 // CompileFullFile compiles a file-backed .arb program with include resolution.
 // When the source contains import declarations, it uses the module system to
 // recursively resolve, prefix, and merge imported modules before compilation.
+//
+// Deprecated: use CompileFile instead. Will be removed in v2.0.0.
 func CompileFullFile(path string) (*CompileResult, error) {
 	unit, parsed, err := LoadFileParsed(path)
 	if err != nil {
@@ -462,6 +471,7 @@ type sourceUnitLoader struct {
 	seen     map[string]struct{}
 	decls    map[string]SourceOrigin
 	stackPos map[string]int
+	warnings []Diagnostic
 }
 
 func (l *sourceUnitLoader) readSource(path string) ([]byte, error) {
@@ -519,6 +529,14 @@ func (l *sourceUnitLoader) expandInto(path string, out *strings.Builder, generat
 			if includePath == "" {
 				return fmt.Errorf("%s: include path is empty", path)
 			}
+			inclLine := 1 + strings.Count(string(source[:child.StartByte()]), "\n")
+			l.warnings = append(l.warnings, Diagnostic{
+				Severity: DiagWarning,
+				Message:  fmt.Sprintf("include %q is deprecated; use import declarations instead", includePath),
+				File:     path,
+				Line:     inclLine,
+				Col:      1,
+			})
 			_, resolved, err := l.resolver.Resolve(includePath, filepath.Dir(path))
 			if err != nil {
 				return fmt.Errorf("%s: %w", path, err)

@@ -8,6 +8,25 @@ import (
 	"github.com/odvcencio/arbiter/vm"
 )
 
+// DiagnosticSeverity indicates the severity level of a Diagnostic.
+type DiagnosticSeverity int
+
+const (
+	// DiagWarning is a non-fatal warning diagnostic.
+	DiagWarning DiagnosticSeverity = iota
+	// DiagInfo is an informational diagnostic.
+	DiagInfo
+)
+
+// Diagnostic is a non-fatal compiler message with file and position data.
+type Diagnostic struct {
+	Severity DiagnosticSeverity
+	Message  string
+	File     string
+	Line     int
+	Col      int
+}
+
 // Program is the compiled output of an Arbiter source. It contains all
 // artifacts needed for evaluation: bytecode, segments, strategies, etc.
 type Program struct {
@@ -19,6 +38,7 @@ type Program struct {
 	Workers    map[string]WorkerDeclaration
 	Arbiters   []ArbiterDeclaration
 	Input      *ir.InputSchema
+	Warnings   []Diagnostic   // non-fatal diagnostics collected during compilation
 	pool       *vm.StringPool // internal, sealed from public API
 }
 
