@@ -199,3 +199,42 @@ rule Default {
 		t.Errorf("expected Offer, got %s", matched[0].Action)
 	}
 }
+
+func TestBundleTagRoundTrip(t *testing.T) {
+	prog, err := arbiter.Compile([]byte(`
+tag "fraud"
+tag "realtime"
+
+rule FraudRealtime tag "fraud" tag "realtime" {
+	when { true }
+	then Allow {}
+}
+
+rule FraudOnly tag "fraud" {
+	when { true }
+	then Review {}
+}
+`))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	blob, err := bundle.Marshal(prog.Ruleset)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	restored, err := bundle.Unmarshal(blob)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if len(restored.Tags) != len(prog.Ruleset.Tags) {
+		t.Fatalf("tag pool length = %d, want %d", len(restored.Tags), len(prog.Ruleset.Tags))
+	}
+	if !restored.RuleMatchesTags(restored.Rules[0], []string{"fraud", "realtime"}) {
+		t.Fatal("expected restored first rule to retain fraud+realtime tags")
+	}
+	if restored.RuleMatchesTags(restored.Rules[1], []string{"realtime"}) {
+		t.Fatal("expected restored second rule to miss realtime tag")
+	}
+}

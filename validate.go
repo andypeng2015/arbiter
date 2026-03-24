@@ -205,6 +205,9 @@ func validateFieldType(fieldType ir.FieldType, span ir.Span, context string) err
 func (v *programValidator) validate() error {
 	var errs []error
 	env := newValidationEnv()
+	if err := v.validateTagUsage(); err != nil {
+		errs = append(errs, err)
+	}
 	for i := range v.program.Tables {
 		if err := v.validateTable(&v.program.Tables[i]); err != nil {
 			errs = append(errs, err)
@@ -254,6 +257,113 @@ func (v *programValidator) validate() error {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+func (v *programValidator) validateTagUsage() error {
+	if v.program == nil {
+		return nil
+	}
+	declared := make(map[string]ir.TagDeclaration, len(v.program.Tags))
+	for _, decl := range v.program.Tags {
+		if decl.Name == "" {
+			continue
+		}
+		if _, ok := declared[decl.Name]; ok {
+			continue
+		}
+		declared[decl.Name] = decl
+	}
+	used := make(map[string]struct{})
+	var errs []error
+	check := func(scope string, span ir.Span, tags []string) {
+		for _, tag := range tags {
+			if tag == "" {
+				continue
+			}
+			if _, ok := declared[tag]; ok {
+				used[tag] = struct{}{}
+				continue
+			}
+			msg := fmt.Sprintf(`%s: unknown tag %q`, scope, tag)
+			if suggestion, ok := nearestTag(tag, declared); ok {
+				msg += fmt.Sprintf(` (did you mean %q?)`, suggestion)
+			}
+			errs = append(errs, spanError(span, "%s", msg))
+		}
+	}
+	for _, rule := range v.program.Rules {
+		check("rule "+rule.Name, rule.Span, rule.Tags)
+	}
+	for _, flag := range v.program.Flags {
+		check("flag "+flag.Name, flag.Span, flag.Tags)
+	}
+	for _, rule := range v.program.Expert {
+		check("expert rule "+rule.Name, rule.Span, rule.Tags)
+	}
+	for _, decl := range v.program.Tags {
+		if _, ok := used[decl.Name]; ok {
+			continue
+		}
+		v.warn(decl.Span, fmt.Sprintf("tag %q declared but not used", decl.Name))
+	}
+	return errors.Join(errs...)
+}
+
+func nearestTag(name string, declared map[string]ir.TagDeclaration) (string, bool) {
+	best := ""
+	bestDistance := 3
+	for candidate := range declared {
+		distance := editDistance(name, candidate)
+		if distance > 2 || distance >= bestDistance {
+			continue
+		}
+		bestDistance = distance
+		best = candidate
+	}
+	return best, best != ""
+}
+
+func editDistance(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+	prev := make([]int, len(b)+1)
+	cur := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			cur[j] = min3(
+				prev[j]+1,
+				cur[j-1]+1,
+				prev[j-1]+cost,
+			)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(b)]
+}
+
+func min3(a, b, c int) int {
+	if a > b {
+		a = b
+	}
+	if a > c {
+		a = c
+	}
+	return a
 }
 
 func (v *programValidator) validateRolloutNamespaces() error {
@@ -433,6 +543,9 @@ func (v *programValidator) validateExpertRule(rule *ir.ExpertRule) error {
 	if rule == nil {
 		return nil
 	}
+	if err := validateExpertTemporalRule(rule); err != nil {
+		return err
+	}
 	env, err := v.validateLets(rule.Lets, newValidationEnv())
 	if err != nil {
 		return err
@@ -461,6 +574,50 @@ func (v *programValidator) validateExpertRule(rule *ir.ExpertRule) error {
 		}
 	}
 	return nil
+}
+
+func validateExpertTemporalRule(rule *ir.ExpertRule) error {
+	if rule == nil {
+		return nil
+	}
+	waiting := make([]string, 0, 4)
+	if rule.ForDuration != nil {
+		waiting = append(waiting, "for")
+	}
+	if rule.WithinDuration != nil {
+		waiting = append(waiting, "within")
+	}
+	if rule.DebounceDuration != nil {
+		waiting = append(waiting, "debounce")
+	}
+	if rule.HasStableCycles {
+		if rule.StableCycles <= 0 {
+			return spanError(rule.Span, "expert rule %s: stable_for cycles must be greater than zero", rule.Name)
+		}
+		waiting = append(waiting, "stable_for")
+	}
+	if rule.PerFact && (rule.ForDuration != nil || rule.WithinDuration != nil || rule.HasStableCycles || rule.CooldownDuration != nil || rule.DebounceDuration != nil) {
+		return spanError(rule.Span, "expert rule %s: temporal operators are not supported on per_fact rules", rule.Name)
+	}
+	if len(waiting) <= 1 {
+		return nil
+	}
+	first := waiting[0]
+	second := waiting[1]
+	reason := `both impose timing constraints on when the rule fires`
+	switch {
+	case (first == "for" && second == "stable_for") || (first == "stable_for" && second == "for"):
+		reason = `"for" is time-based, "stable_for" is cycle-based`
+	case (first == "within" && second == "stable_for") || (first == "stable_for" && second == "within"):
+		reason = `"within" is time-based, "stable_for" is cycle-based`
+	case (first == "debounce" && second == "stable_for") || (first == "stable_for" && second == "debounce"):
+		reason = `"debounce" is time-based, "stable_for" is cycle-based`
+	case (first == "for" && second == "debounce") || (first == "debounce" && second == "for"):
+		reason = `both define overlapping wait periods`
+	case (first == "within" && second == "debounce") || (first == "debounce" && second == "within"):
+		reason = `both define conflicting deadlines`
+	}
+	return spanError(rule.Span, `expert rule %s: cannot combine %q and %q - %s`, rule.Name, first, second, reason)
 }
 
 func (v *programValidator) validateArbiter(arb *ir.Arbiter) error {

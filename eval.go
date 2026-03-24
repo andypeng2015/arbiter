@@ -2,6 +2,7 @@ package arbiter
 
 import (
 	"fmt"
+	"strings"
 
 	gotreesitter "github.com/odvcencio/gotreesitter"
 
@@ -26,12 +27,9 @@ func Compile(source []byte, opts ...Option) (*Program, error) {
 
 	// Check for imports — error if present without resolver.
 	if len(program.Imports) > 0 {
-		var o compileOptions
-		for _, opt := range opts {
-			opt(&o)
-		}
-		if o.resolver == nil {
-			return nil, fmt.Errorf("import requires file context or explicit resolver")
+		program, err = resolveProgramImportsForPath(program, "", false, opts...)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -85,8 +83,35 @@ type EvalContext struct {
 	Pool *vm.StringPool
 }
 
+// EvalOption configures optional runtime evaluation behavior.
+type EvalOption func(*evalOptions)
+
+type evalOptions struct {
+	tags []string
+}
+
+// WithTags restricts evaluation to rules whose tag set contains every
+// requested tag.
+func WithTags(tags ...string) EvalOption {
+	clean := uniqueEvalTags(tags)
+	return func(o *evalOptions) {
+		o.tags = append(o.tags[:0], clean...)
+	}
+}
+
+func applyEvalOptions(opts []EvalOption) evalOptions {
+	var out evalOptions
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&out)
+		}
+	}
+	out.tags = uniqueEvalTags(out.tags)
+	return out
+}
+
 // Eval evaluates a compiled program against a data context.
-func Eval(prog *Program, dc vm.DataContext) ([]vm.MatchedRule, error) {
+func Eval(prog *Program, dc vm.DataContext, opts ...EvalOption) ([]vm.MatchedRule, error) {
 	if prog == nil {
 		return nil, fmt.Errorf("nil program")
 	}
@@ -94,16 +119,17 @@ func Eval(prog *Program, dc vm.DataContext) ([]vm.MatchedRule, error) {
 	if rs == nil {
 		return nil, fmt.Errorf("nil ruleset")
 	}
+	evalOpts := applyEvalOptions(opts)
 	// If dc was created via DataFromMap/DataFromJSON, it shares a pool.
 	// Try to extract it; otherwise create a new one.
 	if ec, ok := dc.(*evalContextWrapper); ok {
-		return vm.EvalWithPool(rs, ec.inner, ec.pool)
+		return vm.EvalWithTagFilter(rs, ec.inner, ec.pool, evalOpts.tags)
 	}
-	return vm.Eval(rs, dc)
+	return vm.EvalWithTagFilter(rs, dc, vm.NewStringPool(rs.Constants.Strings()), evalOpts.tags)
 }
 
 // EvalDebug evaluates with full debug trace.
-func EvalDebug(prog *Program, dc vm.DataContext) vm.DebugResult {
+func EvalDebug(prog *Program, dc vm.DataContext, opts ...EvalOption) vm.DebugResult {
 	if prog == nil {
 		return vm.DebugResult{Error: fmt.Errorf("nil program")}
 	}
@@ -111,19 +137,20 @@ func EvalDebug(prog *Program, dc vm.DataContext) vm.DebugResult {
 	if rs == nil {
 		return vm.DebugResult{Error: fmt.Errorf("nil ruleset")}
 	}
+	evalOpts := applyEvalOptions(opts)
 	if ec, ok := dc.(*evalContextWrapper); ok {
-		return vm.EvalDebugWithPool(rs, ec.inner, ec.pool)
+		return vm.EvalDebugWithTagFilter(rs, ec.inner, ec.pool, evalOpts.tags)
 	}
-	return vm.EvalDebug(rs, dc)
+	return vm.EvalDebugWithTagFilter(rs, dc, vm.NewStringPool(rs.Constants.Strings()), evalOpts.tags)
 }
 
 // EvalGoverned evaluates a compiled program with rule governance enabled.
-func EvalGoverned(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any) ([]vm.MatchedRule, *govern.Trace, error) {
-	return EvalGovernedWithOverrides(prog, dc, segments, ctx, "", nil)
+func EvalGoverned(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any, opts ...EvalOption) ([]vm.MatchedRule, *govern.Trace, error) {
+	return EvalGovernedWithOverrides(prog, dc, segments, ctx, "", nil, opts...)
 }
 
 // EvalGovernedWithOverrides evaluates a program while applying runtime overrides.
-func EvalGovernedWithOverrides(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View) ([]vm.MatchedRule, *govern.Trace, error) {
+func EvalGovernedWithOverrides(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View, opts ...EvalOption) ([]vm.MatchedRule, *govern.Trace, error) {
 	if prog == nil {
 		return nil, &govern.Trace{}, fmt.Errorf("nil program")
 	}
@@ -131,10 +158,11 @@ func EvalGovernedWithOverrides(prog *Program, dc vm.DataContext, segments *gover
 	if rs == nil {
 		return nil, &govern.Trace{}, fmt.Errorf("nil ruleset")
 	}
+	evalOpts := applyEvalOptions(opts)
 	if ec, ok := dc.(*evalContextWrapper); ok {
-		return evalGovernedWithPool(rs, ec.inner, ec.pool, segments, ctx, bundleID, view)
+		return evalGovernedWithPool(rs, ec.inner, ec.pool, segments, ctx, bundleID, view, evalOpts.tags)
 	}
-	return evalGovernedWithPool(rs, dc, vm.NewStringPool(rs.Constants.Strings()), segments, ctx, bundleID, view)
+	return evalGovernedWithPool(rs, dc, vm.NewStringPool(rs.Constants.Strings()), segments, ctx, bundleID, view, evalOpts.tags)
 }
 
 // evalContextWrapper wraps a DataContext with its StringPool.
@@ -208,7 +236,7 @@ func compileSegmentRuleset(program *ir.Program, segment *ir.Segment) (*compiler.
 	return compiler.CompileIR(synthetic)
 }
 
-func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *vm.StringPool, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View) ([]vm.MatchedRule, *govern.Trace, error) {
+func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *vm.StringPool, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View, tags []string) ([]vm.MatchedRule, *govern.Trace, error) {
 	if rs == nil {
 		return nil, &govern.Trace{}, fmt.Errorf("nil ruleset")
 	}
@@ -219,6 +247,9 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 	var matched []vm.MatchedRule
 
 	for _, rule := range rs.Rules {
+		if !rs.RuleMatchesTags(rule, tags) {
+			continue
+		}
 		ruleName := evaluator.String(rule.NameIdx)
 		killSwitch := rule.KillSwitch
 		var rolloutOverride *uint16
@@ -364,4 +395,24 @@ func resolveExcludes(rs *compiler.CompiledRuleset, rule compiler.RuleHeader, eva
 
 func nodeText(n *gotreesitter.Node, source []byte) string {
 	return string(source[n.StartByte():n.EndByte()])
+}
+
+func uniqueEvalTags(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }

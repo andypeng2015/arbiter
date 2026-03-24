@@ -1,5 +1,40 @@
 # Changelog
 
+## v1.3.0
+
+### Rule Tagging
+
+- **`tag`/`tags` declarations** — top-level tag declarations with closed-set validation. Referencing an undeclared tag is a compile error with "did you mean?" suggestions. Unused tags warn.
+- **`tag`/`tags` on rules** — `rule R tag "fraud" { ... }` or `rule R tags "fraud,realtime" { ... }`. Works on rules, expert rules, and flag declarations.
+- **`WithTags` eval option** — `arbiter.Eval(prog, dc, arbiter.WithTags("fraud"))` evaluates only rules with all specified tags. AND semantics. Zero cost when not filtering.
+
+### Temporal Constraint Composition
+
+- **Valid combinations documented and tested** — `cooldown` composes with any one of `for`, `within`, `debounce`, `stable_for`.
+- **Invalid combinations are compile errors** — `for` + `within`, `for` + `debounce`, `within` + `debounce`, and all time-vs-cycle mixing (`for`/`within`/`debounce` + `stable_for`). Duplicate modifiers also rejected.
+
+### LSP — Semantic Highlighting
+
+- **Semantic tokens** for gaps not covered by tree-sitter grammar: fact/outcome names in `assert`/`emit` (type), table names in `lookup` (struct), member access fields (property), qualified name module prefixes (namespace).
+
+### LSP — Code Actions
+
+- **Add missing outcome fields** — quick fix inserts required fields with typed placeholder values.
+- **Add `else` to lookup** — quick fix inserts else block matching the table's column schema.
+- **Add `requires` prerequisite** — refactoring action inserts `requires` clause for qualified references.
+- **Import quick fix** — inserts `import` for unresolved qualified names with multi-candidate support.
+
+### LSP — Multi-File Diagnostics
+
+- **Cross-file error propagation** — errors in imported modules surface in both the imported file and at the `import` line in the importing file.
+- **Reverse dependency tracking** — saving a file recompiles all files that import it, refreshing diagnostics across the workspace.
+
+### VS Code Extension
+
+- **Format on save** enabled by default for `.arb` files. Users can override in settings.
+
+---
+
 ## v1.2.0
 
 ### Action Param Type Checking

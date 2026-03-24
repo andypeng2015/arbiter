@@ -44,6 +44,7 @@ func ArbiterGrammar() *Grammar {
 	g.Define("_declaration", Choice(
 		Sym("include_declaration"),
 		Sym("import_declaration"),
+		Sym("tag_declaration"),
 		Sym("input_declaration"),
 		Sym("feature_declaration"),
 		Sym("fact_declaration"),
@@ -74,6 +75,16 @@ func ArbiterGrammar() *Grammar {
 	g.Define("import_declaration", Choice(
 		Seq(Str("import"), Field("path", Sym("string_literal")), Str("as"), Field("alias", Sym("identifier"))),
 		Seq(Str("import"), Field("path", Sym("string_literal"))),
+	))
+
+	g.Define("tag_declaration", Seq(
+		Choice(Str("tag"), Str("tags")),
+		Field("value", Sym("string_literal")),
+	))
+
+	g.Define("tag_clause", Seq(
+		Choice(Str("tag"), Str("tags")),
+		Field("value", Sym("string_literal")),
 	))
 
 	g.Define("qualified_name", Choice(
@@ -322,7 +333,10 @@ func ArbiterGrammar() *Grammar {
 	g.Define("rule_declaration", Seq(
 		Str("rule"),
 		Field("name", Sym("identifier")),
-		Optional(Seq(Str("priority"), Field("priority", Sym("number_literal")))),
+		Repeat(Choice(
+			Sym("rule_priority"),
+			Sym("tag_clause"),
+		)),
 		Str("{"),
 		Optional(Field("kill_switch", Sym("kill_switch"))),
 		Repeat(Choice(Sym("rule_requires"), Sym("rule_excludes"))),
@@ -331,6 +345,11 @@ func ArbiterGrammar() *Grammar {
 		Optional(Field("fallback", Sym("otherwise_block"))),
 		Optional(Field("rollout", Sym("rule_rollout"))),
 		Str("}"),
+	))
+
+	g.Define("rule_priority", Seq(
+		Str("priority"),
+		Field("priority", Sym("number_literal")),
 	))
 
 	g.Define("rule_requires", Seq(
@@ -366,6 +385,7 @@ func ArbiterGrammar() *Grammar {
 			Sym("per_fact"),
 			Sym("expert_rule_cooldown"),
 			Sym("expert_rule_debounce"),
+			Sym("tag_clause"),
 		)),
 		Str("{"),
 		Optional(Field("kill_switch", Sym("kill_switch"))),
@@ -562,6 +582,7 @@ func ArbiterGrammar() *Grammar {
 	g.Define("flag_declaration", Seq(
 		Str("flag"),
 		Field("name", Sym("identifier")),
+		Repeat(Sym("tag_clause")),
 		Optional(Seq(Str("type"), Field("flag_type", Choice(Str("boolean"), Str("multivariate"))))),
 		Optional(Seq(Str("default"), Field("default_value", Sym("_primary")))),
 		Optional(Field("kill_switch", Sym("kill_switch"))),

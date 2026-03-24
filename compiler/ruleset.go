@@ -14,6 +14,7 @@ type CompiledRuleset struct {
 	Rules        []RuleHeader
 	Actions      []ActionEntry
 	Templates    []TemplateEntry
+	Tags         []uint16
 	Prereqs      []uint16
 	Excludes     []uint16
 
@@ -45,10 +46,50 @@ type RuleHeader struct {
 	HasRolloutNamespace bool
 	PrereqOff           uint16
 	PrereqLen           uint16
+	TagOff              uint16
+	TagLen              uint16
 	ExcludeOff          uint16
 	ExcludeLen          uint16
 	SegmentNameIdx      uint16
 	HasSegment          bool
+}
+
+// RuleMatchesTags reports whether the rule contains all requested tags.
+func (rs *CompiledRuleset) RuleMatchesTags(rule RuleHeader, tags []string) bool {
+	if len(tags) == 0 {
+		return true
+	}
+	if rs == nil || rule.TagLen == 0 {
+		return false
+	}
+	start := int(rule.TagOff)
+	end := start + int(rule.TagLen)
+	if start < 0 || start >= len(rs.Tags) {
+		return false
+	}
+	if end > len(rs.Tags) {
+		end = len(rs.Tags)
+	}
+	if end-start < len(tags) {
+		return false
+	}
+	remaining := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		if tag == "" {
+			continue
+		}
+		remaining[tag] = struct{}{}
+	}
+	if len(remaining) == 0 {
+		return true
+	}
+	for _, idx := range rs.Tags[start:end] {
+		delete(remaining, rs.Constants.GetString(idx))
+		if len(remaining) == 0 {
+			return true
+		}
+	}
+	return len(remaining) == 0
 }
 
 // ActionEntry stores a rule's action or fallback.
@@ -80,12 +121,12 @@ type CompiledTable struct {
 
 // LookupMeta stores the metadata for a single OpLookup instruction.
 type LookupMeta struct {
-	TableIdx uint16 // index into Tables
-	WhereOff uint32 // byte offset of where-clause bytecode (0 if none)
-	WhereLen uint32 // byte length of where-clause bytecode
-	SortCol  string // column to sort by ("" if none)
-	SortDesc bool   // true for descending sort
-	ElseOff  uint32 // byte offset of else-value bytecode (0 if none)
-	ElseLen  uint32 // byte length of else-value bytecode
+	TableIdx uint16   // index into Tables
+	WhereOff uint32   // byte offset of where-clause bytecode (0 if none)
+	WhereLen uint32   // byte length of where-clause bytecode
+	SortCol  string   // column to sort by ("" if none)
+	SortDesc bool     // true for descending sort
+	ElseOff  uint32   // byte offset of else-value bytecode (0 if none)
+	ElseLen  uint32   // byte length of else-value bytecode
 	ElseKeys []string // column names for the else row
 }

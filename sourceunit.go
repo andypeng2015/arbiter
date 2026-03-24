@@ -333,35 +333,9 @@ func CompileFile(path string, opts ...Option) (*Program, error) {
 	if err != nil {
 		return nil, WrapFileError(unit, err)
 	}
-
-	// If the program has imports, use the module system.
-	if len(program.Imports) > 0 {
-		// Import and include are mutually exclusive.
-		if len(unit.Files) > 1 {
-			return nil, fmt.Errorf("cannot use import and include in the same file")
-		}
-
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return nil, fmt.Errorf("resolve %s: %w", path, err)
-		}
-		manifest, err := findManifest(absPath)
-		if err != nil {
-			return nil, err
-		}
-		root := filepath.Dir(absPath)
-		if manifest != nil {
-			root = manifest.dir
-		}
-		resolver := newModuleResolver(root)
-		tree, err := loadModuleTree(program, absPath, resolver)
-		if err != nil {
-			return nil, err
-		}
-		program, err = mergeModules(tree)
-		if err != nil {
-			return nil, err
-		}
+	program, err = resolveProgramImportsForPath(program, path, len(unit.Files) > 1, opts...)
+	if err != nil {
+		return nil, err
 	}
 
 	prog, err := compileProgram(program)
@@ -369,6 +343,32 @@ func CompileFile(path string, opts ...Option) (*Program, error) {
 		return nil, WrapFileError(unit, err)
 	}
 	prog.Warnings = append(prog.Warnings, unit.Warnings...)
+	return prog, nil
+}
+
+// CompileFileSource compiles one file-backed source buffer while resolving
+// imports relative to the provided filesystem path.
+func CompileFileSource(path string, source []byte, opts ...Option) (*Program, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", path, err)
+	}
+	parsed, err := ParseSource(source)
+	if err != nil {
+		return nil, wrapRootPathError(absPath, err)
+	}
+	program, err := ir.Lower(parsed.Root, parsed.Source, parsed.Lang)
+	if err != nil {
+		return nil, wrapRootPathError(absPath, err)
+	}
+	program, err = resolveProgramImportsForPath(program, absPath, false, opts...)
+	if err != nil {
+		return nil, err
+	}
+	prog, err := compileProgram(program)
+	if err != nil {
+		return nil, wrapRootPathError(absPath, err)
+	}
 	return prog, nil
 }
 
@@ -387,35 +387,9 @@ func CompileFullFile(path string) (*CompileResult, error) {
 	if err != nil {
 		return nil, WrapFileError(unit, err)
 	}
-
-	// If the program has imports, use the module system.
-	if len(program.Imports) > 0 {
-		// Import and include are mutually exclusive.
-		if len(unit.Files) > 1 {
-			return nil, fmt.Errorf("cannot use import and include in the same file")
-		}
-
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return nil, fmt.Errorf("resolve %s: %w", path, err)
-		}
-		manifest, err := findManifest(absPath)
-		if err != nil {
-			return nil, err
-		}
-		root := filepath.Dir(absPath)
-		if manifest != nil {
-			root = manifest.dir
-		}
-		resolver := newModuleResolver(root)
-		tree, err := loadModuleTree(program, absPath, resolver)
-		if err != nil {
-			return nil, err
-		}
-		program, err = mergeModules(tree)
-		if err != nil {
-			return nil, err
-		}
+	program, err = resolveProgramImportsForPath(program, path, len(unit.Files) > 1)
+	if err != nil {
+		return nil, err
 	}
 
 	prog, err := compileProgram(program)
@@ -423,6 +397,103 @@ func CompileFullFile(path string) (*CompileResult, error) {
 		return nil, WrapFileError(unit, err)
 	}
 	return prog.toCompileResult(), nil
+}
+
+func applyCompileOptions(opts []Option) compileOptions {
+	var out compileOptions
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&out)
+		}
+	}
+	return out
+}
+
+func resolveProgramImportsForPath(program *ir.Program, path string, hasIncludes bool, opts ...Option) (*ir.Program, error) {
+	if program == nil || len(program.Imports) == 0 {
+		return program, nil
+	}
+	if hasIncludes {
+		return nil, fmt.Errorf("cannot use import and include in the same file")
+	}
+	absPath := path
+	if absPath != "" {
+		var err error
+		absPath, err = filepath.Abs(path)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %s: %w", path, err)
+		}
+	}
+	compileOpts := applyCompileOptions(opts)
+	resolver, err := compileOpts.moduleResolver(absPath)
+	if err != nil {
+		return nil, err
+	}
+	if resolver == nil {
+		return nil, fmt.Errorf("import requires file context or explicit resolver")
+	}
+	tree, err := loadModuleTree(program, absPath, resolver)
+	if err != nil {
+		return nil, err
+	}
+	return mergeModules(tree)
+}
+
+func (o compileOptions) moduleResolver(path string) (IncludeResolver, error) {
+	if o.resolver != nil {
+		return o.resolver, nil
+	}
+	root := ""
+	if o.manifest != nil && *o.manifest != "" {
+		manifestPath := *o.manifest
+		if !filepath.IsAbs(manifestPath) && path != "" {
+			manifestPath = filepath.Join(filepath.Dir(path), manifestPath)
+		}
+		info, err := os.Stat(manifestPath)
+		if err != nil {
+			return nil, err
+		}
+		if info.IsDir() {
+			root = manifestPath
+		} else {
+			root = filepath.Dir(manifestPath)
+		}
+	}
+	if root == "" && path != "" {
+		manifest, err := findManifest(path)
+		if err != nil {
+			return nil, err
+		}
+		root = filepath.Dir(path)
+		if manifest != nil {
+			root = manifest.dir
+		}
+	}
+	if root == "" {
+		return nil, nil
+	}
+	return newModuleResolver(root), nil
+}
+
+func wrapRootPathError(path string, err error) error {
+	if err == nil || path == "" {
+		return err
+	}
+	var diag *DiagnosticError
+	if errors.As(err, &diag) {
+		return err
+	}
+	var pos *positionedError
+	if errors.As(err, &pos) {
+		return &DiagnosticError{
+			File:    path,
+			Line:    pos.Line,
+			Column:  pos.Column,
+			Message: pos.Message,
+			Err:     err,
+		}
+	}
+	return err
 }
 
 // compileProgram compiles a pre-lowered IR program through the standard pipeline.

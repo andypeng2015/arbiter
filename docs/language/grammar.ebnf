@@ -19,6 +19,7 @@ source_file        = { top_level_declaration } ;
 
 top_level_declaration
                    = const_declaration
+                   | tag_declaration
                    | segment_declaration
                    | strategy_declaration
                    | rule_declaration
@@ -37,6 +38,9 @@ top_level_declaration
 include_declaration = "include" string_literal ;
 
 import_declaration = "import" string_literal [ "as" identifier ] ;
+
+tag_declaration    = ( "tag" | "tags" ) string_literal ;
+tag_clause         = ( "tag" | "tags" ) string_literal ;
 
 input_declaration  = "input" "{" { input_field } "}" ;
 input_field        = identifier [ "?" ] ":" ( field_type | "{" { input_field } "}" ) ;
@@ -134,7 +138,7 @@ strategy_else_candidate
 ## Rules
 
 ```ebnf
-rule_declaration   = "rule" identifier [ priority_clause ] rule_block ;
+rule_declaration   = "rule" identifier { priority_clause | tag_clause } rule_block ;
 
 rule_block         = "{"
                        [ kill_switch_clause ]
@@ -164,6 +168,7 @@ param_assignment   = identifier ":" expression [ "," ] ;
 
 ```ebnf
 flag_declaration   = "flag" identifier
+                     { tag_clause }
                      [ "type" ( "boolean" | "multivariate" ) ]
                      [ "default" primary_expr ]
                      [ kill_switch_clause ]
@@ -198,7 +203,7 @@ flag_split_block   = "split"
 ```ebnf
 expert_rule_declaration
                    = "expert" "rule" identifier
-                     { expert_modifier }
+                     { expert_modifier | tag_clause }
                      expert_rule_block ;
 
 expert_modifier    = "priority" number_literal

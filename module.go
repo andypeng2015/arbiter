@@ -83,12 +83,12 @@ type moduleTree struct {
 	rootPath string
 	modules  map[string]*ir.Program // namespace → lowered IR
 	order    []string               // topological order (imports before importers)
-	resolver *moduleResolver
+	resolver IncludeResolver
 }
 
 // loadModuleTree recursively resolves imports from the root program, producing
 // a module tree with all dependencies lowered and ready for merging.
-func loadModuleTree(rootProg *ir.Program, rootPath string, resolver *moduleResolver) (*moduleTree, error) {
+func loadModuleTree(rootProg *ir.Program, rootPath string, resolver IncludeResolver) (*moduleTree, error) {
 	tree := &moduleTree{
 		root:     rootProg,
 		rootPath: rootPath,
@@ -380,6 +380,7 @@ func mergeModules(tree *moduleTree) (*ir.Program, error) {
 		exprOffset += ir.ExprID(len(mod.Exprs))
 
 		merged.Consts = append(merged.Consts, mod.Consts...)
+		merged.Tags = append(merged.Tags, mod.Tags...)
 		merged.Features = append(merged.Features, mod.Features...)
 		merged.FactSchemas = append(merged.FactSchemas, mod.FactSchemas...)
 		merged.OutcomeSchemas = append(merged.OutcomeSchemas, mod.OutcomeSchemas...)
@@ -396,6 +397,7 @@ func mergeModules(tree *moduleTree) (*ir.Program, error) {
 	// Add root declarations last (with expr offset).
 	offsetExprIDs(tree.root, exprOffset)
 	merged.Consts = append(merged.Consts, tree.root.Consts...)
+	merged.Tags = append(merged.Tags, tree.root.Tags...)
 	merged.Features = append(merged.Features, tree.root.Features...)
 	merged.FactSchemas = append(merged.FactSchemas, tree.root.FactSchemas...)
 	merged.OutcomeSchemas = append(merged.OutcomeSchemas, tree.root.OutcomeSchemas...)

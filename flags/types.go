@@ -41,6 +41,7 @@ const (
 // FlagDef is a parsed flag definition from .arb source.
 type FlagDef struct {
 	Key           string
+	Tags          []string
 	Type          FlagType
 	Default       string // default variant name ("false", "control", etc.)
 	KillSwitch    bool

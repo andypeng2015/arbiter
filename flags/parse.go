@@ -43,6 +43,7 @@ func lowerFlagDef(program *ir.Program, flag *ir.Flag) (*FlagDef, error) {
 
 	def := &FlagDef{
 		Key:           flag.Name,
+		Tags:          append([]string(nil), flag.Tags...),
 		Default:       flag.Default,
 		KillSwitch:    flag.KillSwitch,
 		Prerequisites: append([]string(nil), flag.Requires...),

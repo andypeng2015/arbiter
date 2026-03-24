@@ -41,27 +41,29 @@ type ConstantSummary struct {
 }
 
 type RuleSummary struct {
-	Name       string `json:"name"`
-	Priority   int    `json:"priority"`
-	Segment    string `json:"segment,omitempty"`
-	KillSwitch bool   `json:"kill_switch,omitempty"`
-	Action     string `json:"action"`
+	Name       string   `json:"name"`
+	Tags       []string `json:"tags,omitempty"`
+	Priority   int      `json:"priority"`
+	Segment    string   `json:"segment,omitempty"`
+	KillSwitch bool     `json:"kill_switch,omitempty"`
+	Action     string   `json:"action"`
 }
 
 type ExpertRuleSummary struct {
-	Name            string `json:"name"`
-	Priority        int    `json:"priority"`
-	Kind            string `json:"kind"`
-	Target          string `json:"target"`
-	PerFact         bool   `json:"per_fact,omitempty"`
-	NoLoop          bool   `json:"no_loop,omitempty"`
-	Stable          bool   `json:"stable,omitempty"`
-	ActivationGroup string `json:"activation_group,omitempty"`
-	For             string `json:"for,omitempty"`
-	Within          string `json:"within,omitempty"`
-	StableFor       string `json:"stable_for,omitempty"`
-	Cooldown        string `json:"cooldown,omitempty"`
-	Debounce        string `json:"debounce,omitempty"`
+	Name            string   `json:"name"`
+	Tags            []string `json:"tags,omitempty"`
+	Priority        int      `json:"priority"`
+	Kind            string   `json:"kind"`
+	Target          string   `json:"target"`
+	PerFact         bool     `json:"per_fact,omitempty"`
+	NoLoop          bool     `json:"no_loop,omitempty"`
+	Stable          bool     `json:"stable,omitempty"`
+	ActivationGroup string   `json:"activation_group,omitempty"`
+	For             string   `json:"for,omitempty"`
+	Within          string   `json:"within,omitempty"`
+	StableFor       string   `json:"stable_for,omitempty"`
+	Cooldown        string   `json:"cooldown,omitempty"`
+	Debounce        string   `json:"debounce,omitempty"`
 }
 
 type StrategySummary struct {
@@ -169,6 +171,7 @@ func BuildSummary(program *ir.Program) *Summary {
 	for _, rule := range program.Rules {
 		summary.Rules = append(summary.Rules, RuleSummary{
 			Name:       rule.Name,
+			Tags:       append([]string(nil), rule.Tags...),
 			Priority:   int(rule.Priority),
 			Segment:    rule.Segment,
 			KillSwitch: rule.KillSwitch,
@@ -178,6 +181,7 @@ func BuildSummary(program *ir.Program) *Summary {
 	for _, rule := range program.Expert {
 		item := ExpertRuleSummary{
 			Name:            rule.Name,
+			Tags:            append([]string(nil), rule.Tags...),
 			Priority:        int(rule.Priority),
 			Kind:            string(rule.ActionKind),
 			Target:          rule.Target,

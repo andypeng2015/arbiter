@@ -8,6 +8,7 @@ type ExprID uint32
 // Program is the lowered in-process representation of a parsed `.arb` source.
 type Program struct {
 	Imports        []Import
+	Tags           []TagDeclaration
 	Input          *InputSchema
 	Consts         []Const
 	Features       []Feature
@@ -27,6 +28,7 @@ type Program struct {
 	// validated at compile time. Keyed by pattern string.
 	ValidatedRegexes map[string]*regexp.Regexp
 
+	tagIndex           map[string]int
 	constIndex         map[string]int
 	factSchemaIndex    map[string]int
 	outcomeSchemaIndex map[string]int
@@ -38,6 +40,12 @@ type Program struct {
 	expertIndex        map[string]int
 	arbiterIndex       map[string]int
 	tableIndex         map[string]int
+}
+
+// TagDeclaration is one top-level tag declaration.
+type TagDeclaration struct {
+	Name string
+	Span Span
 }
 
 // Span stores byte and point ranges for a declaration or expression.
@@ -126,6 +134,7 @@ type Segment struct {
 type Rule struct {
 	Name         string
 	Span         Span
+	Tags         []string
 	Priority     int32
 	KillSwitch   bool
 	Prereqs      []string
@@ -183,6 +192,7 @@ const (
 type Flag struct {
 	Name       string
 	Span       Span
+	Tags       []string
 	Type       FlagType
 	Default    string
 	KillSwitch bool
@@ -249,6 +259,7 @@ const (
 type ExpertRule struct {
 	Name             string
 	Span             Span
+	Tags             []string
 	Priority         int32
 	KillSwitch       bool
 	Prereqs          []string
@@ -499,6 +510,17 @@ func (p *Program) Expr(id ExprID) *Expr {
 	return &p.Exprs[idx]
 }
 
+// TagByName returns the named tag declaration.
+func (p *Program) TagByName(name string) (*TagDeclaration, bool) {
+	if p == nil || name == "" {
+		return nil, false
+	}
+	if idx, ok := p.tagIndex[name]; ok {
+		return &p.Tags[idx], true
+	}
+	return nil, false
+}
+
 // ConstByName returns the named const declaration.
 func (p *Program) ConstByName(name string) (*Const, bool) {
 	if p == nil || name == "" {
@@ -629,6 +651,13 @@ func (p *Program) RebuildIndexes() {
 }
 
 func (p *Program) rebuildIndexes() {
+	p.tagIndex = make(map[string]int, len(p.Tags))
+	for i := range p.Tags {
+		if _, ok := p.tagIndex[p.Tags[i].Name]; ok {
+			continue
+		}
+		p.tagIndex[p.Tags[i].Name] = i
+	}
 	p.constIndex = make(map[string]int, len(p.Consts))
 	for i := range p.Consts {
 		p.constIndex[p.Consts[i].Name] = i

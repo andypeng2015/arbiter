@@ -102,7 +102,7 @@ func (vm *VM) peek() Value {
 
 // Eval evaluates all rules in the compiled ruleset against the data context.
 func Eval(rs *compiler.CompiledRuleset, dc DataContext) ([]MatchedRule, error) {
-	return evalWithPool(rs, dc, NewStringPool(rs.Constants.Strings()))
+	return EvalWithTagFilter(rs, dc, NewStringPool(rs.Constants.Strings()), nil)
 }
 
 // EvalWithPool evaluates using a shared StringPool (for runtime-interned strings).
@@ -110,11 +110,16 @@ func Eval(rs *compiler.CompiledRuleset, dc DataContext) ([]MatchedRule, error) {
 // Deprecated: The string pool is now managed internally by Program. Use the
 // root-package Eval function with a *Program instead.
 func EvalWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) ([]MatchedRule, error) {
-	return evalWithPool(rs, dc, sp)
+	return EvalWithTagFilter(rs, dc, sp, nil)
 }
 
 // evalWithPool is the internal implementation of EvalWithPool.
 func evalWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) ([]MatchedRule, error) {
+	return EvalWithTagFilter(rs, dc, sp, nil)
+}
+
+// EvalWithTagFilter evaluates using the provided tag filter.
+func EvalWithTagFilter(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool, tags []string) ([]MatchedRule, error) {
 	if rs == nil {
 		return nil, fmt.Errorf("nil ruleset")
 	}
@@ -123,6 +128,9 @@ func evalWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) 
 	var matched []MatchedRule
 
 	for _, rule := range rs.Rules {
+		if !rs.RuleMatchesTags(rule, tags) {
+			continue
+		}
 		vm.sp = 0 // reset stack per rule
 		clear(vm.locals)
 		vm.iters = vm.iters[:0]
@@ -170,7 +178,7 @@ func evalWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) 
 
 // EvalDebug evaluates with full tracing.
 func EvalDebug(rs *compiler.CompiledRuleset, dc DataContext) DebugResult {
-	return evalDebugWithPool(rs, dc, NewStringPool(rs.Constants.Strings()))
+	return EvalDebugWithTagFilter(rs, dc, NewStringPool(rs.Constants.Strings()), nil)
 }
 
 // EvalDebugWithPool evaluates with full tracing using a shared StringPool.
@@ -178,16 +186,24 @@ func EvalDebug(rs *compiler.CompiledRuleset, dc DataContext) DebugResult {
 // Deprecated: The string pool is now managed internally by Program. Use the
 // root-package EvalDebug function with a *Program instead.
 func EvalDebugWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) DebugResult {
-	return evalDebugWithPool(rs, dc, sp)
+	return EvalDebugWithTagFilter(rs, dc, sp, nil)
 }
 
 // evalDebugWithPool is the internal implementation of EvalDebugWithPool.
 func evalDebugWithPool(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool) DebugResult {
+	return EvalDebugWithTagFilter(rs, dc, sp, nil)
+}
+
+// EvalDebugWithTagFilter evaluates with full tracing using the provided tag filter.
+func EvalDebugWithTagFilter(rs *compiler.CompiledRuleset, dc DataContext, sp *StringPool, tags []string) DebugResult {
 	start := time.Now()
 	vm := newVM(rs, sp)
 	var result DebugResult
 
 	for _, rule := range rs.Rules {
+		if !rs.RuleMatchesTags(rule, tags) {
+			continue
+		}
 		vm.sp = 0
 		clear(vm.locals)
 		vm.iters = vm.iters[:0]

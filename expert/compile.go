@@ -26,6 +26,7 @@ const modifySetPrefix = "__expert_set__"
 // Rule describes one compiled expert rule.
 type Rule struct {
 	Name            string
+	Tags            []string
 	Priority        int
 	Kind            ActionKind
 	Target          string
@@ -190,6 +191,7 @@ func lowerExpertRule(program *ir.Program, expertRule *ir.ExpertRule, segmentDeps
 	}
 	rule := Rule{
 		Name:     expertRule.Name,
+		Tags:     append([]string(nil), expertRule.Tags...),
 		Priority: int(expertRule.Priority),
 		Kind:     ActionKind(expertRule.ActionKind),
 		Target:   expertRule.Target,
@@ -203,8 +205,8 @@ func lowerExpertRule(program *ir.Program, expertRule *ir.ExpertRule, segmentDeps
 	if expertRule.PerFact && hasTemporalRule(expertRule) {
 		return Rule{}, ir.Rule{}, fmt.Errorf("expert rule %s: temporal operators are not supported on per_fact rules", rule.Name)
 	}
-	if expertRule.ForDuration != nil && expertRule.DebounceDuration != nil {
-		return Rule{}, ir.Rule{}, fmt.Errorf("expert rule %s: for and debounce cannot be combined", rule.Name)
+	if err := validateTemporalModifiers(rule.Name, expertRule); err != nil {
+		return Rule{}, ir.Rule{}, err
 	}
 	if expertRule.ForDuration != nil {
 		duration, err := compileTemporalDuration(expertRule.ForDuration)
@@ -315,6 +317,7 @@ func lowerExpertRule(program *ir.Program, expertRule *ir.ExpertRule, segmentDeps
 	synthetic := ir.Rule{
 		Name:         expertRule.Name,
 		Span:         expertRule.Span,
+		Tags:         append([]string(nil), expertRule.Tags...),
 		Priority:     expertRule.Priority,
 		KillSwitch:   expertRule.KillSwitch,
 		Prereqs:      append([]string(nil), expertRule.Prereqs...),
@@ -358,6 +361,44 @@ func hasTemporalRule(rule *ir.ExpertRule) bool {
 		rule.HasStableCycles ||
 		rule.CooldownDuration != nil ||
 		rule.DebounceDuration != nil
+}
+
+func validateTemporalModifiers(ruleName string, rule *ir.ExpertRule) error {
+	if rule == nil {
+		return nil
+	}
+	waiting := make([]string, 0, 4)
+	if rule.ForDuration != nil {
+		waiting = append(waiting, "for")
+	}
+	if rule.WithinDuration != nil {
+		waiting = append(waiting, "within")
+	}
+	if rule.DebounceDuration != nil {
+		waiting = append(waiting, "debounce")
+	}
+	if rule.HasStableCycles {
+		waiting = append(waiting, "stable_for")
+	}
+	if len(waiting) <= 1 {
+		return nil
+	}
+	first := waiting[0]
+	second := waiting[1]
+	reason := `both impose timing constraints on when the rule fires`
+	switch {
+	case (first == "for" && second == "stable_for") || (first == "stable_for" && second == "for"):
+		reason = `"for" is time-based, "stable_for" is cycle-based`
+	case (first == "within" && second == "stable_for") || (first == "stable_for" && second == "within"):
+		reason = `"within" is time-based, "stable_for" is cycle-based`
+	case (first == "debounce" && second == "stable_for") || (first == "stable_for" && second == "debounce"):
+		reason = `"debounce" is time-based, "stable_for" is cycle-based`
+	case (first == "for" && second == "debounce") || (first == "debounce" && second == "for"):
+		reason = `both define overlapping wait periods`
+	case (first == "within" && second == "debounce") || (first == "debounce" && second == "within"):
+		reason = `both define conflicting deadlines`
+	}
+	return fmt.Errorf(`expert rule %s: cannot combine %q and %q - %s`, ruleName, first, second, reason)
 }
 
 func compileTemporalDuration(duration *ir.Duration) (time.Duration, error) {

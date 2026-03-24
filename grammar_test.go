@@ -150,6 +150,29 @@ func TestParseConstList(t *testing.T) {
 	}
 }
 
+func TestParseTags(t *testing.T) {
+	sexp := parseArb(t, `
+tag "fraud"
+rule Check priority 10 tag "fraud" tags "realtime,batch" {
+	when { true }
+	then Allow {}
+}
+flag Feature tag "fraud" {
+	when { true } then "true"
+}
+expert rule Detect tag "fraud" cooldown 5m {
+	when { true }
+	then emit Alert {}
+}
+`)
+	if !strings.Contains(sexp, "tag_declaration") {
+		t.Fatalf("expected tag_declaration nodes, got: %s", sexp)
+	}
+	if strings.Count(sexp, "tag_clause") < 3 {
+		t.Fatalf("expected tag_clause nodes, got: %s", sexp)
+	}
+}
+
 func TestParseArbiterDeclaration(t *testing.T) {
 	sexp := parseArb(t, `
 arbiter trading_system {

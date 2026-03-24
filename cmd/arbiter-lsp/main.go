@@ -115,6 +115,10 @@ func (s *server) handle(msg rpcMessage) []rpcMessage {
 		return []rpcMessage{s.handleDocumentSymbol(msg)}
 	case "textDocument/formatting":
 		return []rpcMessage{s.handleFormatting(msg)}
+	case "textDocument/codeAction":
+		return []rpcMessage{s.handleCodeAction(msg)}
+	case "textDocument/semanticTokens/full":
+		return []rpcMessage{s.handleSemanticTokens(msg)}
 	default:
 		if msg.ID != nil {
 			return []rpcMessage{{
@@ -140,13 +144,21 @@ func (s *server) handleInitialize(msg rpcMessage) rpcMessage {
 					"change":    1, // Full sync
 					"save":      map[string]any{"includeText": true},
 				},
-				"completionProvider":   map[string]any{"triggerCharacters": []string{".", " "}},
-				"hoverProvider":        true,
-				"definitionProvider":   true,
-				"referencesProvider":   true,
-				"renameProvider":       true,
-				"documentSymbolProvider":    true,
+				"completionProvider":         map[string]any{"triggerCharacters": []string{".", " "}},
+				"hoverProvider":              true,
+				"definitionProvider":         true,
+				"referencesProvider":         true,
+				"renameProvider":             true,
+				"documentSymbolProvider":     true,
 				"documentFormattingProvider": true,
+				"codeActionProvider":         true,
+				"semanticTokensProvider": map[string]any{
+					"legend": map[string]any{
+						"tokenTypes":     semanticTokenTypes,
+						"tokenModifiers": semanticTokenModifiers,
+					},
+					"full": true,
+				},
 				"diagnosticProvider":         map[string]any{"interFileDependencies": true, "workspaceDiagnostics": false},
 			},
 			"serverInfo": map[string]any{
@@ -234,106 +246,29 @@ func (s *server) handleDidClose(msg rpcMessage) []rpcMessage {
 	s.mu.Lock()
 	delete(s.files, params.TextDocument.URI)
 	s.mu.Unlock()
-	// Clear diagnostics.
-	return []rpcMessage{s.diagnosticNotification(params.TextDocument.URI, nil)}
+	return s.publishDiagnostics(params.TextDocument.URI)
 }
 
 // --- Diagnostics ---
 
 func (s *server) publishDiagnostics(uri string) []rpcMessage {
 	s.mu.Lock()
-	f, ok := s.files[uri]
-	if !ok {
-		s.mu.Unlock()
-		return nil
+	files := make(map[string]*fileState, len(s.files))
+	for key, value := range s.files {
+		copyState := *value
+		files[key] = &copyState
 	}
-	content := f.content
 	s.mu.Unlock()
 
-	diags := compileDiagnostics(uri, content)
-	return []rpcMessage{s.diagnosticNotification(uri, diags)}
-}
-
-func compileDiagnostics(uri, source string) []map[string]any {
-	_, err, warnings := compileForDiagnostics(uri, []byte(source))
-
-	var diags []map[string]any
-
-	// Surface compile errors (severity 1 = Error).
-	if err != nil {
-		for _, line := range strings.Split(err.Error(), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			d := parseDiagnosticLine(line)
-			diags = append(diags, d)
-		}
+	workspace := compileWorkspaceDiagnostics(files)
+	var notifications []rpcMessage
+	for key, diags := range workspace {
+		notifications = append(notifications, s.diagnosticNotification(key, diags))
 	}
-
-	// Surface compiler warnings (severity 2 = Warning).
-	for _, w := range warnings {
-		lineNum := w.Line
-		col := w.Col
-		if lineNum > 0 {
-			lineNum-- // LSP is 0-based
-		}
-		if col > 0 {
-			col-- // LSP is 0-based
-		}
-		diags = append(diags, map[string]any{
-			"range": map[string]any{
-				"start": map[string]any{"line": lineNum, "character": col},
-				"end":   map[string]any{"line": lineNum, "character": col + 1},
-			},
-			"severity": 2, // Warning
-			"source":   "arbiter",
-			"message":  w.Message,
-		})
+	if _, ok := files[uri]; !ok && uri != "" {
+		notifications = append(notifications, s.diagnosticNotification(uri, nil))
 	}
-
-	return diags
-}
-
-func parseDiagnosticLine(line string) map[string]any {
-	// Try to parse "file:line:col: message" or "line:col: message"
-	lineNum, col, message := 0, 0, line
-
-	parts := strings.SplitN(line, ":", 4)
-	if len(parts) >= 3 {
-		if n, err := strconv.Atoi(strings.TrimSpace(parts[0])); err == nil {
-			lineNum = n
-			if c, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
-				col = c
-				message = strings.TrimSpace(parts[2])
-			}
-		} else if len(parts) >= 4 {
-			if n, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
-				lineNum = n
-				if c, err := strconv.Atoi(strings.TrimSpace(parts[2])); err == nil {
-					col = c
-					message = strings.TrimSpace(parts[3])
-				}
-			}
-		}
-	}
-
-	if lineNum > 0 {
-		lineNum-- // LSP is 0-based
-	}
-	if col > 0 {
-		col-- // LSP is 0-based
-	}
-
-	return map[string]any{
-		"range": map[string]any{
-			"start": map[string]any{"line": lineNum, "character": col},
-			"end":   map[string]any{"line": lineNum, "character": col + 1},
-		},
-		"severity": 1, // Error
-		"source":   "arbiter",
-		"message":  message,
-	}
+	return notifications
 }
 
 func (s *server) diagnosticNotification(uri string, diags []map[string]any) rpcMessage {

@@ -92,6 +92,8 @@ func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) {
 	for i := 0; i < int(root.NamedChildCount()); i++ {
 		child := root.NamedChild(i)
 		switch child.Type(l.lang) {
+		case "tag_declaration":
+			l.program.Tags = append(l.program.Tags, l.lowerTagDeclaration(child)...)
 		case "const_declaration":
 			l.program.Consts = append(l.program.Consts, l.lowerConst(child))
 		case "feature_declaration":
@@ -162,6 +164,25 @@ func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) {
 			l.program.Tables = append(l.program.Tables, tbl)
 		}
 	}
+}
+
+func (l *lowerer) lowerTagDeclaration(n *gotreesitter.Node) []TagDeclaration {
+	valueNode := n.ChildByFieldName("value", l.lang)
+	if valueNode == nil {
+		return nil
+	}
+	names := parseTagNames(parseutil.StripQuotes(l.text(valueNode)))
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]TagDeclaration, 0, len(names))
+	for _, name := range names {
+		out = append(out, TagDeclaration{
+			Name: name,
+			Span: spanForNode(n),
+		})
+	}
+	return out
 }
 
 func (l *lowerer) lowerConst(n *gotreesitter.Node) Const {
@@ -384,14 +405,19 @@ func (l *lowerer) lowerRule(n *gotreesitter.Node) (Rule, error) {
 	if nameNode := n.ChildByFieldName("name", l.lang); nameNode != nil {
 		rule.Name = l.text(nameNode)
 	}
-	if priNode := n.ChildByFieldName("priority", l.lang); priNode != nil {
-		rule.Priority = int32(parseutil.ParseInt(l.text(priNode)))
-	}
 	rule.KillSwitch = n.ChildByFieldName("kill_switch", l.lang) != nil
 
 	for i := 0; i < int(n.NamedChildCount()); i++ {
 		child := n.NamedChild(i)
 		switch child.Type(l.lang) {
+		case "rule_priority":
+			if priNode := child.ChildByFieldName("priority", l.lang); priNode != nil {
+				rule.Priority = int32(parseutil.ParseInt(l.text(priNode)))
+			}
+		case "tag_clause":
+			if valueNode := child.ChildByFieldName("value", l.lang); valueNode != nil {
+				rule.Tags = appendUniqueStrings(rule.Tags, parseTagNames(parseutil.StripQuotes(l.text(valueNode)))...)
+			}
 		case "rule_requires":
 			if refNode := child.ChildByFieldName("name", l.lang); refNode != nil {
 				rule.Prereqs = append(rule.Prereqs, l.text(refNode))
@@ -587,6 +613,10 @@ func (l *lowerer) lowerFlag(n *gotreesitter.Node) (Flag, error) {
 	for i := 0; i < int(n.NamedChildCount()); i++ {
 		child := n.NamedChild(i)
 		switch child.Type(l.lang) {
+		case "tag_clause":
+			if valueNode := child.ChildByFieldName("value", l.lang); valueNode != nil {
+				flag.Tags = appendUniqueStrings(flag.Tags, parseTagNames(parseutil.StripQuotes(l.text(valueNode)))...)
+			}
 		case "flag_metadata":
 			keyNode := child.ChildByFieldName("key", l.lang)
 			valueNode := child.ChildByFieldName("value", l.lang)
@@ -709,6 +739,10 @@ func (l *lowerer) lowerExpertRule(n *gotreesitter.Node) (ExpertRule, error) {
 	for i := 0; i < int(n.NamedChildCount()); i++ {
 		child := n.NamedChild(i)
 		switch child.Type(l.lang) {
+		case "tag_clause":
+			if valueNode := child.ChildByFieldName("value", l.lang); valueNode != nil {
+				rule.Tags = appendUniqueStrings(rule.Tags, parseTagNames(parseutil.StripQuotes(l.text(valueNode)))...)
+			}
 		case "expert_rule_priority":
 			if priNode := child.ChildByFieldName("priority", l.lang); priNode != nil {
 				rule.Priority = int32(parseutil.ParseInt(l.text(priNode)))
@@ -716,10 +750,16 @@ func (l *lowerer) lowerExpertRule(n *gotreesitter.Node) (ExpertRule, error) {
 		case "per_fact":
 			rule.PerFact = true
 		case "expert_rule_cooldown":
+			if rule.CooldownDuration != nil {
+				return ExpertRule{}, fmt.Errorf("duplicate temporal modifier %q", "cooldown")
+			}
 			if durationNode := child.ChildByFieldName("duration", l.lang); durationNode != nil {
 				rule.CooldownDuration = l.lowerTemporalDuration(durationNode)
 			}
 		case "expert_rule_debounce":
+			if rule.DebounceDuration != nil {
+				return ExpertRule{}, fmt.Errorf("duplicate temporal modifier %q", "debounce")
+			}
 			if durationNode := child.ChildByFieldName("duration", l.lang); durationNode != nil {
 				rule.DebounceDuration = l.lowerTemporalDuration(durationNode)
 			}
@@ -1583,6 +1623,45 @@ func normalizeSchemaTypeName(name string) string {
 	default:
 		return name
 	}
+}
+
+func parseTagNames(text string) []string {
+	parts := strings.Split(text, ",")
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		name := strings.TrimSpace(part)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out
+}
+
+func appendUniqueStrings(dst []string, values ...string) []string {
+	if len(values) == 0 {
+		return dst
+	}
+	seen := make(map[string]struct{}, len(dst)+len(values))
+	for _, value := range dst {
+		seen[value] = struct{}{}
+	}
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		dst = append(dst, value)
+	}
+	return dst
 }
 
 func parseSchemaFieldType(text string) FieldType {

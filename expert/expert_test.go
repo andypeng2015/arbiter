@@ -1524,10 +1524,67 @@ expert rule PressureDrop debounce 30s {
 	}
 }
 
-func TestCompileRejectsTemporalForAndDebounceCombination(t *testing.T) {
-	src := []byte(`
+func TestCompileRejectsInvalidTemporalCombinations(t *testing.T) {
+	tests := []struct {
+		name    string
+		source  string
+		message string
+	}{
+		{
+			name: "for and debounce",
+			source: `
 expert rule InvalidTemporal debounce 30s {
 	when { input.hot == true } for 10m
+	then emit HeatWarning {
+		level: "high",
+	}
+}
+`,
+			message: `cannot combine "for" and "debounce"`,
+		},
+		{
+			name: "within and debounce",
+			source: `
+expert rule InvalidTemporal debounce 30s {
+	when { input.hot == true } within 5m
+	then emit HeatWarning {
+		level: "high",
+	}
+}
+`,
+			message: `cannot combine "within" and "debounce"`,
+		},
+		{
+			name: "stable_for and debounce",
+			source: `
+expert rule InvalidTemporal debounce 30s {
+	when { input.hot == true } stable_for 3 cycles
+	then emit HeatWarning {
+		level: "high",
+	}
+}
+`,
+			message: `cannot combine "debounce" and "stable_for"`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			src := []byte(tc.source)
+			if _, err := expert.Compile(src); err == nil || !strings.Contains(err.Error(), tc.message) {
+				t.Fatalf("expert.Compile error = %v, want message %q", err, tc.message)
+			}
+			if _, err := arbiter.Compile(src); err == nil || !strings.Contains(err.Error(), tc.message) {
+				t.Fatalf("arbiter.Compile error = %v, want message %q", err, tc.message)
+			}
+		})
+	}
+}
+
+func TestCompileRejectsDuplicateTemporalModifier(t *testing.T) {
+	src := []byte(`
+expert rule InvalidTemporal debounce 30s debounce 10s {
+	when { input.hot == true }
 	then emit HeatWarning {
 		level: "high",
 	}
@@ -1536,10 +1593,65 @@ expert rule InvalidTemporal debounce 30s {
 
 	_, err := expert.Compile(src)
 	if err == nil {
-		t.Fatal("expected compile to reject for + debounce")
+		t.Fatal("expected compile to reject duplicate debounce")
 	}
-	if !strings.Contains(err.Error(), "for and debounce cannot be combined") {
+	if !strings.Contains(err.Error(), `duplicate temporal modifier "debounce"`) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCompileAllowsCooldownWithWaitingModifier(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{
+			name: "cooldown and debounce",
+			source: `
+expert rule ValidTemporal cooldown 5m debounce 30s {
+	when { input.hot == true }
+	then emit HeatWarning { level: "high" }
+}
+`,
+		},
+		{
+			name: "cooldown and for",
+			source: `
+expert rule ValidTemporal cooldown 5m {
+	when { input.hot == true } for 10m
+	then emit HeatWarning { level: "high" }
+}
+`,
+		},
+		{
+			name: "cooldown and within",
+			source: `
+expert rule ValidTemporal cooldown 5m {
+	when { input.hot == true } within 10m
+	then emit HeatWarning { level: "high" }
+}
+`,
+		},
+		{
+			name: "cooldown and stable_for",
+			source: `
+expert rule ValidTemporal cooldown 5m {
+	when { input.hot == true } stable_for 3 cycles
+	then emit HeatWarning { level: "high" }
+}
+`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := expert.Compile([]byte(tc.source)); err != nil {
+				t.Fatalf("expert.Compile: %v", err)
+			}
+			if _, err := arbiter.Compile([]byte(tc.source)); err != nil {
+				t.Fatalf("arbiter.Compile: %v", err)
+			}
+		})
 	}
 }
 

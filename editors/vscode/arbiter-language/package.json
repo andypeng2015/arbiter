@@ -75,6 +75,11 @@
           "description": "Run `arbiter check` automatically when an .arb file is opened or saved (only used when LSP is not available)."
         }
       }
+    },
+    "configurationDefaults": {
+      "[arbiter]": {
+        "editor.formatOnSave": true
+      }
     }
   },
   "repository": {

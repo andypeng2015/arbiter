@@ -102,6 +102,14 @@ func (c *irCompiler) compileRule(rule *ir.Rule, rs *CompiledRuleset) (RuleHeader
 		rh.PrereqLen++
 	}
 
+	for _, tag := range rule.Tags {
+		if rh.TagLen == 0 {
+			rh.TagOff = uint16(len(rs.Tags))
+		}
+		rs.Tags = append(rs.Tags, c.pool.String(tag))
+		rh.TagLen++
+	}
+
 	for _, exclude := range rule.Excludes {
 		if rh.ExcludeLen == 0 {
 			rh.ExcludeOff = uint16(len(rs.Excludes))

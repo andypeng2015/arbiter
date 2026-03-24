@@ -131,6 +131,12 @@ func MarshalObfuscated(rs *compiler.CompiledRuleset, opts ObfuscateOptions) ([]b
 		}
 	}
 
+	// Tags
+	writeU32(&buf, uint32(len(rs.Tags)))
+	for _, idx := range rs.Tags {
+		writeU16(&buf, idx)
+	}
+
 	// Prereqs
 	if opts.StripPrereqs {
 		writeU32(&buf, 0)
@@ -271,6 +277,13 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 		}
 	}
 
+	// Tags
+	tagCount := readU32(r)
+	tags := make([]uint16, tagCount)
+	for i := range tagCount {
+		tags[i] = readU16(r)
+	}
+
 	// Prereqs / Excludes
 	prereqCount := readU32(r)
 	prereqs := make([]uint16, prereqCount)
@@ -338,6 +351,7 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 		Instructions: instructions,
 		Rules:        rules,
 		Actions:      actions,
+		Tags:         tags,
 		Prereqs:      prereqs,
 		Excludes:     excludes,
 		Tables:       tables,
@@ -386,8 +400,8 @@ func hashString(s string) string {
 
 // --- Binary encoding helpers ---
 
-func writeU16(w *bytes.Buffer, v uint16) { binary.Write(w, binary.LittleEndian, v) }
-func writeU32(w *bytes.Buffer, v uint32) { binary.Write(w, binary.LittleEndian, v) }
+func writeU16(w *bytes.Buffer, v uint16)  { binary.Write(w, binary.LittleEndian, v) }
+func writeU32(w *bytes.Buffer, v uint32)  { binary.Write(w, binary.LittleEndian, v) }
 func writeF64(w *bytes.Buffer, v float64) { binary.Write(w, binary.LittleEndian, v) }
 func writeBool(w *bytes.Buffer, v bool) {
 	if v {
@@ -416,18 +430,24 @@ func writeRuleHeader(w *bytes.Buffer, r compiler.RuleHeader) {
 	writeBool(w, r.HasRolloutNamespace)
 	writeU16(w, r.PrereqOff)
 	writeU16(w, r.PrereqLen)
+	writeU16(w, r.TagOff)
+	writeU16(w, r.TagLen)
 	writeU16(w, r.ExcludeOff)
 	writeU16(w, r.ExcludeLen)
 	writeU16(w, r.SegmentNameIdx)
 	writeBool(w, r.HasSegment)
 }
 
-func readU8(r *bytes.Reader) uint8       { var v uint8; binary.Read(r, binary.LittleEndian, &v); return v }
-func readI32(r *bytes.Reader) int32      { var v int32; binary.Read(r, binary.LittleEndian, &v); return v }
-func readU16(r *bytes.Reader) uint16     { var v uint16; binary.Read(r, binary.LittleEndian, &v); return v }
-func readU32(r *bytes.Reader) uint32     { var v uint32; binary.Read(r, binary.LittleEndian, &v); return v }
-func readF64(r *bytes.Reader) float64    { var v float64; binary.Read(r, binary.LittleEndian, &v); return v }
-func readBool(r *bytes.Reader) bool      { return readU8(r) != 0 }
+func readU8(r *bytes.Reader) uint8   { var v uint8; binary.Read(r, binary.LittleEndian, &v); return v }
+func readI32(r *bytes.Reader) int32  { var v int32; binary.Read(r, binary.LittleEndian, &v); return v }
+func readU16(r *bytes.Reader) uint16 { var v uint16; binary.Read(r, binary.LittleEndian, &v); return v }
+func readU32(r *bytes.Reader) uint32 { var v uint32; binary.Read(r, binary.LittleEndian, &v); return v }
+func readF64(r *bytes.Reader) float64 {
+	var v float64
+	binary.Read(r, binary.LittleEndian, &v)
+	return v
+}
+func readBool(r *bytes.Reader) bool { return readU8(r) != 0 }
 func readString(r *bytes.Reader) string {
 	n := readU32(r)
 	buf := make([]byte, n)
@@ -451,6 +471,8 @@ func readRuleHeader(r *bytes.Reader) compiler.RuleHeader {
 		HasRolloutNamespace: readBool(r),
 		PrereqOff:           readU16(r),
 		PrereqLen:           readU16(r),
+		TagOff:              readU16(r),
+		TagLen:              readU16(r),
 		ExcludeOff:          readU16(r),
 		ExcludeLen:          readU16(r),
 		SegmentNameIdx:      readU16(r),
