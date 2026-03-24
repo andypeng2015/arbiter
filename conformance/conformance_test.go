@@ -592,6 +592,505 @@ func TestConformance_APIParity(t *testing.T) {
 	}
 }
 
+// ── v1.2.0 conformance tests ──────────────────────────────────────────────────
+
+// TestConformance_ActionTypeChecking verifies two things:
+//  1. Programs with outcome schemas that reference invalid action fields are
+//     rejected at compile time (the schema acts as a gate, not just decoration).
+//  2. Programs with valid outcome schemas produce identical evaluation results
+//     to semantically-equivalent programs without any outcome schema.
+func TestConformance_ActionTypeChecking(t *testing.T) {
+	// Invalid field must fail compilation.
+	t.Run("invalid field rejected at compile time", func(t *testing.T) {
+		_, err := arbiter.Compile([]byte(`
+outcome Badge { level: string }
+rule R {
+	when { true }
+	then Badge { level: "gold", bogus: 99 }
+}
+`))
+		if err == nil {
+			t.Fatal("expected compile error for unknown outcome field, got nil")
+		}
+	})
+
+	// Type mismatch must fail compilation.
+	t.Run("type mismatch rejected at compile time", func(t *testing.T) {
+		_, err := arbiter.Compile([]byte(`
+outcome Badge { level: string }
+rule R {
+	when { true }
+	then Badge { level: 42 }
+}
+`))
+		if err == nil {
+			t.Fatal("expected compile error for type mismatch, got nil")
+		}
+	})
+
+	// Valid schema produces identical results to an unschema'd equivalent.
+	srcWithSchema := `
+outcome Reward { amount: number }
+rule R {
+	when { user.active == true }
+	then Reward { amount: 100 }
+}
+`
+	srcWithoutSchema := `
+rule R {
+	when { user.active == true }
+	then Reward { amount: 100 }
+}
+`
+	ctx := map[string]any{"user": map[string]any{"active": true}}
+
+	t.Run("schema vs no-schema produce identical results", func(t *testing.T) {
+		progWith, err := arbiter.Compile([]byte(srcWithSchema))
+		if err != nil {
+			t.Fatalf("Compile(with schema): %v", err)
+		}
+		progWithout, err := arbiter.Compile([]byte(srcWithoutSchema))
+		if err != nil {
+			t.Fatalf("Compile(without schema): %v", err)
+		}
+
+		matchedWith, err := arbiter.Eval(progWith, arbiter.DataFromMap(ctx, progWith))
+		if err != nil {
+			t.Fatalf("Eval(with schema): %v", err)
+		}
+		matchedWithout, err := arbiter.Eval(progWithout, arbiter.DataFromMap(ctx, progWithout))
+		if err != nil {
+			t.Fatalf("Eval(without schema): %v", err)
+		}
+
+		if len(matchedWith) != len(matchedWithout) {
+			t.Fatalf("match count mismatch: with=%d, without=%d",
+				len(matchedWith), len(matchedWithout))
+		}
+		if len(matchedWith) != 1 {
+			t.Fatalf("expected 1 match, got %d", len(matchedWith))
+		}
+		if matchedWith[0].Action != matchedWithout[0].Action {
+			t.Errorf("action mismatch: with=%s, without=%s",
+				matchedWith[0].Action, matchedWithout[0].Action)
+		}
+		if matchedWith[0].Params["amount"] != matchedWithout[0].Params["amount"] {
+			t.Errorf("param mismatch: with=%v, without=%v",
+				matchedWith[0].Params["amount"], matchedWithout[0].Params["amount"])
+		}
+	})
+}
+
+// TestConformance_RegexPreCompilation verifies that pre-compiled regex patterns
+// produce identical match results to a program evaluated without pre-compilation
+// (i.e., same source, same context). Because both use the same compiled ruleset
+// under the hood, this test validates that the pre-compiled Regexes map contains
+// the correct regex and that it matches what runtime evaluation would produce.
+func TestConformance_RegexPreCompilation(t *testing.T) {
+	src := `rule T { when { code matches "^[A-Z]{3}$" } then Match { found: true } }`
+
+	prog, err := arbiter.Compile([]byte(src))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	// Verify the regex was pre-compiled into the ruleset.
+	rs := prog.Ruleset
+	if len(rs.Regexes) == 0 {
+		t.Fatal("expected pre-compiled regex in ruleset, got none")
+	}
+
+	// For each pre-compiled regex, verify it matches correctly.
+	for _, re := range rs.Regexes {
+		if !re.MatchString("ABC") {
+			t.Error("pre-compiled regex should match 'ABC'")
+		}
+		if re.MatchString("ab") {
+			t.Error("pre-compiled regex should not match 'ab'")
+		}
+	}
+
+	cases := []struct {
+		name    string
+		code    string
+		wantHit bool
+	}{
+		{"uppercase three chars matches", "ABC", true},
+		{"lowercase no match", "abc", false},
+		{"too long no match", "ABCD", false},
+		{"exact match XYZ", "XYZ", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := map[string]any{"code": tc.code}
+			matched, err := arbiter.Eval(prog, arbiter.DataFromMap(ctx, prog))
+			if err != nil {
+				t.Fatalf("eval: %v", err)
+			}
+			got := len(matched) > 0
+			if got != tc.wantHit {
+				t.Errorf("code=%q: want match=%v, got match=%v", tc.code, tc.wantHit, got)
+			}
+
+			// Bundle round-trip must produce the same result.
+			blob, err := bundle.Marshal(rs)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			restored, err := bundle.Unmarshal(blob)
+			if err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			sp := vm.NewStringPool(restored.Constants.Strings())
+			dc := vm.DataFromMap(ctx, sp)
+			matchedBundle, err := vm.EvalWithPool(restored, dc, sp)
+			if err != nil {
+				t.Fatalf("bundle eval: %v", err)
+			}
+			gotBundle := len(matchedBundle) > 0
+			if got != gotBundle {
+				t.Errorf("code=%q: native=%v, bundle=%v (diverged)", tc.code, got, gotBundle)
+			}
+		})
+	}
+}
+
+// TestConformance_TableRoundTrip compiles a program containing a table, marshals
+// it to a binary bundle, unmarshals it, and verifies that in-process eval and
+// bundle round-trip eval produce identical results.
+func TestConformance_TableRoundTrip(t *testing.T) {
+	src := `
+table tiers {
+	score: number | label: string
+	90 | "A"
+	80 | "B"
+	70 | "C"
+}
+
+rule Grade {
+	when { student.score >= 70 }
+	then Result {
+		let row = lookup tiers where score <= student.score order by score desc else { score: 0, label: "F" }
+		grade: row.label,
+	}
+}
+`
+	cases := []struct {
+		name        string
+		score       float64
+		wantGrade   string
+		wantMatched bool
+	}{
+		{"score 95 -> A", 95, "A", true},
+		{"score 85 -> B", 85, "B", true},
+		{"score 75 -> C", 75, "C", true},
+		{"score 60 -> no match (below 70)", 60, "", false},
+	}
+
+	prog, err := arbiter.Compile([]byte(src))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	// Marshal once; reuse for all cases.
+	blob, err := bundle.Marshal(prog.Ruleset)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	restored, err := bundle.Unmarshal(blob)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := map[string]any{"student": map[string]any{"score": tc.score}}
+
+			// Native eval.
+			matchedNative, err := arbiter.Eval(prog, arbiter.DataFromMap(ctx, prog))
+			if err != nil {
+				t.Fatalf("native eval: %v", err)
+			}
+
+			// Bundle eval.
+			sp := vm.NewStringPool(restored.Constants.Strings())
+			dc := vm.DataFromMap(ctx, sp)
+			matchedBundle, err := vm.EvalWithPool(restored, dc, sp)
+			if err != nil {
+				t.Fatalf("bundle eval: %v", err)
+			}
+
+			// Both surfaces must agree on match count.
+			if len(matchedNative) != len(matchedBundle) {
+				t.Fatalf("match count diverged: native=%d, bundle=%d",
+					len(matchedNative), len(matchedBundle))
+			}
+
+			if !tc.wantMatched {
+				if len(matchedNative) != 0 {
+					t.Errorf("expected no match for score=%.0f, got %d", tc.score, len(matchedNative))
+				}
+				return
+			}
+
+			if len(matchedNative) != 1 {
+				t.Fatalf("expected 1 match, got %d", len(matchedNative))
+			}
+
+			// Native result.
+			if matchedNative[0].Params["grade"] != tc.wantGrade {
+				t.Errorf("native: expected grade=%s, got %v", tc.wantGrade, matchedNative[0].Params["grade"])
+			}
+			// Bundle result.
+			if matchedBundle[0].Params["grade"] != tc.wantGrade {
+				t.Errorf("bundle: expected grade=%s, got %v", tc.wantGrade, matchedBundle[0].Params["grade"])
+			}
+		})
+	}
+}
+
+// TestConformance_LookupDeterminism verifies that identical table + identical
+// context always produces the same lookup result, and that native eval and
+// bundle round-trip agree across multiple independent evaluations.
+func TestConformance_LookupDeterminism(t *testing.T) {
+	src := `
+table pricing {
+	region: string | tier: string | price: number
+	"US" | "basic" | 9.99
+	"US" | "pro"   | 19.99
+	"EU" | "basic" | 8.99
+	"EU" | "pro"   | 17.99
+}
+
+rule Price {
+	when { order.region != "" }
+	then Charge {
+		let row = lookup pricing where region == order.region and tier == order.tier
+		amount: row.price,
+	}
+}
+`
+	ctx := map[string]any{"order": map[string]any{"region": "EU", "tier": "pro"}}
+	wantPrice := 17.99
+
+	prog, err := arbiter.Compile([]byte(src))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	blob, err := bundle.Marshal(prog.Ruleset)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	restored, err := bundle.Unmarshal(blob)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// Run each surface 5 times; every run must return the same value.
+	const runs = 5
+	for i := range runs {
+		t.Run("native", func(t *testing.T) {
+			matched, err := arbiter.Eval(prog, arbiter.DataFromMap(ctx, prog))
+			if err != nil {
+				t.Fatalf("run %d native eval: %v", i, err)
+			}
+			if len(matched) != 1 {
+				t.Fatalf("run %d: expected 1 match, got %d", i, len(matched))
+			}
+			if matched[0].Params["amount"] != wantPrice {
+				t.Errorf("run %d: expected amount=%.2f, got %v", i, wantPrice, matched[0].Params["amount"])
+			}
+		})
+
+		t.Run("bundle", func(t *testing.T) {
+			sp := vm.NewStringPool(restored.Constants.Strings())
+			dc := vm.DataFromMap(ctx, sp)
+			matched, err := vm.EvalWithPool(restored, dc, sp)
+			if err != nil {
+				t.Fatalf("run %d bundle eval: %v", i, err)
+			}
+			if len(matched) != 1 {
+				t.Fatalf("run %d: expected 1 match, got %d", i, len(matched))
+			}
+			if matched[0].Params["amount"] != wantPrice {
+				t.Errorf("run %d: expected amount=%.2f, got %v", i, wantPrice, matched[0].Params["amount"])
+			}
+		})
+	}
+}
+
+// TestConformance_LookupNullBehavior verifies two properties of lookups without
+// an else clause:
+//  1. A lookup that matches nothing returns null for the bound variable.
+//  2. Accessing a field on the null variable produces null in the action params
+//     (not a runtime error), because field access on null is defined to propagate
+//     null in the Arbiter evaluation model.
+func TestConformance_LookupNullBehavior(t *testing.T) {
+	// Source with no-match lookup and no else — row is null.
+	srcNullField := `
+table ladder {
+	height: number | bitrate: string
+	1080 | "6500k"
+}
+
+rule Transcode {
+	when { job.height >= 100 }
+	then Profile {
+		let row = lookup ladder where height > 9999
+		bitrate: row.bitrate,
+	}
+}
+`
+	// Source with no-match lookup WITH else — row falls back to else value.
+	srcElseFallback := `
+table ladder {
+	height: number | bitrate: string
+	1080 | "6500k"
+}
+
+rule Transcode {
+	when { job.height >= 100 }
+	then Profile {
+		let row = lookup ladder where height > 9999 else { height: 0, bitrate: "fallback" }
+		bitrate: row.bitrate,
+	}
+}
+`
+
+	ctx := map[string]any{"job": map[string]any{"height": 500.0}}
+
+	t.Run("no else: field on null row is null in native eval", func(t *testing.T) {
+		prog, err := arbiter.Compile([]byte(srcNullField))
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		matched, err := arbiter.Eval(prog, arbiter.DataFromMap(ctx, prog))
+		if err != nil {
+			t.Fatalf("eval: %v", err)
+		}
+		if len(matched) != 1 {
+			t.Fatalf("expected 1 match (rule fires), got %d", len(matched))
+		}
+		if matched[0].Params["bitrate"] != nil {
+			t.Errorf("expected null bitrate for no-match/no-else, got %v", matched[0].Params["bitrate"])
+		}
+	})
+
+	t.Run("no else: field on null row is null in bundle round-trip", func(t *testing.T) {
+		prog, err := arbiter.Compile([]byte(srcNullField))
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		blob, err := bundle.Marshal(prog.Ruleset)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		restored, err := bundle.Unmarshal(blob)
+		if err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		sp := vm.NewStringPool(restored.Constants.Strings())
+		dc := vm.DataFromMap(ctx, sp)
+		matched, err := vm.EvalWithPool(restored, dc, sp)
+		if err != nil {
+			t.Fatalf("bundle eval: %v", err)
+		}
+		if len(matched) != 1 {
+			t.Fatalf("expected 1 match, got %d", len(matched))
+		}
+		if matched[0].Params["bitrate"] != nil {
+			t.Errorf("expected null bitrate for no-match/no-else (bundle), got %v", matched[0].Params["bitrate"])
+		}
+	})
+
+	t.Run("with else: field returns else value in native eval", func(t *testing.T) {
+		prog, err := arbiter.Compile([]byte(srcElseFallback))
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		matched, err := arbiter.Eval(prog, arbiter.DataFromMap(ctx, prog))
+		if err != nil {
+			t.Fatalf("eval: %v", err)
+		}
+		if len(matched) != 1 {
+			t.Fatalf("expected 1 match, got %d", len(matched))
+		}
+		if matched[0].Params["bitrate"] != "fallback" {
+			t.Errorf("expected bitrate=fallback from else, got %v", matched[0].Params["bitrate"])
+		}
+	})
+
+	t.Run("with else: field returns else value in bundle round-trip", func(t *testing.T) {
+		prog, err := arbiter.Compile([]byte(srcElseFallback))
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		blob, err := bundle.Marshal(prog.Ruleset)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		restored, err := bundle.Unmarshal(blob)
+		if err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		sp := vm.NewStringPool(restored.Constants.Strings())
+		dc := vm.DataFromMap(ctx, sp)
+		matched, err := vm.EvalWithPool(restored, dc, sp)
+		if err != nil {
+			t.Fatalf("bundle eval: %v", err)
+		}
+		if len(matched) != 1 {
+			t.Fatalf("expected 1 match, got %d", len(matched))
+		}
+		if matched[0].Params["bitrate"] != "fallback" {
+			t.Errorf("expected bitrate=fallback from else (bundle), got %v", matched[0].Params["bitrate"])
+		}
+	})
+
+	// Native and bundle round-trip must agree on null behavior.
+	t.Run("null behavior: native and bundle agree", func(t *testing.T) {
+		prog, err := arbiter.Compile([]byte(srcNullField))
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+
+		matchedNative, err := arbiter.Eval(prog, arbiter.DataFromMap(ctx, prog))
+		if err != nil {
+			t.Fatalf("native eval: %v", err)
+		}
+
+		blob, err := bundle.Marshal(prog.Ruleset)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		restored, err := bundle.Unmarshal(blob)
+		if err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		sp := vm.NewStringPool(restored.Constants.Strings())
+		dc := vm.DataFromMap(ctx, sp)
+		matchedBundle, err := vm.EvalWithPool(restored, dc, sp)
+		if err != nil {
+			t.Fatalf("bundle eval: %v", err)
+		}
+
+		if len(matchedNative) != len(matchedBundle) {
+			t.Fatalf("match count diverged: native=%d, bundle=%d",
+				len(matchedNative), len(matchedBundle))
+		}
+		if len(matchedNative) == 0 {
+			return
+		}
+		nativeBitrate := matchedNative[0].Params["bitrate"]
+		bundleBitrate := matchedBundle[0].Params["bitrate"]
+		if nativeBitrate != bundleBitrate {
+			t.Errorf("bitrate diverged: native=%v, bundle=%v", nativeBitrate, bundleBitrate)
+		}
+	})
+}
+
 // TestConformance_CrossModuleExpert verifies that expert rules in an imported
 // module fire based on working memory contents, not on module ordering. Module
 // A asserts a fact; module B reads that fact and emits an outcome. Both rules
