@@ -308,6 +308,72 @@ func CompileFullParsed(parsed *ParsedSource) (*CompileResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	return compileProgram(program)
+}
+
+// CompileFile compiles a file-backed .arb program with include resolution.
+func CompileFile(path string) (*compiler.CompiledRuleset, error) {
+	unit, parsed, err := LoadFileParsed(path)
+	if err != nil {
+		return nil, err
+	}
+	rs, err := CompileParsed(parsed)
+	if err != nil {
+		return nil, WrapFileError(unit, err)
+	}
+	return rs, nil
+}
+
+// CompileFullFile compiles a file-backed .arb program with include resolution.
+// When the source contains import declarations, it uses the module system to
+// recursively resolve, prefix, and merge imported modules before compilation.
+func CompileFullFile(path string) (*CompileResult, error) {
+	unit, parsed, err := LoadFileParsed(path)
+	if err != nil {
+		return nil, err
+	}
+
+	program, err := ir.Lower(parsed.Root, parsed.Source, parsed.Lang)
+	if err != nil {
+		return nil, WrapFileError(unit, err)
+	}
+
+	// If the program has imports, use the module system.
+	if len(program.Imports) > 0 {
+		// Import and include are mutually exclusive.
+		if len(unit.Files) > 1 {
+			return nil, fmt.Errorf("cannot use import and include in the same file")
+		}
+
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %s: %w", path, err)
+		}
+		manifest, err := findManifest(absPath)
+		if err != nil {
+			return nil, err
+		}
+		root := filepath.Dir(absPath)
+		if manifest != nil {
+			root = manifest.dir
+		}
+		resolver := newModuleResolver(root)
+		tree, err := loadModuleTree(program, absPath, resolver)
+		if err != nil {
+			return nil, err
+		}
+		program = mergeModules(tree)
+	}
+
+	full, err := compileProgram(program)
+	if err != nil {
+		return nil, WrapFileError(unit, err)
+	}
+	return full, nil
+}
+
+// compileProgram compiles a pre-lowered IR program through the standard pipeline.
+func compileProgram(program *ir.Program) (*CompileResult, error) {
 	if err := validateProgram(program); err != nil {
 		return nil, err
 	}
@@ -340,32 +406,6 @@ func CompileFullParsed(parsed *ParsedSource) (*CompileResult, error) {
 		Arbiters:   arbiters,
 		Program:    program,
 	}, nil
-}
-
-// CompileFile compiles a file-backed .arb program with include resolution.
-func CompileFile(path string) (*compiler.CompiledRuleset, error) {
-	unit, parsed, err := LoadFileParsed(path)
-	if err != nil {
-		return nil, err
-	}
-	rs, err := CompileParsed(parsed)
-	if err != nil {
-		return nil, WrapFileError(unit, err)
-	}
-	return rs, nil
-}
-
-// CompileFullFile compiles a file-backed .arb program with include resolution.
-func CompileFullFile(path string) (*CompileResult, error) {
-	unit, parsed, err := LoadFileParsed(path)
-	if err != nil {
-		return nil, err
-	}
-	full, err := CompileFullParsed(parsed)
-	if err != nil {
-		return nil, WrapFileError(unit, err)
-	}
-	return full, nil
 }
 
 type sourceUnitLoader struct {
