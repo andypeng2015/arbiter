@@ -31,7 +31,8 @@ top_level_declaration
                    | arbiter_declaration
                    | include_declaration
                    | import_declaration
-                   | input_declaration ;
+                   | input_declaration
+                   | table_declaration ;
 
 include_declaration = "include" string_literal ;
 
@@ -91,6 +92,22 @@ type_name          = "number"
                    | "list" "<" type_name ">" ;
 ```
 
+## Tables
+
+```ebnf
+table_declaration  = "table" identifier "{"
+                       table_header_row
+                       { table_data_row }
+                     "}" ;
+
+table_header_row   = table_column_header { "|" table_column_header } ;
+
+table_column_header
+                   = identifier ":" schema_type_name ;
+
+table_data_row     = literal { "|" literal } ;
+```
+
 ## Strategies
 
 ```ebnf
@@ -139,7 +156,7 @@ when_clause        = "when" [ "segment" qualified_name ] "{" { let_binding } exp
 then_clause        = "then" action_block ;
 otherwise_clause   = "otherwise" action_block ;
 
-action_block       = identifier "{" { param_assignment } "}" ;
+action_block       = identifier "{" { let_binding } { param_assignment } "}" ;
 param_assignment   = identifier ":" expression [ "," ] ;
 ```
 
@@ -327,7 +344,20 @@ value_expression   = math_expr
 
 math_expr          = value_expression ( "+" | "-" | "*" | "/" | "%" ) value_expression ;
 
-let_binding        = "let" identifier "=" expression ;
+let_binding        = "let" identifier "=" ( lookup_expr | expression ) ;
+
+lookup_expr        = "lookup" identifier
+                     [ lookup_where_clause ]
+                     [ lookup_order_clause ]
+                     [ lookup_else_clause ] ;
+
+lookup_where_clause
+                   = "where" expression ;
+
+lookup_order_clause
+                   = "order" "by" identifier ( "asc" | "desc" ) ;
+
+lookup_else_clause = "else" "{" { param_assignment } "}" ;
 
 primary_expr       = call_expr
                    | member_expression
