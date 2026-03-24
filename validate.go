@@ -23,19 +23,32 @@ const (
 	schemaBaseObject    = "object"
 )
 
-func validateProgram(program *ir.Program) error {
+func validateProgram(program *ir.Program) ([]Diagnostic, error) {
 	if program == nil {
-		return nil
+		return nil, nil
 	}
 	validator := &programValidator{program: program}
 	if err := validator.normalizeSchemas(); err != nil {
-		return err
+		return nil, err
 	}
-	return validator.validate()
+	if err := validator.validate(); err != nil {
+		return nil, err
+	}
+	return validator.warnings, nil
 }
 
 type programValidator struct {
-	program *ir.Program
+	program  *ir.Program
+	warnings []Diagnostic
+}
+
+func (v *programValidator) warn(span ir.Span, msg string) {
+	v.warnings = append(v.warnings, Diagnostic{
+		Severity: DiagWarning,
+		Message:  msg,
+		Line:     int(span.StartRow) + 1,
+		Col:      int(span.StartCol) + 1,
+	})
 }
 
 type exprType struct {
@@ -192,6 +205,11 @@ func validateFieldType(fieldType ir.FieldType, span ir.Span, context string) err
 func (v *programValidator) validate() error {
 	var errs []error
 	env := newValidationEnv()
+	for i := range v.program.Tables {
+		if err := v.validateTable(&v.program.Tables[i]); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	for i := range v.program.Consts {
 		if _, err := v.validateExpr(v.program.Consts[i].Value, env); err != nil {
 			errs = append(errs, err)
@@ -459,6 +477,56 @@ func (v *programValidator) validateArbiter(arb *ir.Arbiter) error {
 	return nil
 }
 
+func (v *programValidator) validateTable(table *ir.Table) error {
+	if table == nil {
+		return nil
+	}
+	// Warn if any column name shadows a root input field.
+	if v.program.Input != nil {
+		inputRoots := make(map[string]struct{}, len(v.program.Input.Fields))
+		for _, f := range v.program.Input.Fields {
+			inputRoots[f.Name] = struct{}{}
+		}
+		for _, col := range table.Columns {
+			if _, ok := inputRoots[col.Name]; ok {
+				v.warn(table.Span, fmt.Sprintf("table column %q shadows input field %q", col.Name, col.Name))
+			}
+		}
+	}
+	// Validate each row: correct number of values and matching column types.
+	for _, row := range table.Rows {
+		if len(row.Values) != len(table.Columns) {
+			return spanError(row.Span, "table %s: row has %d values but table has %d columns",
+				table.Name, len(row.Values), len(table.Columns))
+		}
+		for i, exprID := range row.Values {
+			col := table.Columns[i]
+			valueType, err := v.validateExpr(exprID, newValidationEnv())
+			if err != nil {
+				return err
+			}
+			if !valueType.isKnown() {
+				continue
+			}
+			field := ir.SchemaField{
+				Name:     col.Name,
+				Type:     col.Type,
+				Required: true,
+			}
+			if !assignableToField(valueType, field) {
+				expr := v.program.Expr(exprID)
+				span := table.Span
+				if expr != nil {
+					span = expr.Span
+				}
+				return spanError(span, "table %s: column %q expects %s, got %s",
+					table.Name, col.Name, col.Type.Base, valueType.String())
+			}
+		}
+	}
+	return nil
+}
+
 func (v *programValidator) validateWorker(worker *ir.Worker) error {
 	if worker == nil {
 		return nil
@@ -651,7 +719,12 @@ func (v *programValidator) validateStrategyOutcomeParams(strategy *ir.Strategy, 
 }
 
 func (v *programValidator) validateRuleAction(rule *ir.Rule, action *ir.Action, env *validationEnv) error {
-	if err := v.validateParams(action.Params, env); err != nil {
+	// Validate action-level let bindings and extend the environment with them.
+	actionEnv, err := v.validateLets(action.Lets, env)
+	if err != nil {
+		return err
+	}
+	if err := v.validateParams(action.Params, actionEnv); err != nil {
 		return err
 	}
 	schema, ok := v.program.OutcomeSchemaByName(action.Name)
@@ -669,7 +742,7 @@ func (v *programValidator) validateRuleAction(rule *ir.Rule, action *ir.Action, 
 		if !ok {
 			return spanError(param.Span, "rule %s action %s: unknown field %q", rule.Name, action.Name, param.Key)
 		}
-		if err := v.validateAssignedType(param.Value, field, env, rule.Name, "action", action.Name); err != nil {
+		if err := v.validateAssignedType(param.Value, field, actionEnv, rule.Name, "action", action.Name); err != nil {
 			return err
 		}
 		delete(required, param.Key)
@@ -812,6 +885,8 @@ func (v *programValidator) validateExpr(exprID ir.ExprID, env *validationEnv) (e
 		return v.validateAggregate(expr, env)
 	case ir.ExprBuiltinCall:
 		return v.validateBuiltinCall(expr, env)
+	case ir.ExprLookup:
+		return v.validateLookup(expr, env)
 	default:
 		return exprType{}, nil
 	}
@@ -870,6 +945,11 @@ func (v *programValidator) validateVarRef(expr *ir.Expr, env *validationEnv) (ex
 		return binding.typ, nil
 	}
 	if binding.typ.Schema == nil {
+		// If the binding type is unknown (e.g. a lookup result), field access is
+		// allowed and resolves to unknown rather than a hard error.
+		if !binding.typ.isKnown() {
+			return exprType{}, nil
+		}
 		return exprType{}, spanError(expr.Span, "cannot access field %q on %s", expr.Path, binding.typ.String())
 	}
 	field, ok := factSchemaField(binding.typ.Schema, parts[1])
@@ -1084,6 +1164,48 @@ func (v *programValidator) validateBuiltinCall(expr *ir.Expr, env *validationEnv
 	default:
 		return exprType{}, spanError(expr.Span, "unknown builtin %q", expr.FuncName)
 	}
+}
+
+func (v *programValidator) validateLookup(expr *ir.Expr, env *validationEnv) (exprType, error) {
+	if expr == nil {
+		return exprType{}, nil
+	}
+	// Verify the referenced table exists.
+	table, ok := v.program.TableByName(expr.TableName)
+	if !ok {
+		return exprType{}, spanError(expr.Span, "lookup references unknown table %q", expr.TableName)
+	}
+	// Build a set of valid column names for subsequent checks.
+	colSet := make(map[string]struct{}, len(table.Columns))
+	for _, col := range table.Columns {
+		colSet[col.Name] = struct{}{}
+	}
+	// Validate the where clause — must be boolean.
+	if expr.Where != 0 {
+		if err := v.validateCondition(expr.Where, env, "lookup "+expr.TableName); err != nil {
+			return exprType{}, err
+		}
+	}
+	// Validate the sort column.
+	if expr.SortCol != "" {
+		if _, ok := colSet[expr.SortCol]; !ok {
+			return exprType{}, spanError(expr.Span, "lookup %s: sort column %q is not a valid column name",
+				expr.TableName, expr.SortCol)
+		}
+	}
+	// Validate the else keys.
+	for _, key := range expr.ElseKeys {
+		if _, ok := colSet[key]; !ok {
+			return exprType{}, spanError(expr.Span, "lookup %s: else key %q is not a valid column name",
+				expr.TableName, key)
+		}
+	}
+	// Warn if no else is provided.
+	if len(expr.ElseKeys) == 0 {
+		v.warn(expr.Span, "lookup without else may return null")
+	}
+	// The result is an opaque object (table row or null); callers use field access on it.
+	return exprType{}, nil
 }
 
 func (v *programValidator) factSchemaForCollection(exprID ir.ExprID) *ir.FactSchema {

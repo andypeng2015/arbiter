@@ -1,6 +1,7 @@
 package arbiter
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -287,5 +288,134 @@ rule Price {
 	}
 	if matched[0].Params["rate"] != 17.99 {
 		t.Fatalf("expected rate=17.99, got %v", matched[0].Params["rate"])
+	}
+}
+
+func TestTableRejectsColumnTypeMismatch(t *testing.T) {
+	src := []byte(`
+table t {
+    x: number
+    "not_a_number"
+}
+
+rule R {
+    when { true }
+    then Out {}
+}
+`)
+	_, err := Compile(src)
+	if err == nil {
+		t.Fatal("expected error for column type mismatch, got nil")
+	}
+	if !strings.Contains(err.Error(), "type mismatch") && !strings.Contains(err.Error(), "expects number") && !strings.Contains(err.Error(), "column") {
+		t.Fatalf("expected descriptive type error, got: %v", err)
+	}
+}
+
+func TestTableLookupWithoutElseWarns(t *testing.T) {
+	src := []byte(`
+table ladder {
+    height: number | bitrate: string
+    1080 | "6500k"
+    720 | "3800k"
+}
+
+rule Transcode {
+    when { job.height >= 480 }
+    then Profile {
+        let row = lookup ladder where height <= job.height order by height desc
+        bitrate: row.bitrate,
+    }
+}
+`)
+	prog, err := Compile(src)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	found := false
+	for _, w := range prog.Warnings {
+		if strings.Contains(w.Message, "else") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected warning about missing else, got warnings: %v", prog.Warnings)
+	}
+}
+
+func TestTableColumnShadowsInputWarns(t *testing.T) {
+	src := []byte(`
+input {
+    job: {
+        height: number
+    }
+}
+
+table ladder {
+    job: string
+    "engineer"
+    "manager"
+}
+
+rule R {
+    when { true }
+    then Out {}
+}
+`)
+	prog, err := Compile(src)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	found := false
+	for _, w := range prog.Warnings {
+		if strings.Contains(w.Message, "shadows") && strings.Contains(w.Message, "job") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected shadow warning for column 'job', got warnings: %v", prog.Warnings)
+	}
+}
+
+func TestTableLookupRejectsUnknownTable(t *testing.T) {
+	src := []byte(`
+rule R {
+    when { true }
+    then Out {
+        let row = lookup nonexistent where x > 0
+        val: row.val,
+    }
+}
+`)
+	_, err := Compile(src)
+	if err == nil {
+		t.Fatal("expected error for unknown table, got nil")
+	}
+	if !strings.Contains(err.Error(), "nonexistent") {
+		t.Fatalf("expected error mentioning table name, got: %v", err)
+	}
+}
+
+func TestTableLookupRejectsUnknownSortColumn(t *testing.T) {
+	src := []byte(`
+table ladder {
+    height: number | bitrate: string
+    1080 | "6500k"
+}
+
+rule Transcode {
+    when { true }
+    then Profile {
+        let row = lookup ladder where height > 0 order by nonexistent_col desc
+        bitrate: row.bitrate,
+    }
+}
+`)
+	_, err := Compile(src)
+	if err == nil {
+		t.Fatal("expected error for unknown sort column, got nil")
+	}
+	if !strings.Contains(err.Error(), "nonexistent_col") {
+		t.Fatalf("expected error mentioning column name, got: %v", err)
 	}
 }
