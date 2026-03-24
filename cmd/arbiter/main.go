@@ -33,14 +33,15 @@ import (
 	"github.com/odvcencio/arbiter"
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/arbtest"
-	"github.com/odvcencio/arbiter/bundle"
-	"github.com/odvcencio/arbiter/format"
 	"github.com/odvcencio/arbiter/audit"
+	"github.com/odvcencio/arbiter/bundle"
 	"github.com/odvcencio/arbiter/decompile"
 	"github.com/odvcencio/arbiter/expert"
 	explorepkg "github.com/odvcencio/arbiter/explore"
 	"github.com/odvcencio/arbiter/flags"
+	"github.com/odvcencio/arbiter/format"
 	"github.com/odvcencio/arbiter/grpcserver"
+	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/overrides"
 	"google.golang.org/grpc"
 )
@@ -285,6 +286,7 @@ func runServe(args []string) error {
 	auditFile := ""
 	bundleFile := ""
 	overridesFile := ""
+	logLevel := "info"
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--grpc" && i+1 < len(args) {
 			grpcAddr = args[i+1]
@@ -302,8 +304,12 @@ func runServe(args []string) error {
 			overridesFile = args[i+1]
 			i++
 		}
+		if args[i] == "--log-level" && i+1 < len(args) {
+			logLevel = args[i+1]
+			i++
+		}
 	}
-	return serveCmd(grpcAddr, auditFile, bundleFile, overridesFile)
+	return serveCmd(grpcAddr, auditFile, bundleFile, overridesFile, logLevel)
 }
 
 func formatCLIError(err error) string {
@@ -666,7 +672,9 @@ func importCmd(path, outPath string) error {
 	return fmt.Errorf("cannot parse %s: expected Arishem JSON with rules array, rule array, or single rule", path)
 }
 
-func serveCmd(grpcAddr, auditFile, bundleFile, overridesFile string) error {
+func serveCmd(grpcAddr, auditFile, bundleFile, overridesFile, logLevel string) error {
+	logger := observability.NewLogger(observability.ParseLevel(logLevel))
+
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", grpcAddr, err)
@@ -702,9 +710,9 @@ func serveCmd(grpcAddr, auditFile, bundleFile, overridesFile string) error {
 	}
 
 	grpcSrv := grpc.NewServer()
-	arbiterv1.RegisterArbiterServiceServer(grpcSrv, grpcserver.NewServer(registry, store, sink))
+	arbiterv1.RegisterArbiterServiceServer(grpcSrv, grpcserver.NewServerWithLogger(registry, store, sink, logger))
 
-	fmt.Fprintf(os.Stderr, "arbiter gRPC listening on %s\n", grpcAddr)
+	logger.Info("arbiter gRPC listening", "addr", grpcAddr)
 	return grpcSrv.Serve(lis)
 }
 

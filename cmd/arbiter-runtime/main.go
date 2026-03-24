@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,6 +22,7 @@ import (
 	"time"
 
 	arbiter "github.com/odvcencio/arbiter"
+	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/workflow"
 )
 
@@ -31,12 +32,15 @@ func main() {
 	statusAddr := flag.String("status", ":7082", "health/status HTTP address")
 	checkpointDir := flag.String("checkpoint", "", "directory for checkpoint files")
 	deliveryLog := flag.String("delivery-log", "", "path for delivery journal (JSONL)")
+	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	flag.Parse()
 
 	if *bundlePath == "" {
 		fmt.Fprintln(os.Stderr, "Usage: arbiter-runtime --bundle <file.arb> [flags]")
 		os.Exit(2)
 	}
+
+	logger := observability.NewLogger(observability.ParseLevel(*logLevel))
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -46,15 +50,17 @@ func main() {
 		statusAddr:    *statusAddr,
 		checkpointDir: *checkpointDir,
 		deliveryLog:   *deliveryLog,
-	})
+	}, logger)
 	if err != nil {
-		log.Fatalf("init: %v", err)
+		logger.Error("init failed", observability.KeyError, err.Error())
+		os.Exit(1)
 	}
 
 	if err := rt.run(ctx); err != nil && ctx.Err() == nil {
-		log.Fatalf("runtime: %v", err)
+		logger.Error("runtime error", observability.KeyError, err.Error())
+		os.Exit(1)
 	}
-	log.Println("shutdown complete")
+	logger.Info("shutdown complete")
 }
 
 type runtimeConfig struct {
@@ -69,6 +75,7 @@ type runtime struct {
 	runner  *workflow.Runner
 	wf      *workflow.Workflow
 	full    *arbiter.CompileResult
+	logger  *slog.Logger
 
 	mu         sync.RWMutex
 	lastTick   time.Time
@@ -78,7 +85,10 @@ type runtime struct {
 	ready      bool
 }
 
-func newRuntime(bundlePath string, config runtimeConfig) (*runtime, error) {
+func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*runtime, error) {
+	if logger == nil {
+		logger = observability.NewLogger(observability.ParseLevel("info"))
+	}
 	full, err := arbiter.CompileFullFile(bundlePath)
 	if err != nil {
 		return nil, fmt.Errorf("compile %s: %w", bundlePath, err)
@@ -93,7 +103,7 @@ func newRuntime(bundlePath string, config runtimeConfig) (*runtime, error) {
 	}
 
 	runner, err := workflow.NewRunner(wf, workflow.RunnerOptions{
-		Handlers:       defaultOutcomeHandlers(),
+		Handlers:       defaultOutcomeHandlers(logger),
 		WorkerHandlers: defaultWorkerHandlers(),
 		DeliveryLog:    config.deliveryLog,
 		Stdout:         os.Stdout,
@@ -102,14 +112,18 @@ func newRuntime(bundlePath string, config runtimeConfig) (*runtime, error) {
 		return nil, fmt.Errorf("create runner: %w", err)
 	}
 
-	log.Printf("loaded %s: %d arbiters, %d workers, %d external sources",
-		bundlePath, len(full.Arbiters), len(full.Workers), len(wf.ExternalSources()))
+	logger.Info("bundle loaded",
+		observability.KeySource, bundlePath,
+		observability.KeyArbiter, len(full.Arbiters),
+		observability.KeyWorker, len(full.Workers),
+		"external_sources", len(wf.ExternalSources()))
 
 	return &runtime{
 		config: config,
 		runner: runner,
 		wf:     wf,
 		full:   full,
+		logger: logger,
 	}, nil
 }
 
@@ -117,9 +131,9 @@ func (rt *runtime) run(ctx context.Context) error {
 	// Start health server.
 	srv := &http.Server{Addr: rt.config.statusAddr, Handler: rt.statusMux()}
 	go func() {
-		log.Printf("status server listening on %s", rt.config.statusAddr)
+		rt.logger.Info("status server listening", "addr", rt.config.statusAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("status server: %v", err)
+			rt.logger.Error("status server error", observability.KeyError, err.Error())
 		}
 	}()
 
@@ -153,10 +167,13 @@ func (rt *runtime) tick(ctx context.Context) {
 	rt.ready = true
 	if err != nil {
 		rt.errors++
-		log.Printf("tick %d: error: %v", rt.tickCount, err)
+		rt.logger.Error("tick error",
+			"tick", rt.tickCount,
+			observability.KeyError, err.Error())
 	} else {
 		rt.lastResult = result
 	}
+	tick := rt.tickCount
 	rt.mu.Unlock()
 
 	if err == nil {
@@ -165,9 +182,13 @@ func (rt *runtime) tick(ctx context.Context) {
 			outcomes += len(arb.Delta.Outcomes)
 		}
 		if outcomes > 0 || result.Delivered > 0 {
-			log.Printf("tick %d: %d outcomes, %d delivered, %d enqueued, %d retried (%.0fms)",
-				rt.tickCount, outcomes, result.Delivered, result.Enqueued, result.Retried,
-				time.Since(start).Seconds()*1000)
+			rt.logger.Info("tick complete",
+				"tick", tick,
+				"outcomes", outcomes,
+				"delivered", result.Delivered,
+				"enqueued", result.Enqueued,
+				"retried", result.Retried,
+				"duration_ms", int64(time.Since(start).Seconds()*1000))
 		}
 	}
 }
@@ -220,9 +241,13 @@ func (rt *runtime) handleStatus(w http.ResponseWriter, _ *http.Request) {
 
 // --- Default Handlers ---
 
-func defaultOutcomeHandlers() map[arbiter.ArbiterHandlerKind]workflow.OutcomeHandler {
+func defaultOutcomeHandlers(logger *slog.Logger) map[arbiter.ArbiterHandlerKind]workflow.OutcomeHandler {
 	logHandler := workflow.OutcomeHandlerFunc(func(_ context.Context, d workflow.Delivery) error {
-		log.Printf("[%s] %s → %s %s", d.Handler.Kind, d.Arbiter, d.Outcome.Name, d.Handler.Target)
+		logger.Info("outcome delivered",
+			observability.KeyHandlerKind, string(d.Handler.Kind),
+			observability.KeyArbiter, d.Arbiter,
+			"outcome", d.Outcome.Name,
+			"target", d.Handler.Target)
 		return nil
 	})
 	return map[arbiter.ArbiterHandlerKind]workflow.OutcomeHandler{
