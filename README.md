@@ -6,8 +6,8 @@ Every decision your software makes — approve this transaction, show this varia
 
 ```text
 .arb source ──→ Parser ──→ Compiler ──→ Bytecode VM (~200ns simple eval)
-                              │
-                              └──→ Arishem JSON (compatibility)
+                  │                         │
+                  └──→ Module imports        └──→ Binary bundle (edge/mobile)
 ```
 
 Four modalities, one language. **Stateless evaluation** for request-path decisions. **Feature flags** for governed variant resolution. **Expert inference** for forward-chaining reasoning until quiescence. **Continuous arbiters** for always-on decision loops. Same compiler, same VM, same governance.
@@ -415,7 +415,9 @@ When the store is opened from a file, override mutations are persisted on every 
 
 ### gRPC API
 
-Arbiter ships a gRPC server that bundles compilation, evaluation, flag resolution, expert sessions, runtime overrides, and audit logging into a single service.
+Arbiter ships a gRPC server with compilation, evaluation, flag resolution, expert sessions, runtime overrides, audit logging, and full observability (Prometheus metrics, structured logging via `slog`, OpenTelemetry trace propagation).
+
+The server exposes two listeners: gRPC for API traffic, HTTP for `/metrics`, `/healthz`, `/readyz`, `/status`.
 
 ```protobuf
 service ArbiterService {
@@ -468,7 +470,21 @@ go install github.com/odvcencio/arbiter/cmd/arbiter@latest
 
 ## Editor Support
 
-Tree-sitter consumers can use [highlights.scm](highlights.scm) directly for `.arb` highlighting. A minimal VS Code language package also ships in [editors/vscode/arbiter-language](editors/vscode/arbiter-language) with syntax highlighting, snippets, and `arbiter check` diagnostics on open/save.
+The Arbiter LSP (`arbiter-lsp`) provides:
+
+- **Diagnostics** — compile errors with source locations, including cross-module import errors
+- **Completions** — facts, outcomes, segments, strategies, rules, keywords with context
+- **Hover** — schema fields, rule summaries with priorities
+- **Go-to-definition** — jump to any declaration across files
+- **Find references** — all usage sites for any declaration
+- **Rename** — whole-word rename with word-boundary checking
+- **Document symbols** — outline view of all declarations
+- **Formatting** — canonical formatting including table column alignment
+- **Semantic highlighting** — color-codes fact/outcome names, table names, member access, and module prefixes
+- **Code actions** — add missing outcome fields, add `else` to lookup, add `requires`, import quick fix
+- **Multi-file diagnostics** — errors in imported modules surface in both files
+
+The VS Code extension ships in [editors/vscode/arbiter-language](editors/vscode/arbiter-language) with format-on-save enabled by default. Tree-sitter consumers can use [highlights.scm](highlights.scm) directly.
 
 ## Usage
 
@@ -513,7 +529,7 @@ rules/segments.arb:14:1: rule EnterpriseDecision: rollout must be between 0 and 
 You can embed governed rule evaluation directly into an existing `net/http` service. The middleware evaluates once per request, stores the result on the request context, and lets the next handler decide how to act on it.
 
 ```go
-compiled, err := arbiter.CompileFullFile("rules.arb")
+compiled, err := arbiter.CompileFile("rules.arb")
 if err != nil {
 	log.Fatal(err)
 }
@@ -550,34 +566,27 @@ For stricter production behavior, use `arbiter.MiddlewareWithOptions` to supply 
 ### Go Library — Stateless Rules
 
 ```go
-ruleset, _ := arbiter.Compile(source)
-dc := arbiter.DataFromMap(data, ruleset)
+prog, _ := arbiter.Compile(source)
+dc := arbiter.DataFromMap(data, prog)
 
 // Fast path — no governance
-matched, _ := arbiter.Eval(ruleset, dc)
+matched, _ := arbiter.Eval(prog, dc)
 
 // Governed path — segments, kill switches, rollouts, prerequisites, trace
-result, _ := arbiter.CompileFull(source)
-matched, trace, _ := arbiter.EvalGoverned(result.Ruleset, dc, result.Segments, ctx)
+matched, trace, _ := arbiter.EvalGoverned(prog, dc, prog.Segments, ctx)
+
+// Selective evaluation — filter by tags
+matched, _ = arbiter.Eval(prog, dc, arbiter.WithTags("fraud"))
 ```
 
-Use file-aware APIs when your source uses `include`:
+Use file-aware APIs when your source uses `import` or `include`:
 
 ```go
-ruleset, _ := arbiter.CompileFile("rules/main.arb")
-full, _ := arbiter.CompileFullFile("rules/main.arb")
-json, _ := arbiter.TranspileFile("rules/main.arb")
+prog, _ := arbiter.CompileFile("rules/main.arb")
+prog, _ = arbiter.CompileFile("rules/main.arb", arbiter.WithManifest("arbiter.toml"))
 ```
 
-Continuous arbiters come back on the same compile path:
-
-```go
-full, _ := arbiter.CompileFull(source)
-for _, decl := range full.Arbiters {
-    fmt.Printf("%s killable=%t triggers=%d checkpoint=%q\n",
-        decl.Name, decl.Killable, len(decl.Triggers), decl.Checkpoint)
-}
-```
+`Compile` returns a unified `*Program` with `Ruleset`, `Segments`, `Strategies`, `Input`, `IR`, and `Warnings`.
 
 ### Go Library — Flags
 
@@ -654,9 +663,10 @@ dc, _ := arishem.DataContext(ctx, inputJSON)
 arishem.ExecuteRules([]arishem.RuleTarget{rule}, dc)
 
 // After (Arbiter — 72MB for 10K rules, ~223ns/rule eval)
-ruleset, _ := arbiter.CompileJSONRules([]arbiter.JSONRule{{name, priority, condJSON, actJSON}})
-dc, _ := arbiter.DataFromJSON(inputJSON, ruleset)
-matched, _ := arbiter.Eval(ruleset, dc)
+src, _ := arbiter.ConvertJSONRules([]arbiter.JSONRule{{name, priority, condJSON, actJSON}})
+prog, _ := arbiter.Compile(src)
+dc, _ := arbiter.DataFromJSON(inputJSON, prog)
+matched, _ := arbiter.Eval(prog, dc)
 ```
 
 ## Language
@@ -684,20 +694,93 @@ const VIP_THRESHOLD = 1000
 const PREMIUM_TIERS = ["gold", "platinum"]
 ```
 
-### Includes
+### Modules
 
-Split one program across multiple files. Each included file is a valid `.arb` fragment.
+Split programs across files with namespaced imports. An `arbiter.toml` manifest at the project root anchors import resolution.
+
+```arb
+import "fraud/scoring"
+import "fraud/scoring" as fs
+```
+
+Imported declarations are accessed via namespace: `requires scoring.BaseRule`, `segment scoring.HighRisk`. All top-level declarations are visible — no export gating. Circular imports are a compile error.
+
+```toml
+# arbiter.toml
+[project]
+name = "acme-fraud"
+version = "1.3.0"
+```
+
+### Input Schemas
+
+Declare expected input shape for compile-time path validation.
+
+```arb
+input {
+    user: {
+        id: string
+        age: number
+        balance: decimal<USD>
+    }
+    request: {
+        amount: decimal<USD>
+        tags: list<string>
+    }
+}
+```
+
+Unknown paths and type mismatches are compile errors. Optional when absent — v1.0 runtime behavior unchanged.
+
+### Tables
+
+Named immutable data for lookup-driven decisions. Replaces combinatorial rule explosion.
+
+```arb
+table h264_ladder {
+    height: number | video_bitrate: string | audio_bitrate: string | preset: string
+    1080           | "6500k"               | "160k"              | "p3"
+    720            | "3800k"               | "128k"              | "p3"
+    480            | "1200k"               | "96k"               | "p2"
+}
+
+rule Transcode {
+    when { job.codec == "h264" }
+    then Profile {
+        let row = lookup h264_ladder
+            where height <= job.target_height
+            order by height desc
+            else { height: 0, video_bitrate: "800k", audio_bitrate: "96k", preset: "p2" }
+        video_bitrate: row.video_bitrate,
+        audio_bitrate: row.audio_bitrate,
+    }
+}
+```
+
+### Tags
+
+Organize rules into groups for selective evaluation.
+
+```arb
+tag "fraud"
+tags "realtime,batch"
+
+rule HighValue tag "fraud" tag "realtime" {
+    when { transaction.amount > 5000 USD }
+    then Flag { reason: "high value" }
+}
+```
+
+Evaluate subsets: `arbiter.Eval(prog, dc, arbiter.WithTags("fraud"))`. Tags are a closed set — undeclared tags are compile errors.
+
+### Includes (Deprecated)
+
+`include` still works but emits a deprecation warning. Use `import` for new code.
 
 ```arb
 include "schema.arb"
-include "constants.arb"
 include "segments.arb"
-include "phase1_gross_income.arb"
-include "phase2_deductions.arb"
-include "phase3_agi.arb"
 ```
-
-The compiler expands the include graph into one compilation unit. Constants, segments, rules, expert rules, and prerequisites work across file boundaries. `include` is file-based: use `CompileFile`, `CompileFullFile`, `TranspileFile`, `flags.LoadFile`, or `expert.CompileFile` when it is present.
 
 ### Rules
 
@@ -971,24 +1054,30 @@ go build -tags grammar_blobs_external -o arbiter-runtime ./cmd/arbiter-runtime
 ## Architecture
 
 ```text
-intern/       Constant pool — deduplicates strings and numbers across all rules
-compiler/     CST → IR → bytecode compiler (with constant folding) + Arishem JSON loader
-ir/           Intermediate representation with optimization passes (constant folding)
-vm/           Stack-based bytecode VM (fixed 256-element stack, thread-safe string pool)
-govern/       Governance primitives: segments, rollouts, kill switches, prerequisites, trace
-flags/        Feature flags: variants, schema validation, secret references, hot reload
-strategy/     Native decision trees: exactly-one governed routing with trace
-expert/       Forward-chaining inference: working memory, assert/emit/retract/modify, activation trace
-workflow/     Multi-arbiter chaining: outcome→fact mapping, topological ordering, delivery
-audit/        Durable decision logging (Sink interface, JSONL default)
-overrides/    Runtime governance overrides (kill switches, rollout percentages)
-grpcserver/   gRPC service: bundle registry, evaluation, flag resolution, expert sessions
-dataplane/    Agent sidecar: local compiled cache, bundle/override watch streams
-arbtest/      Test framework: .test.arb files for rules, flags, strategies, expert scenarios
-decompile/    Bytecode → Arishem JSON
-decimal/      Exact fixed-point arithmetic (add, sub, mul, div, mod) with unit validation
-units/        70+ units across 17 dimensions with base-unit conversion
-sourceunit.go Multi-file include expansion with pluggable IncludeResolver interface
+intern/        Constant pool — deduplicates strings and numbers across all rules
+compiler/      CST → IR → bytecode compiler (with constant folding), table compilation, regex pre-compilation
+ir/            Intermediate representation: declarations, expressions, tables, lookup, optimization passes
+vm/            Stack-based bytecode VM (fixed 256-element stack, thread-safe string pool, table lookup)
+govern/        Governance primitives: segments, rollouts, kill switches, prerequisites, trace
+flags/         Feature flags: variants, schema validation, secret references, hot reload
+strategy/      Native decision trees: exactly-one governed routing with trace
+expert/        Forward-chaining inference: working memory, assert/emit/retract/modify, temporal constraints
+workflow/      Multi-arbiter chaining: outcome→fact mapping, topological ordering, delivery
+audit/         Durable decision logging (Sink interface, JSONL default)
+overrides/     Runtime governance overrides (kill switches, rollout percentages)
+grpcserver/    gRPC service + Prometheus metrics + OTel traces + separate HTTP listener
+observability/ Structured logging (slog): standard field set, logger factory
+dataplane/     Agent sidecar: local compiled cache, bundle/override watch streams
+arbtest/       Test framework: .test.arb files for rules, flags, strategies, expert scenarios
+bundle/        Binary bundle serialization with obfuscation, signing, and table support
+decompile/     Bytecode → Arishem JSON, ConvertJSON bridge
+format/        Canonical formatter with table column alignment
+decimal/       Exact fixed-point arithmetic (add, sub, mul, div, mod) with unit validation
+units/         85+ units across 19 dimensions with base-unit conversion
+module.go      Module resolver: arbiter.toml discovery, import resolution, namespace prefixing
+input.go       Compile-time input schema validation
+program.go     Unified Program type with functional options
+sourceunit.go  Multi-file compilation with module and include support
 ```
 
 Flat `[]byte` of fixed-width 4-byte instructions: `[opcode(1B), flags(1B), arg(2B)]`. Constant pool indices are `uint16`, giving 65K unique values per type. The parser uses [gotreesitter](https://github.com/odvcencio/gotreesitter), and the repo ships a tree-sitter highlight query and a VS Code language package for `.arb` files.
@@ -1119,33 +1208,31 @@ expert rule EmitDetermination priority 90 {
 
 ## Status
 
-Arbiter is in **private alpha**. The language, compiler, VM, and inference engine are stable and well-tested. The gRPC API, sidecar agent, and workflow runtime are functional and deployed in production for internal use. The API surface may evolve as early adopters provide feedback.
+**v1.3.0** — language contract frozen, compiler and VM stable, full IDE experience.
 
-What you can rely on today:
+What you can rely on:
 
-- Stateless rule evaluation at sub-microsecond latency
-- Feature flag resolution with segments, rollouts, prerequisites, and kill switches
-- Expert inference with forward-chaining, truth maintenance, and reversible overlays
-- Strategy evaluation with governed candidate selection
-- The `.arb` language syntax and governance keywords
-- gRPC bundle management with versioning, activation, and rollback
-- gRPC expert sessions with assert, retract, run, and trace
-- Audit trail on every decision
-- Decision diff and replay via CLI
-- Concurrency-safe evaluation (race-tested, thread-safe string pool)
-- IR constant folding optimization
-- Multi-error compiler diagnostics
-- Exact decimal arithmetic (add, sub, mul, div, mod) with unit validation
-- WASM compilation target for browser and edge evaluation
-- Pluggable include resolution
-- `.test.arb` test framework covering all four evaluation modes
+- Sub-microsecond rule evaluation (223ns/rule, 10K rules in 2ms)
+- Module system with namespaced imports and `arbiter.toml` manifests
+- Compile-time input schema validation, action param type checking, regex pre-compilation
+- Lookup tables for data-driven decisions without rule explosion
+- Rule tagging with selective evaluation (`WithTags`)
+- Feature flags, strategies, expert inference, continuous arbiters
+- Governance primitives: segments, rollouts, kill switches, prerequisites, traces
+- Exact decimal arithmetic with 19 unit dimensions (85+ symbols)
+- gRPC server with Prometheus metrics, structured logging (`slog`), OpenTelemetry traces
+- Full LSP: diagnostics, completions, hover, go-to-def, references, rename, symbols, formatting, semantic highlighting, code actions, multi-file diagnostics
+- `.test.arb` test framework, decision diff, audit replay
+- Binary bundles with obfuscation and Ed25519 signing
+- WASM compilation target
+- Node, Python, Rust SDKs
 
 What is evolving:
 
-- Continuous arbiter runtime (`arbiter-runtime` handles poll-based loops, source polling, worker dispatch, and delivery retry; streaming and scheduled triggers beyond poll are in progress)
-- Worker dispatch (`arbiter-runtime` executes `exec` and `webhook` workers; `grpc` and `slack` handlers log-only for now)
-- Fact source and sink plugin ecosystem (CSV, JSON, JSONL, HTTP, Terraform, and Google Sheets are shipped; additional connectors are straightforward to add via the `Loader`/`Saver` interfaces)
-- SDK coverage (Node, Python, Rust gRPC stubs + TypeScript WASM SDK shipped; idiomatic wrapper libraries are not yet built)
+- Continuous arbiter runtime (poll-based loops, source polling, worker dispatch, delivery retry are shipped; streaming triggers beyond poll are in progress)
+- Worker transports (`exec` and `webhook` are stable; `grpc` and `slack` are log-only)
+- Fact source ecosystem (CSV, JSON, JSONL, HTTP, Terraform, Google Sheets shipped; additional connectors via `Loader`/`Saver` interfaces)
+- SDK wrapper libraries (gRPC stubs + TypeScript WASM shipped; idiomatic wrappers not yet built)
 
 Arbiter is maintained by a solo author. Contributions, feedback, and design-partner conversations are welcome.
 
