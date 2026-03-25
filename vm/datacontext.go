@@ -3,6 +3,7 @@ package vm
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -10,9 +11,13 @@ import (
 	"github.com/odvcencio/arbiter/units"
 )
 
-// StringPool holds interned strings. It is initialized from the constant pool
-// but can grow at runtime when data values contain strings not seen at compile time.
-// All methods are safe for concurrent use.
+const (
+	maxStringPoolIndex   = 1<<16 - 1
+	maxStringPoolEntries = maxStringPoolIndex + 1
+)
+
+// StringPool holds compiled string constants and optionally supports
+// additional caller-managed interning. All methods are safe for concurrent use.
 type StringPool struct {
 	mu    sync.RWMutex
 	strs  []string
@@ -24,6 +29,9 @@ func NewStringPool(strs []string) *StringPool {
 	// The caller may pass a shared slice (e.g. intern.Pool.Strings()).
 	owned := make([]string, len(strs))
 	copy(owned, strs)
+	if len(owned) > maxStringPoolEntries {
+		panic(fmt.Sprintf("string pool overflow: maximum unique strings is %d", maxStringPoolEntries))
+	}
 	idx := make(map[string]uint16, len(owned))
 	for i, s := range owned {
 		idx[s] = uint16(i)
@@ -54,6 +62,9 @@ func (sp *StringPool) Intern(s string) uint16 {
 	// Double-check after acquiring write lock.
 	if idx, ok := sp.index[s]; ok {
 		return idx
+	}
+	if len(sp.strs) > maxStringPoolIndex {
+		panic(fmt.Sprintf("string pool overflow: maximum unique strings is %d", maxStringPoolEntries))
 	}
 	idx := uint16(len(sp.strs))
 	sp.strs = append(sp.strs, s)
@@ -147,7 +158,7 @@ func anyToValue(v any, pool *StringPool) Value {
 	case uint64:
 		return NumVal(float64(val))
 	case string:
-		return StrVal(pool.Intern(val))
+		return Value{Typ: TypeString, Any: val}
 	case dec.Value:
 		return DecimalVal(val)
 	case units.Quantity:

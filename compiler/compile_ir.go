@@ -42,6 +42,9 @@ func (c *irCompiler) compile() (*CompiledRuleset, error) {
 	// Compile table declarations first so lookups can reference them.
 	for i := range c.program.Tables {
 		ct := c.compileTable(&c.program.Tables[i])
+		if err := c.pool.Err(); err != nil {
+			return nil, err
+		}
 		rs.Tables = append(rs.Tables, ct)
 	}
 
@@ -54,7 +57,13 @@ func (c *irCompiler) compile() (*CompiledRuleset, error) {
 		if c.err != nil {
 			return nil, c.err
 		}
+		if err := c.pool.Err(); err != nil {
+			return nil, err
+		}
 		rs.Rules = append(rs.Rules, rh)
+	}
+	if err := c.pool.Err(); err != nil {
+		return nil, err
 	}
 
 	return rs, nil

@@ -16,6 +16,8 @@ func TestValueEqual(t *testing.T) {
 		{NumVal(42), NumVal(43), false},
 		{StrVal(5), StrVal(5), true}, // same pool index
 		{StrVal(5), StrVal(6), false},
+		{Value{Typ: TypeString, Any: "hello"}, Value{Typ: TypeString, Any: "hello"}, true},
+		{Value{Typ: TypeString, Any: "hello"}, Value{Typ: TypeString, Any: "world"}, false},
 		{BoolVal(true), BoolVal(true), true},
 		{BoolVal(true), BoolVal(false), false},
 		{NullVal(), NullVal(), true},

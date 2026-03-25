@@ -2,7 +2,9 @@ package expert
 
 import (
 	"context"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -607,6 +609,84 @@ expert rule RouteReview {
 	}
 	if ok {
 		t.Fatalf("expected missing rollout subject to skip rule, got match %+v", match)
+	}
+}
+
+func TestSessionConcurrentAccessIsSerialized(t *testing.T) {
+	program := mustCompiledProgram(t, []byte(`
+expert rule Ready {
+	when { input.enabled == true }
+	then emit Ready {}
+}
+`))
+
+	session := NewSession(program, map[string]any{
+		"input": map[string]any{"enabled": true},
+	}, nil, Options{})
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 4)
+
+	run := func(fn func() error) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := fn(); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+
+	run(func() error {
+		for i := 0; i < 100; i++ {
+			if _, err := session.Run(context.Background()); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	run(func() error {
+		for i := 0; i < 100; i++ {
+			if err := session.Assert(Fact{
+				Type: "Signal",
+				Key:  strconv.Itoa(i),
+				Fields: map[string]any{
+					"value": float64(i),
+				},
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	run(func() error {
+		for i := 0; i < 100; i++ {
+			if err := session.Retract("Signal", strconv.Itoa(i)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	run(func() error {
+		for i := 0; i < 100; i++ {
+			mark := session.Checkpoint()
+			_ = session.DeltaSince(mark)
+			_ = session.Trace()
+			_ = session.Facts()
+			_ = session.Snapshot()
+		}
+		return nil
+	})
+
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

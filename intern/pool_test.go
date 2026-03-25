@@ -1,7 +1,10 @@
 // intern/pool_test.go
 package intern
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestStringInterning(t *testing.T) {
 	p := NewPool()
@@ -82,5 +85,42 @@ func TestPoolOutOfBoundsLookupsAreSafe(t *testing.T) {
 	}
 	if got := p.GetList(99, 1); got != nil {
 		t.Errorf("GetList out of bounds: got %v, want nil", got)
+	}
+}
+
+func TestStringOverflowRecordsError(t *testing.T) {
+	p := NewPool()
+	p.strings = make([]string, maxPoolEntries)
+
+	if got := p.String("overflow"); got != 0 {
+		t.Fatalf("String overflow returned %d, want 0", got)
+	}
+	if err := p.Err(); err == nil || !strings.Contains(err.Error(), "string pool overflow") {
+		t.Fatalf("Err() = %v, want string pool overflow", err)
+	}
+}
+
+func TestListStartOverflowRecordsError(t *testing.T) {
+	p := NewPool()
+	p.lists = make([]PoolValue, maxPoolEntries)
+
+	idx, length := p.List([]PoolValue{{Typ: TypeBool, Bool: true}})
+	if idx != 0 || length != 0 {
+		t.Fatalf("List overflow = (%d, %d), want (0, 0)", idx, length)
+	}
+	if err := p.Err(); err == nil || !strings.Contains(err.Error(), "list pool overflow") {
+		t.Fatalf("Err() = %v, want list pool overflow", err)
+	}
+}
+
+func TestListLengthOverflowRecordsError(t *testing.T) {
+	p := NewPool()
+
+	idx, length := p.List(make([]PoolValue, maxPoolIndex+1))
+	if idx != 0 || length != 0 {
+		t.Fatalf("List length overflow = (%d, %d), want (0, 0)", idx, length)
+	}
+	if err := p.Err(); err == nil || !strings.Contains(err.Error(), "list literal overflow") {
+		t.Fatalf("Err() = %v, want list literal overflow", err)
 	}
 }

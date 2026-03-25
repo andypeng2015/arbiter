@@ -1,6 +1,14 @@
 # Compiled binary
 /arbiter
+/arbiter-lsp
+/arbiter-runtime
+/arbiter-wasm
+/conformance.test
 /.gts/
+
+# Local specs and plans
+/docs/superpowers/plans/
+/docs/superpowers/specs/
 
 # SDK build artifacts
 sdks/node/node_modules/
@@ -19,3 +27,4 @@ sdks/python/build/
 
 # OS
 .DS_Store
+.local/

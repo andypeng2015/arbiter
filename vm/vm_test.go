@@ -2,6 +2,8 @@
 package vm
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/odvcencio/arbiter/compiler"
@@ -171,5 +173,64 @@ func TestRegexCompilationIsCached(t *testing.T) {
 	}
 	if len(vm.regexes) != 1 {
 		t.Fatalf("expected cached regex count to stay at 1, got %d", len(vm.regexes))
+	}
+}
+
+func TestRegexCacheIsBounded(t *testing.T) {
+	pool := intern.NewPool()
+	vm := newVM(&compiler.CompiledRuleset{Constants: pool}, NewStringPool(pool.Strings()))
+
+	for i := 0; i < maxRegexCacheEntries+32; i++ {
+		pattern := fmt.Sprintf("^value-%d$", i)
+		if vm.regex(pattern) == nil {
+			t.Fatalf("regex(%q) returned nil", pattern)
+		}
+	}
+	if len(vm.regexes) > maxRegexCacheEntries {
+		t.Fatalf("regex cache size = %d, want <= %d", len(vm.regexes), maxRegexCacheEntries)
+	}
+}
+
+func TestEvalInstructionLimitReturnsError(t *testing.T) {
+	pool := intern.NewPool()
+	var code []byte
+	code = compiler.Emit(code, compiler.OpLoadBool, 0, 0)
+	code = compiler.Emit(code, compiler.OpJumpIfFalse, 0, 0)
+
+	rs := makeRuleset(pool, code)
+	dc := DataFromMap(map[string]any{}, NewStringPool(pool.Strings()))
+
+	if _, err := Eval(rs, dc); err == nil || !strings.Contains(err.Error(), "instruction limit exceeded") {
+		t.Fatalf("Eval error = %v, want instruction limit exceeded", err)
+	}
+}
+
+func TestDynamicStringsCompareAgainstPooledStrings(t *testing.T) {
+	pool := intern.NewPool()
+	helloIdx := pool.String("hello")
+	sp := NewStringPool(pool.Strings())
+	vm := newVM(&compiler.CompiledRuleset{Constants: pool}, sp)
+
+	if !vm.valEqual(StrVal(helloIdx), Value{Typ: TypeString, Any: "hello"}) {
+		t.Fatal("expected pooled and runtime strings to compare equal")
+	}
+}
+
+func TestStringAdditionDoesNotInternRuntimeResults(t *testing.T) {
+	pool := intern.NewPool()
+	helloIdx := pool.String("hello")
+	sp := NewStringPool(pool.Strings())
+	vm := newVM(&compiler.CompiledRuleset{Constants: pool}, sp)
+
+	result, err := vm.addValues(StrVal(helloIdx), Value{Typ: TypeString, Any: " world"})
+	if err != nil {
+		t.Fatalf("addValues: %v", err)
+	}
+	got, ok := result.Any.(string)
+	if !ok || got != "hello world" {
+		t.Fatalf("string addition = %#v, want %q", result.Any, "hello world")
+	}
+	if len(sp.strs) != 1 {
+		t.Fatalf("string pool grew to %d entries, want 1", len(sp.strs))
 	}
 }

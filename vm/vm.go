@@ -14,7 +14,12 @@ import (
 	"github.com/odvcencio/arbiter/intern"
 )
 
-const maxStack = 256
+const (
+	maxStack               = 256
+	maxInstructionsPerEval = 1 << 20
+	maxRegexCacheEntries   = 256
+	maxBadRegexEntries     = 256
+)
 
 // MatchedRule is the result of evaluating a rule that matched.
 type MatchedRule struct {
@@ -53,17 +58,19 @@ type iterState struct {
 
 // VM is the bytecode evaluator.
 type VM struct {
-	stack   [maxStack]Value
-	sp      int
-	pool    *intern.Pool
-	strPool *StringPool
-	rs      *compiler.CompiledRuleset
-	locals  map[string]any // iterator variable bindings
-	iters   []iterState
-	regexes map[string]*regexp.Regexp
-	badRe   map[string]struct{}
-	err     error
-	ip      uint32
+	stack    [maxStack]Value
+	sp       int
+	pool     *intern.Pool
+	strPool  *StringPool
+	rs       *compiler.CompiledRuleset
+	locals   map[string]any // iterator variable bindings
+	iters    []iterState
+	regexes  map[string]*regexp.Regexp
+	regexLRU []string
+	badRe    map[string]struct{}
+	badReLRU []string
+	err      error
+	ip       uint32
 }
 
 func newVM(rs *compiler.CompiledRuleset, sp *StringPool) *VM {
@@ -250,8 +257,14 @@ func EvalDebugWithTagFilter(rs *compiler.CompiledRuleset, dc DataContext, sp *St
 func (vm *VM) evalCondition(instrs []byte, off, length uint32, dc DataContext) bool {
 	end := off + length
 	ip := off
+	steps := 0
 
 	for ip < end {
+		steps++
+		if steps > maxInstructionsPerEval {
+			vm.err = fmt.Errorf("instruction limit exceeded after %d steps", maxInstructionsPerEval)
+			return false
+		}
 		if ip+compiler.InstrSize > uint32(len(instrs)) {
 			break
 		}
@@ -319,6 +332,9 @@ func (vm *VM) valueToAny(v Value) any {
 	case TypeNumber:
 		return v.Num
 	case TypeString:
+		if s, ok := v.Any.(string); ok {
+			return s
+		}
 		return vm.strPool.Get(v.Str)
 	case TypeList:
 		if items, ok := v.Any.([]any); ok {
@@ -356,10 +372,10 @@ func (vm *VM) valEqual(a, b Value) bool {
 		return a.Num == b.Num
 	case TypeString:
 		// Compare by pool index first (fast), fall back to string compare
-		if a.Str == b.Str {
+		if a.Any == nil && b.Any == nil && a.Str == b.Str {
 			return true
 		}
-		return vm.strPool.Get(a.Str) == vm.strPool.Get(b.Str)
+		return vm.toStr(a) == vm.toStr(b)
 	case TypeDecimal:
 		left, lok := decimalFromValue(a)
 		right, rok := decimalFromValue(b)
@@ -378,6 +394,9 @@ func (vm *VM) toNum(v Value) float64 {
 
 func (vm *VM) toStr(v Value) string {
 	if v.Typ == TypeString {
+		if s, ok := v.Any.(string); ok {
+			return s
+		}
 		return vm.strPool.Get(v.Str)
 	}
 	return ""
@@ -436,14 +455,48 @@ func (vm *VM) regex(pattern string) *regexp.Regexp {
 		if vm.badRe == nil {
 			vm.badRe = make(map[string]struct{})
 		}
+		vm.trimBadRegexCache(pattern)
 		vm.badRe[pattern] = struct{}{}
 		return nil
 	}
 	if vm.regexes == nil {
 		vm.regexes = make(map[string]*regexp.Regexp)
 	}
+	vm.trimRegexCache(pattern)
 	vm.regexes[pattern] = re
 	return re
+}
+
+func (vm *VM) trimRegexCache(next string) {
+	if vm.regexes == nil {
+		return
+	}
+	if _, ok := vm.regexes[next]; ok {
+		return
+	}
+	vm.regexLRU = append(vm.regexLRU, next)
+	if len(vm.regexLRU) <= maxRegexCacheEntries {
+		return
+	}
+	evict := vm.regexLRU[0]
+	vm.regexLRU = vm.regexLRU[1:]
+	delete(vm.regexes, evict)
+}
+
+func (vm *VM) trimBadRegexCache(next string) {
+	if vm.badRe == nil {
+		return
+	}
+	if _, ok := vm.badRe[next]; ok {
+		return
+	}
+	vm.badReLRU = append(vm.badReLRU, next)
+	if len(vm.badReLRU) <= maxBadRegexEntries {
+		return
+	}
+	evict := vm.badReLRU[0]
+	vm.badReLRU = vm.badReLRU[1:]
+	delete(vm.badRe, evict)
 }
 
 func (vm *VM) listRetains(a, b Value) bool {
@@ -644,7 +697,7 @@ func (vm *VM) orderedCompare(a, b Value) (int, error) {
 
 func (vm *VM) addValues(a, b Value) (Value, error) {
 	if a.Typ == TypeString || b.Typ == TypeString {
-		return StrVal(vm.strPool.Intern(vm.valueToString(a) + vm.valueToString(b))), nil
+		return Value{Typ: TypeString, Any: vm.valueToString(a) + vm.valueToString(b)}, nil
 	}
 	if a.Typ == TypeDecimal || b.Typ == TypeDecimal {
 		left, lok := decimalFromValue(a)

@@ -18,11 +18,11 @@ const (
 type Value struct {
 	Typ     uint8
 	Num     float64
-	Str     uint16 // constant pool string index
+	Str     uint16 // constant pool string index when Any is nil
 	Bool    bool
 	ListIdx uint16 // index into constant pool lists
 	ListLen uint16
-	Any     any
+	Any     any // runtime strings, objects, dynamic lists, decimals
 }
 
 func NullVal() Value                { return Value{Typ: TypeNull} }
@@ -48,6 +48,11 @@ func (v Value) Equal(other Value) bool {
 	case TypeNumber:
 		return v.Num == other.Num
 	case TypeString:
+		left, lok := v.Any.(string)
+		right, rok := other.Any.(string)
+		if lok || rok {
+			return lok && rok && left == right
+		}
 		return v.Str == other.Str
 	case TypeDecimal:
 		left, lok := v.Any.(dec.Value)

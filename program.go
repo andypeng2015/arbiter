@@ -1,6 +1,8 @@
 package arbiter
 
 import (
+	"sync"
+
 	"github.com/odvcencio/arbiter/compiler"
 	"github.com/odvcencio/arbiter/govern"
 	"github.com/odvcencio/arbiter/ir"
@@ -40,13 +42,19 @@ type Program struct {
 	Input      *ir.InputSchema
 	Warnings   []Diagnostic   // non-fatal diagnostics collected during compilation
 	pool       *vm.StringPool // internal, sealed from public API
+	poolOnce   sync.Once
 }
 
 // stringPool returns the string pool, lazily initializing from the ruleset if needed.
 func (p *Program) stringPool() *vm.StringPool {
-	if p.pool == nil && p.Ruleset != nil {
-		p.pool = vm.NewStringPool(p.Ruleset.Constants.Strings())
+	if p == nil {
+		return nil
 	}
+	p.poolOnce.Do(func() {
+		if p.Ruleset != nil {
+			p.pool = vm.NewStringPool(p.Ruleset.Constants.Strings())
+		}
+	})
 	return p.pool
 }
 

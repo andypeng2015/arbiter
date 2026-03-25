@@ -57,15 +57,16 @@ func (f WorkerHandlerFunc) Execute(ctx context.Context, invocation WorkerInvocat
 
 // RunnerOptions configure one reliable workflow runtime.
 type RunnerOptions struct {
-	Loader         SourceLoader
-	Handlers       map[arbiter.ArbiterHandlerKind]OutcomeHandler
-	WorkerHandlers map[arbiter.ArbiterHandlerKind]WorkerHandler
-	Now            func() time.Time
-	InitialBackoff time.Duration
-	MaxBackoff     time.Duration
-	SourceAttempts int
-	DeliveryLog    string
-	Stdout         io.Writer
+	Loader               SourceLoader
+	Handlers             map[arbiter.ArbiterHandlerKind]OutcomeHandler
+	WorkerHandlers       map[arbiter.ArbiterHandlerKind]WorkerHandler
+	Now                  func() time.Time
+	InitialBackoff       time.Duration
+	MaxBackoff           time.Duration
+	SourceAttempts       int
+	DeliveryLog          string
+	MaxPendingDeliveries int
+	Stdout               io.Writer
 }
 
 // SourceSnapshot describes one source's current runtime health.
@@ -122,23 +123,25 @@ type TickResult struct {
 }
 
 type Runner struct {
-	workflow       *Workflow
-	now            func() time.Time
-	loader         SourceLoader
-	handlers       map[arbiter.ArbiterHandlerKind]OutcomeHandler
-	workerHandlers map[arbiter.ArbiterHandlerKind]WorkerHandler
-	dispatchers    map[string][]compiledDispatchHandler
-	sources        map[string]*sourceState
-	sinks          map[string]*sinkState
-	pending        map[string]Delivery
-	initialBackoff time.Duration
-	maxBackoff     time.Duration
-	sourceAttempts int
-	nextID         uint64
-	stdout         io.Writer
-	deliveryLog    string
-	logMu          sync.Mutex
-	auditSinks     map[string]*audit.JSONLSink
+	mu                   sync.RWMutex
+	workflow             *Workflow
+	now                  func() time.Time
+	loader               SourceLoader
+	handlers             map[arbiter.ArbiterHandlerKind]OutcomeHandler
+	workerHandlers       map[arbiter.ArbiterHandlerKind]WorkerHandler
+	dispatchers          map[string][]compiledDispatchHandler
+	sources              map[string]*sourceState
+	sinks                map[string]*sinkState
+	pending              map[string]Delivery
+	initialBackoff       time.Duration
+	maxBackoff           time.Duration
+	sourceAttempts       int
+	maxPendingDeliveries int
+	nextID               uint64
+	stdout               io.Writer
+	deliveryLog          string
+	logMu                sync.Mutex
+	auditSinks           map[string]*audit.JSONLSink
 }
 
 type compiledDispatchHandler struct {
@@ -189,26 +192,30 @@ func NewRunner(w *Workflow, opts RunnerOptions) (*Runner, error) {
 	if opts.SourceAttempts <= 0 {
 		opts.SourceAttempts = 3
 	}
+	if opts.MaxPendingDeliveries <= 0 {
+		opts.MaxPendingDeliveries = 10_000
+	}
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
 	}
 
 	r := &Runner{
-		workflow:       w,
-		now:            opts.Now,
-		loader:         opts.Loader,
-		handlers:       opts.Handlers,
-		workerHandlers: opts.WorkerHandlers,
-		dispatchers:    make(map[string][]compiledDispatchHandler, len(w.order)),
-		sources:        make(map[string]*sourceState),
-		sinks:          make(map[string]*sinkState),
-		pending:        make(map[string]Delivery),
-		initialBackoff: opts.InitialBackoff,
-		maxBackoff:     opts.MaxBackoff,
-		sourceAttempts: opts.SourceAttempts,
-		stdout:         opts.Stdout,
-		deliveryLog:    opts.DeliveryLog,
-		auditSinks:     make(map[string]*audit.JSONLSink),
+		workflow:             w,
+		now:                  opts.Now,
+		loader:               opts.Loader,
+		handlers:             opts.Handlers,
+		workerHandlers:       opts.WorkerHandlers,
+		dispatchers:          make(map[string][]compiledDispatchHandler, len(w.order)),
+		sources:              make(map[string]*sourceState),
+		sinks:                make(map[string]*sinkState),
+		pending:              make(map[string]Delivery),
+		initialBackoff:       opts.InitialBackoff,
+		maxBackoff:           opts.MaxBackoff,
+		sourceAttempts:       opts.SourceAttempts,
+		maxPendingDeliveries: opts.MaxPendingDeliveries,
+		stdout:               opts.Stdout,
+		deliveryLog:          opts.DeliveryLog,
+		auditSinks:           make(map[string]*audit.JSONLSink),
 	}
 
 	for target := range w.sources {
@@ -235,6 +242,12 @@ func (r *Runner) Close() error {
 	if r == nil {
 		return nil
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.closeLocked()
+}
+
+func (r *Runner) closeLocked() error {
 	var firstErr error
 	for target, sink := range r.auditSinks {
 		if err := sink.Close(); err != nil && firstErr == nil {
@@ -250,6 +263,12 @@ func (r *Runner) Tick(ctx context.Context) (TickResult, error) {
 	if r == nil || r.workflow == nil {
 		return TickResult{}, fmt.Errorf("nil runner")
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.tickLocked(ctx)
+}
+
+func (r *Runner) tickLocked(ctx context.Context) (TickResult, error) {
 	if err := r.syncSources(ctx); err != nil {
 		return TickResult{}, err
 	}
@@ -272,12 +291,74 @@ func (r *Runner) Tick(ctx context.Context) (TickResult, error) {
 
 	return TickResult{
 		Workflow:  workflowResult,
-		Sources:   r.SourceStates(),
-		Sinks:     r.SinkStates(),
+		Sources:   r.sourceStatesLocked(),
+		Sinks:     r.sinkStatesLocked(),
 		Delivered: delivered,
 		Retried:   retried,
 		Enqueued:  enqueued,
 	}, nil
+}
+
+// Drain attempts to flush pending deliveries without running a new workflow tick.
+func (r *Runner) Drain(ctx context.Context) (int, int, error) {
+	if r == nil {
+		return 0, 0, nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.drainLocked(ctx)
+}
+
+func (r *Runner) drainLocked(ctx context.Context) (int, int, error) {
+	drained := 0
+	retried := 0
+	for {
+		if err := ctx.Err(); err != nil {
+			r.refreshSinkPendingCounts()
+			return drained, retried, err
+		}
+		deliveredNow, retriedNow, err := r.deliverReady(ctx)
+		drained += deliveredNow
+		retried += retriedNow
+		r.refreshSinkPendingCounts()
+		if err != nil {
+			return drained, retried, err
+		}
+		if len(r.pending) == 0 {
+			return drained, retried, nil
+		}
+		next, ok := r.nextPendingAttemptAtLocked()
+		now := r.now().UTC()
+		if !ok || !next.After(now) {
+			continue
+		}
+		timer := time.NewTimer(next.Sub(now))
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			r.refreshSinkPendingCounts()
+			return drained, retried, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func (r *Runner) nextPendingAttemptAtLocked() (time.Time, bool) {
+	var next time.Time
+	set := false
+	for _, delivery := range r.pending {
+		at := delivery.NextAttemptAt
+		if at.IsZero() {
+			return time.Time{}, false
+		}
+		if !set || at.Before(next) {
+			next = at
+			set = true
+		}
+	}
+	return next, set
 }
 
 // SourceStates returns a snapshot of runtime source health.
@@ -285,6 +366,12 @@ func (r *Runner) SourceStates() map[string]SourceSnapshot {
 	if r == nil {
 		return nil
 	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.sourceStatesLocked()
+}
+
+func (r *Runner) sourceStatesLocked() map[string]SourceSnapshot {
 	out := make(map[string]SourceSnapshot, len(r.sources))
 	for target, state := range r.sources {
 		out[target] = state.SourceSnapshot
@@ -297,6 +384,12 @@ func (r *Runner) SinkStates() map[string]SinkSnapshot {
 	if r == nil {
 		return nil
 	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.sinkStatesLocked()
+}
+
+func (r *Runner) sinkStatesLocked() map[string]SinkSnapshot {
 	out := make(map[string]SinkSnapshot, len(r.sinks))
 	for key, state := range r.sinks {
 		out[key] = state.SinkSnapshot

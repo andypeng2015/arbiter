@@ -212,11 +212,17 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 		s := readString(r)
 		pool.String(s)
 	}
+	if err := pool.Err(); err != nil {
+		return nil, fmt.Errorf("unmarshal strings: %w", err)
+	}
 
 	// Numbers
 	numCount := readU32(r)
 	for range numCount {
 		pool.Number(readF64(r))
+	}
+	if err := pool.Err(); err != nil {
+		return nil, fmt.Errorf("unmarshal numbers: %w", err)
 	}
 
 	// Decimals
@@ -229,6 +235,9 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 			return nil, fmt.Errorf("unmarshal decimal: %w", err)
 		}
 		pool.Decimal(v)
+	}
+	if err := pool.Err(); err != nil {
+		return nil, fmt.Errorf("unmarshal decimals: %w", err)
 	}
 
 	// Lists

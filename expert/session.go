@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/odvcencio/arbiter/compiler"
@@ -125,6 +126,7 @@ type temporalState struct {
 
 // Session runs an expert program against an envelope and working memory.
 type Session struct {
+	mu                 sync.RWMutex
 	program            *Program
 	envelope           map[string]any
 	facts              map[string]map[string]Fact
@@ -203,6 +205,8 @@ func (s *Session) SetEnvelope(envelope map[string]any) {
 	if s == nil {
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.envelope = cloneMap(envelope)
 	s.contextDirty = true
 }
@@ -212,6 +216,12 @@ func (s *Session) Assert(f Fact) error {
 	if s == nil {
 		return fmt.Errorf("nil session")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.assertLocked(f)
+}
+
+func (s *Session) assertLocked(f Fact) error {
 	if f.Type == "" {
 		return fmt.Errorf("fact type is required")
 	}
@@ -227,6 +237,12 @@ func (s *Session) Retract(factType, factKey string) error {
 	if s == nil {
 		return fmt.Errorf("nil session")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.retractLocked(factType, factKey)
+}
+
+func (s *Session) retractLocked(factType, factKey string) error {
 	if factType == "" {
 		return fmt.Errorf("fact type is required")
 	}
@@ -252,6 +268,8 @@ func (s *Session) SyncFacts(facts []Fact) (SyncSummary, error) {
 	if s == nil {
 		return SyncSummary{}, fmt.Errorf("nil session")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	incoming, err := normalizeSyncFacts(facts)
 	if err != nil {
@@ -319,7 +337,7 @@ func (s *Session) retractMissingSyncFacts(incoming map[string]map[string]Fact, s
 			if _, ok := nextByKey[factKey]; ok {
 				continue
 			}
-			if err := s.Retract(factType, factKey); err != nil {
+			if err := s.retractLocked(factType, factKey); err != nil {
 				return err
 			}
 			summary.Retracted++
@@ -334,12 +352,19 @@ func (s *Session) Facts() []Fact {
 	if s == nil {
 		return nil
 	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.sortedFacts()
 }
 
 // Trace returns the recorded expert activations.
 func (s *Session) Trace() []Activation {
-	if s == nil || len(s.activations) == 0 {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.activations) == 0 {
 		return nil
 	}
 	out := make([]Activation, len(s.activations))
@@ -362,6 +387,8 @@ func (s *Session) Checkpoint() Checkpoint {
 	if s == nil {
 		return Checkpoint{}
 	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return Checkpoint{
 		outcomeCount:    len(s.outcomes),
 		activationCount: len(s.activations),
@@ -374,6 +401,8 @@ func (s *Session) DeltaSince(mark Checkpoint) Result {
 	if s == nil {
 		return Result{}
 	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return Result{
 		Outcomes:    cloneOutcomes(s.outcomes, mark.outcomeCount),
 		Facts:       s.sortedFacts(),
@@ -1556,6 +1585,11 @@ func (s *Session) clearDirtyFacts() {
 
 // Snapshot returns the current session state without advancing evaluation.
 func (s *Session) Snapshot() Result {
+	if s == nil {
+		return Result{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.snapshot()
 }
 

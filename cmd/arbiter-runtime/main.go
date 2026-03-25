@@ -75,12 +75,12 @@ type runtimeConfig struct {
 const runtimeTracerName = "arbiter.runtime"
 
 type runtime struct {
-	config  runtimeConfig
-	runner  *workflow.Runner
-	wf      *workflow.Workflow
-	full    *arbiter.CompileResult
-	logger  *slog.Logger
-	name    string
+	config runtimeConfig
+	runner *workflow.Runner
+	wf     *workflow.Workflow
+	full   *arbiter.CompileResult
+	logger *slog.Logger
+	name   string
 
 	mu         sync.RWMutex
 	lastTick   time.Time
@@ -154,8 +154,22 @@ func (rt *runtime) run(ctx context.Context) error {
 		case <-ctx.Done():
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
-			srv.Shutdown(shutdownCtx)
-			rt.runner.Close()
+			_ = srv.Shutdown(shutdownCtx)
+			drained, retried, err := rt.runner.Drain(shutdownCtx)
+			switch {
+			case err != nil && shutdownCtx.Err() != nil:
+				rt.logger.Warn("shutdown drain timed out",
+					"delivered", drained,
+					"retried", retried,
+					observability.KeyError, err.Error())
+			case err != nil:
+				rt.logger.Error("shutdown drain error", observability.KeyError, err.Error())
+			default:
+				rt.logger.Info("shutdown drain complete",
+					"delivered", drained,
+					"retried", retried)
+			}
+			_ = rt.runner.Close()
 			return nil
 		case <-ticker.C:
 			rt.tick(ctx)

@@ -1192,6 +1192,38 @@ expert rule ApproveB {
 	}
 }
 
+func TestSessionActivationGroupUsesHighestPriorityRule(t *testing.T) {
+	src := []byte(`
+expert rule ApproveLow priority 10 {
+	activation_group resolution
+	when { true }
+	then emit OutcomeLow { choice: "low" }
+}
+
+expert rule ApproveHigh priority 90 {
+	activation_group resolution
+	when { true }
+	then emit OutcomeHigh { choice: "high" }
+}
+`)
+
+	program, err := expert.Compile(src)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	result, err := expert.NewSession(program, map[string]any{}, nil, expert.Options{}).Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(result.Outcomes) != 1 || result.Outcomes[0].Name != "OutcomeHigh" {
+		t.Fatalf("expected highest-priority activation-group outcome, got %+v", result.Outcomes)
+	}
+	if len(result.Activations) != 1 || result.Activations[0].Rule != "ApproveHigh" {
+		t.Fatalf("expected highest-priority activation-group activation, got %+v", result.Activations)
+	}
+}
+
 func TestCompileFileResolvesIncludes(t *testing.T) {
 	dir := t.TempDir()
 	writeExpertTestFile(t, dir, "constants.arb", `const LIMIT = 600`)

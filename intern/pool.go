@@ -1,7 +1,11 @@
 // intern/pool.go
 package intern
 
-import dec "github.com/odvcencio/arbiter/decimal"
+import (
+	"fmt"
+
+	dec "github.com/odvcencio/arbiter/decimal"
+)
 
 // TypeTag identifies the type of a pooled value.
 const (
@@ -11,6 +15,9 @@ const (
 	TypeString  uint8 = 3
 	TypeList    uint8 = 4
 	TypeDecimal uint8 = 5
+
+	maxPoolIndex   = 1<<16 - 1
+	maxPoolEntries = maxPoolIndex + 1
 )
 
 // PoolValue is the VM's value representation used in lists.
@@ -33,6 +40,7 @@ type Pool struct {
 	strIndex map[string]uint16
 	numIndex map[float64]uint16
 	decIndex map[string]uint16
+	err      error
 }
 
 // NewPool creates an empty constant pool.
@@ -49,6 +57,13 @@ func (p *Pool) String(s string) uint16 {
 	if idx, ok := p.strIndex[s]; ok {
 		return idx
 	}
+	if p.err != nil {
+		return 0
+	}
+	if len(p.strings) > maxPoolIndex {
+		p.setErr(fmt.Errorf("string pool overflow: maximum unique strings is %d", maxPoolEntries))
+		return 0
+	}
 	idx := uint16(len(p.strings))
 	p.strings = append(p.strings, s)
 	p.strIndex[s] = idx
@@ -59,6 +74,13 @@ func (p *Pool) String(s string) uint16 {
 func (p *Pool) Number(n float64) uint16 {
 	if idx, ok := p.numIndex[n]; ok {
 		return idx
+	}
+	if p.err != nil {
+		return 0
+	}
+	if len(p.numbers) > maxPoolIndex {
+		p.setErr(fmt.Errorf("number pool overflow: maximum unique numbers is %d", maxPoolEntries))
+		return 0
 	}
 	idx := uint16(len(p.numbers))
 	p.numbers = append(p.numbers, n)
@@ -72,6 +94,13 @@ func (p *Pool) Decimal(v dec.Value) uint16 {
 	if idx, ok := p.decIndex[key]; ok {
 		return idx
 	}
+	if p.err != nil {
+		return 0
+	}
+	if len(p.decimals) > maxPoolIndex {
+		p.setErr(fmt.Errorf("decimal pool overflow: maximum unique decimals is %d", maxPoolEntries))
+		return 0
+	}
 	idx := uint16(len(p.decimals))
 	p.decimals = append(p.decimals, v)
 	p.decIndex[key] = idx
@@ -80,6 +109,17 @@ func (p *Pool) Decimal(v dec.Value) uint16 {
 
 // List stores a list of values contiguously and returns (start index, length).
 func (p *Pool) List(items []PoolValue) (uint16, uint16) {
+	if p.err != nil {
+		return 0, 0
+	}
+	if len(items) > maxPoolIndex {
+		p.setErr(fmt.Errorf("list literal overflow: maximum list length is %d", maxPoolIndex))
+		return 0, 0
+	}
+	if len(p.lists) > maxPoolIndex {
+		p.setErr(fmt.Errorf("list pool overflow: maximum list start index is %d", maxPoolIndex))
+		return 0, 0
+	}
 	start := uint16(len(p.lists))
 	p.lists = append(p.lists, items...)
 	return start, uint16(len(items))
@@ -142,3 +182,18 @@ func (p *Pool) Decimals() []dec.Value { return p.decimals }
 
 // RestoreLists replaces the internal list storage (for deserialization).
 func (p *Pool) RestoreLists(items []PoolValue) { p.lists = items }
+
+// Err reports the first overflow recorded while interning constants.
+func (p *Pool) Err() error {
+	if p == nil {
+		return nil
+	}
+	return p.err
+}
+
+func (p *Pool) setErr(err error) {
+	if p == nil || err == nil || p.err != nil {
+		return
+	}
+	p.err = err
+}

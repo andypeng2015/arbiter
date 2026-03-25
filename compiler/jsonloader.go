@@ -32,6 +32,9 @@ func CompileJSONBatch(rules []JSONRuleInput) (*CompiledRuleset, error) {
 		if err := c.compileRule(r); err != nil {
 			return nil, fmt.Errorf("rule %s: %w", r.Name, err)
 		}
+		if err := c.pool.Err(); err != nil {
+			return nil, fmt.Errorf("constant pool: %w", err)
+		}
 	}
 
 	return &CompiledRuleset{

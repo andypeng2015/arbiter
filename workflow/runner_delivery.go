@@ -108,9 +108,16 @@ func newDelivery(now time.Time, arbiterName string, handler compiledDispatchHand
 }
 
 func (r *Runner) queueDelivery(delivery Delivery) error {
+	if r.maxPendingDeliveries > 0 && len(r.pending) >= r.maxPendingDeliveries {
+		return fmt.Errorf("workflow pending delivery queue full: limit %d", r.maxPendingDeliveries)
+	}
 	delivery.ID = r.nextDeliveryID(delivery.EnqueuedAt)
 	r.pending[delivery.ID] = delivery
-	return r.appendJournal("queued", delivery)
+	if err := r.appendJournal("queued", delivery); err != nil {
+		delete(r.pending, delivery.ID)
+		return err
+	}
+	return nil
 }
 
 func (r *Runner) pendingDeliveryIDs() []string {
@@ -300,6 +307,9 @@ func (r *Runner) restorePending() error {
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("workflow delivery log read: %w", err)
 	}
+	if r.maxPendingDeliveries > 0 && len(r.pending) > r.maxPendingDeliveries {
+		return fmt.Errorf("workflow pending delivery queue full: restored %d deliveries exceeds limit %d", len(r.pending), r.maxPendingDeliveries)
+	}
 	return nil
 }
 
@@ -326,6 +336,9 @@ func (r *Runner) appendJournal(event string, delivery Delivery) error {
 	}
 	if err := json.NewEncoder(file).Encode(entry); err != nil {
 		return fmt.Errorf("workflow delivery log write: %w", err)
+	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("workflow delivery log sync: %w", err)
 	}
 	return nil
 }

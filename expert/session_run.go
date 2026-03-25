@@ -3,6 +3,7 @@ package expert
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/odvcencio/arbiter/vm"
@@ -10,6 +11,12 @@ import (
 
 // Run evaluates the expert program until it reaches a fixed point or a guardrail.
 func (s *Session) Run(ctx context.Context) (Result, error) {
+	if s == nil {
+		return Result{}, fmt.Errorf("nil expert program")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := s.validateRunState(); err != nil {
 		return Result{}, err
 	}
@@ -149,21 +156,23 @@ func (s *Session) applyRoundMatches(ctx context.Context, round int, matched []vm
 	}
 	mutated := false
 
-	for _, match := range matched {
+	ordered, err := s.orderedMatches(matched)
+	if err != nil {
+		return false, active, false, err
+	}
+
+	for _, item := range ordered {
 		if err := ctx.Err(); err != nil {
 			s.stopReason = StopContextCancelled
 			return false, active, true, err
 		}
 
-		rule, ok := s.program.lookupRule(match.Name)
-		if !ok {
-			return false, active, false, fmt.Errorf("missing expert rule metadata for %q", match.Name)
-		}
+		rule := item.rule
 		if s.groupAlreadyFired(rule, firedGroups) {
 			continue
 		}
 
-		changed, err := s.applyMatchedRule(round, rule, match, active)
+		changed, err := s.applyMatchedRule(round, rule, item.match, active)
 		if err != nil {
 			return false, active, false, err
 		}
@@ -178,6 +187,34 @@ func (s *Session) applyRoundMatches(ctx context.Context, round int, matched []vm
 	}
 
 	return mutated, active, false, nil
+}
+
+type scheduledMatch struct {
+	rule  Rule
+	match vm.MatchedRule
+	order int
+}
+
+func (s *Session) orderedMatches(matched []vm.MatchedRule) ([]scheduledMatch, error) {
+	ordered := make([]scheduledMatch, 0, len(matched))
+	for i, match := range matched {
+		rule, ok := s.program.lookupRule(match.Name)
+		if !ok {
+			return nil, fmt.Errorf("missing expert rule metadata for %q", match.Name)
+		}
+		ordered = append(ordered, scheduledMatch{
+			rule:  rule,
+			match: match,
+			order: i,
+		})
+	}
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].rule.Priority != ordered[j].rule.Priority {
+			return ordered[i].rule.Priority > ordered[j].rule.Priority
+		}
+		return ordered[i].order < ordered[j].order
+	})
+	return ordered, nil
 }
 
 func (s *Session) groupAlreadyFired(rule Rule, firedGroups map[string]struct{}) bool {

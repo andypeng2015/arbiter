@@ -228,6 +228,110 @@ expert rule QualifyLead priority 10 per_fact {
 	}
 }
 
+func TestRunnerQueueDeliveryRespectsMaxPendingLimit(t *testing.T) {
+	now := time.Unix(3_000, 0).UTC()
+	runner := &Runner{
+		now:                  func() time.Time { return now },
+		pending:              make(map[string]Delivery),
+		maxPendingDeliveries: 1,
+	}
+
+	if err := runner.queueDelivery(Delivery{EnqueuedAt: now}); err != nil {
+		t.Fatalf("first queueDelivery: %v", err)
+	}
+	if err := runner.queueDelivery(Delivery{EnqueuedAt: now}); err == nil || !strings.Contains(err.Error(), "queue full") {
+		t.Fatalf("second queueDelivery error = %v, want queue full", err)
+	}
+	if len(runner.pending) != 1 {
+		t.Fatalf("pending len = %d, want 1", len(runner.pending))
+	}
+}
+
+func TestRunnerQueueDeliveryRollsBackOnJournalError(t *testing.T) {
+	tempDir := t.TempDir()
+	blocker := filepath.Join(tempDir, "blocker")
+	if err := os.WriteFile(blocker, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	now := time.Unix(3_100, 0).UTC()
+	runner := &Runner{
+		now:         func() time.Time { return now },
+		pending:     make(map[string]Delivery),
+		deliveryLog: filepath.Join(blocker, "deliveries.jsonl"),
+	}
+
+	if err := runner.queueDelivery(Delivery{EnqueuedAt: now}); err == nil {
+		t.Fatal("expected queueDelivery to fail when journal directory cannot be created")
+	}
+	if len(runner.pending) != 0 {
+		t.Fatalf("pending len = %d, want 0 after journal failure", len(runner.pending))
+	}
+}
+
+func TestRunnerDrainRetriesPendingDeliveriesUntilBackoffExpires(t *testing.T) {
+	attempts := 0
+	runner := &Runner{
+		now:            time.Now,
+		pending:        make(map[string]Delivery),
+		sinks:          make(map[string]*sinkState),
+		handlers:       make(map[arbiter.ArbiterHandlerKind]OutcomeHandler),
+		initialBackoff: 5 * time.Millisecond,
+		maxBackoff:     5 * time.Millisecond,
+	}
+	handlerKey := "webhook\x00https://hooks.internal/drain"
+	runner.handlers[arbiter.ArbiterHandlerWebhook] = OutcomeHandlerFunc(func(_ context.Context, delivery Delivery) error {
+		attempts++
+		if delivery.Handler.Target != "https://hooks.internal/drain" {
+			t.Fatalf("unexpected delivery target %q", delivery.Handler.Target)
+		}
+		if attempts == 1 {
+			return errors.New("temporary failure")
+		}
+		return nil
+	})
+	runner.sinks[handlerKey] = &sinkState{
+		SinkSnapshot: SinkSnapshot{
+			Key:       handlerKey,
+			Alias:     "hooks_internal_drain",
+			Kind:      string(arbiter.ArbiterHandlerWebhook),
+			Target:    "https://hooks.internal/drain",
+			Available: true,
+		},
+	}
+
+	now := time.Now().UTC()
+	if err := runner.queueDelivery(Delivery{
+		Handler: arbiter.ArbiterHandler{
+			Kind:   arbiter.ArbiterHandlerWebhook,
+			Target: "https://hooks.internal/drain",
+		},
+		HandlerKey: handlerKey,
+		Outcome: expert.Outcome{
+			Name: "Qualified",
+		},
+		EnqueuedAt: now,
+	}); err != nil {
+		t.Fatalf("queueDelivery: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	delivered, retried, err := runner.Drain(ctx)
+	if err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if delivered != 1 || retried != 1 {
+		t.Fatalf("Drain = delivered %d retried %d, want 1/1", delivered, retried)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if len(runner.pending) != 0 {
+		t.Fatalf("pending len = %d, want 0", len(runner.pending))
+	}
+}
+
 func TestRunnerFiltersWebhookDeliveriesByOutcomeFields(t *testing.T) {
 	src := []byte(`
 arbiter alerts {

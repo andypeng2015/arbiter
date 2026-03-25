@@ -57,3 +57,24 @@ func TestJSONContext(t *testing.T) {
 		t.Errorf("name type: got %d, want %d", v.Typ, TypeString)
 	}
 }
+
+func TestRuntimeStringsDoNotGrowStringPool(t *testing.T) {
+	pool := NewStringPool([]string{"name"})
+	beforeStrs := len(pool.strs)
+	beforeIndex := len(pool.index)
+
+	v := DataFromMap(map[string]any{"name": "alice"}, pool).Get("name")
+	if v.Typ != TypeString {
+		t.Fatalf("name type: got %d, want %d", v.Typ, TypeString)
+	}
+	got, ok := v.Any.(string)
+	if !ok || got != "alice" {
+		t.Fatalf("dynamic string = %#v, want %q", v.Any, "alice")
+	}
+	if len(pool.strs) != beforeStrs {
+		t.Fatalf("string pool grew from %d to %d", beforeStrs, len(pool.strs))
+	}
+	if len(pool.index) != beforeIndex {
+		t.Fatalf("string pool index grew from %d to %d", beforeIndex, len(pool.index))
+	}
+}
