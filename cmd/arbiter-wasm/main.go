@@ -48,8 +48,8 @@ func main() {
 // --- Compilation ---
 
 var (
-	compiled      *arbiter.CompileResult
-	expertProg    *expert.Program
+	compiled   *arbiter.Program
+	expertProg *expert.Program
 	lastSource    []byte
 	bundleRuleset *compiler.CompiledRuleset // set by loadBundle
 )
@@ -59,22 +59,22 @@ func compile(_ js.Value, args []js.Value) any {
 		return jsError("compile requires .arb source string")
 	}
 	source := []byte(args[0].String())
-	full, err := arbiter.CompileFull(source)
+	prog, err := arbiter.Compile(source)
 	if err != nil {
 		return jsError(err.Error())
 	}
-	compiled = full
+	compiled = prog
 	lastSource = source
 	// Pre-compile expert program for session support.
-	prog, err := expert.Compile(source)
-	if err != nil {
+	ep, eerr := expert.Compile(source)
+	if eerr != nil {
 		expertProg = nil // not all bundles have expert rules
 	} else {
-		expertProg = prog
+		expertProg = ep
 	}
 	return jsResult(map[string]any{
-		"rules":      len(full.Ruleset.Rules),
-		"strategies": full.Strategies.Count(),
+		"rules":      len(compiled.Ruleset.Rules),
+		"strategies": compiled.Strategies.Count(),
 	})
 }
 
@@ -148,11 +148,11 @@ func evalGoverned(_ js.Value, args []js.Value) any {
 	if err := json.Unmarshal([]byte(args[0].String()), &ctx); err != nil {
 		return jsError(err.Error())
 	}
-	dc, err := arbiter.DataFromJSON(args[0].String(), compiled.Ruleset)
+	dc, err := arbiter.DataFromJSON(args[0].String(), compiled)
 	if err != nil {
 		return jsError(err.Error())
 	}
-	matched, _, err := arbiter.EvalGoverned(compiled.Ruleset, dc, compiled.Segments, ctx)
+	matched, _, err := arbiter.EvalGoverned(compiled, dc, compiled.Segments, ctx)
 	if err != nil {
 		return jsError(err.Error())
 	}
@@ -171,7 +171,7 @@ func evalStrategy(_ js.Value, args []js.Value) any {
 	if err := json.Unmarshal([]byte(args[1].String()), &ctx); err != nil {
 		return jsError(err.Error())
 	}
-	result, err := arbiter.EvalStrategy(compiled, name, ctx)
+	result, err := compiled.Strategies.Evaluate(name, ctx)
 	if err != nil {
 		return jsError(err.Error())
 	}
