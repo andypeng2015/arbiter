@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,23 @@ import (
 	arbiter "github.com/odvcencio/arbiter"
 	"github.com/odvcencio/arbiter/expert"
 )
+
+func writeDeliveryJournal(t *testing.T, path string, entries ...deliveryJournalEntry) {
+	t.Helper()
+
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	defer file.Close()
+
+	enc := json.NewEncoder(file)
+	for _, entry := range entries {
+		if err := enc.Encode(entry); err != nil {
+			t.Fatalf("Encode: %v", err)
+		}
+	}
+}
 
 func TestRunnerKeepsLastKnownGoodFactsAndExposesSourceStaleness(t *testing.T) {
 	src := []byte(`
@@ -308,6 +326,89 @@ expert rule QualifyLead priority 10 per_fact {
 	}
 }
 
+func TestRunnerRestoresDispatchingDeliveriesAsAmbiguousWithoutReplay(t *testing.T) {
+	src := []byte(`
+arbiter sales {
+	poll 1s
+	source https://feed.internal/facts
+	on Qualified webhook https://hooks.internal/qualified
+}
+
+expert rule QualifyLead priority 10 per_fact {
+	when {
+		any lead in facts.Lead { lead.score >= 90 }
+	}
+	then emit Qualified {
+		key: lead.key,
+	}
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	logPath := filepath.Join(t.TempDir(), "deliveries.jsonl")
+	delivery := Delivery{
+		ID:         "1000-000001",
+		Arbiter:    "sales",
+		Handler:    arbiter.ArbiterHandler{Kind: arbiter.ArbiterHandlerWebhook, Target: "https://hooks.internal/qualified"},
+		HandlerKey: "webhook\x00https://hooks.internal/qualified",
+		Outcome: expert.Outcome{
+			Name: "Qualified",
+			Params: map[string]any{
+				"key": "lead-1",
+			},
+		},
+		EnqueuedAt:    time.Unix(4_000, 0).UTC(),
+		LastAttemptAt: time.Unix(4_001, 0).UTC(),
+	}
+	writeDeliveryJournal(t, logPath,
+		deliveryJournalEntry{Event: "queued", At: time.Unix(4_000, 0).UTC(), Delivery: delivery},
+		deliveryJournalEntry{Event: "dispatching", At: time.Unix(4_001, 0).UTC(), Delivery: delivery},
+	)
+
+	attempts := 0
+	runner, err := NewRunner(w, RunnerOptions{
+		Loader: func(_ context.Context, _ string) ([]expert.Fact, error) { return nil, nil },
+		Handlers: map[arbiter.ArbiterHandlerKind]OutcomeHandler{
+			arbiter.ArbiterHandlerWebhook: OutcomeHandlerFunc(func(_ context.Context, _ Delivery) error {
+				attempts++
+				return nil
+			}),
+		},
+		DeliveryLog: logPath,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner: %v", err)
+	}
+
+	ambiguous := runner.AmbiguousDeliveries()
+	if len(ambiguous) != 1 || ambiguous[0].ID != delivery.ID {
+		t.Fatalf("ambiguous deliveries = %+v, want %q", ambiguous, delivery.ID)
+	}
+
+	sink := runner.SinkStates()[delivery.HandlerKey]
+	if sink.Pending != 0 || sink.Ambiguous != 1 {
+		t.Fatalf("sink state = %+v, want pending=0 ambiguous=1", sink)
+	}
+
+	tick, err := runner.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if attempts != 0 {
+		t.Fatalf("attempts = %d, want 0 for ambiguous delivery", attempts)
+	}
+	if tick.Delivered != 0 || tick.Retried != 0 || tick.Enqueued != 0 {
+		t.Fatalf("tick delivery counts = %+v, want all zero", tick)
+	}
+	if got := runner.SinkStates()[delivery.HandlerKey].Ambiguous; got != 1 {
+		t.Fatalf("ambiguous after tick = %d, want 1", got)
+	}
+}
+
 func TestRunnerQueueDeliveryRespectsMaxPendingLimit(t *testing.T) {
 	now := time.Unix(3_000, 0).UTC()
 	runner := &Runner{
@@ -494,6 +595,115 @@ func TestRunnerDrainKeepsSinkSnapshotsReadableDuringBackoffWait(t *testing.T) {
 
 	if err := <-drainDone; err != nil {
 		t.Fatalf("Drain: %v", err)
+	}
+}
+
+func TestRunnerRequeueAmbiguousMovesDeliveryBackToPending(t *testing.T) {
+	handlerKey := "webhook\x00https://hooks.internal/requeue"
+	delivery := Delivery{
+		ID:         "5000-000001",
+		Handler:    arbiter.ArbiterHandler{Kind: arbiter.ArbiterHandlerWebhook, Target: "https://hooks.internal/requeue"},
+		HandlerKey: handlerKey,
+		Outcome:    expert.Outcome{Name: "Qualified"},
+		EnqueuedAt: time.Now().UTC(),
+	}
+
+	attempts := 0
+	runner := &Runner{
+		now:            time.Now,
+		pending:        make(map[string]Delivery),
+		ambiguous:      map[string]Delivery{delivery.ID: delivery},
+		sinks:          map[string]*sinkState{handlerKey: {SinkSnapshot: SinkSnapshot{Key: handlerKey, Kind: string(arbiter.ArbiterHandlerWebhook), Target: "https://hooks.internal/requeue", Ambiguous: 1}}},
+		handlers:       map[arbiter.ArbiterHandlerKind]OutcomeHandler{},
+		initialBackoff: time.Millisecond,
+		maxBackoff:     time.Millisecond,
+	}
+	runner.handlers[arbiter.ArbiterHandlerWebhook] = OutcomeHandlerFunc(func(_ context.Context, got Delivery) error {
+		attempts++
+		if got.ID != delivery.ID {
+			t.Fatalf("delivery ID = %q, want %q", got.ID, delivery.ID)
+		}
+		return nil
+	})
+
+	requeued, err := runner.RequeueAmbiguous()
+	if err != nil {
+		t.Fatalf("RequeueAmbiguous: %v", err)
+	}
+	if requeued != 1 {
+		t.Fatalf("requeued = %d, want 1", requeued)
+	}
+	sink := runner.SinkStates()[handlerKey]
+	if sink.Pending != 1 || sink.Ambiguous != 0 {
+		t.Fatalf("sink state after requeue = %+v, want pending=1 ambiguous=0", sink)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	delivered, retried, err := runner.Drain(ctx)
+	if err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if delivered != 1 || retried != 0 {
+		t.Fatalf("Drain = delivered %d retried %d, want 1/0", delivered, retried)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+}
+
+func TestRunnerAcknowledgeAmbiguousRemovesDelivery(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "deliveries.jsonl")
+	handlerKey := "webhook\x00https://hooks.internal/ack"
+	delivery := Delivery{
+		ID:         "6000-000001",
+		Handler:    arbiter.ArbiterHandler{Kind: arbiter.ArbiterHandlerWebhook, Target: "https://hooks.internal/ack"},
+		HandlerKey: handlerKey,
+		Outcome:    expert.Outcome{Name: "Qualified"},
+		EnqueuedAt: time.Now().UTC(),
+	}
+	writeDeliveryJournal(t, logPath,
+		deliveryJournalEntry{Event: "queued", At: time.Unix(6_000, 0).UTC(), Delivery: delivery},
+		deliveryJournalEntry{Event: "dispatching", At: time.Unix(6_001, 0).UTC(), Delivery: delivery},
+	)
+
+	runner := &Runner{
+		now:         time.Now,
+		pending:     make(map[string]Delivery),
+		ambiguous:   map[string]Delivery{delivery.ID: delivery},
+		sinks:       map[string]*sinkState{handlerKey: {SinkSnapshot: SinkSnapshot{Key: handlerKey, Kind: string(arbiter.ArbiterHandlerWebhook), Target: "https://hooks.internal/ack", Ambiguous: 1}}},
+		deliveryLog: logPath,
+	}
+
+	acked, err := runner.AcknowledgeAmbiguous()
+	if err != nil {
+		t.Fatalf("AcknowledgeAmbiguous: %v", err)
+	}
+	if acked != 1 {
+		t.Fatalf("acked = %d, want 1", acked)
+	}
+	if got := runner.SinkStates()[handlerKey].Ambiguous; got != 0 {
+		t.Fatalf("ambiguous after acknowledge = %d, want 0", got)
+	}
+
+	restore := &Runner{
+		now:       time.Now,
+		pending:   make(map[string]Delivery),
+		ambiguous: make(map[string]Delivery),
+		sinks: map[string]*sinkState{
+			handlerKey: {SinkSnapshot: SinkSnapshot{Key: handlerKey, Kind: string(arbiter.ArbiterHandlerWebhook), Target: "https://hooks.internal/ack"}},
+		},
+		deliveryLog: logPath,
+	}
+	if err := restore.restorePending(); err != nil {
+		t.Fatalf("restorePending: %v", err)
+	}
+	restore.refreshSinkPendingCounts()
+	if len(restore.AmbiguousDeliveries()) != 0 {
+		t.Fatalf("restored ambiguous deliveries = %+v, want none", restore.AmbiguousDeliveries())
+	}
+	if sink := restore.SinkStates()[handlerKey]; sink.Pending != 0 || sink.Ambiguous != 0 {
+		t.Fatalf("restored sink state = %+v, want empty", sink)
 	}
 }
 

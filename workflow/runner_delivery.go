@@ -158,6 +158,9 @@ func (r *Runner) processDeliveryAttempt(ctx context.Context, id string, now time
 	if !ok {
 		return false, nil
 	}
+	if err := r.appendJournal("dispatching", delivery); err != nil {
+		return true, err
+	}
 	if err := r.dispatch(ctx, delivery); err != nil {
 		return true, r.recordDeliveryFailure(id, delivery, now, err)
 	}
@@ -224,6 +227,17 @@ func (r *Runner) adjustSinkPendingLocked(handlerKey string, delta int) {
 	state.Pending += delta
 	if state.Pending < 0 {
 		state.Pending = 0
+	}
+}
+
+func (r *Runner) adjustSinkAmbiguousLocked(handlerKey string, delta int) {
+	state := r.sinks[handlerKey]
+	if state == nil || delta == 0 {
+		return
+	}
+	state.Ambiguous += delta
+	if state.Ambiguous < 0 {
+		state.Ambiguous = 0
 	}
 }
 
@@ -341,8 +355,16 @@ func (r *Runner) restorePending() error {
 		switch entry.Event {
 		case "queued", "failed":
 			r.pending[entry.Delivery.ID] = entry.Delivery
+			delete(r.ambiguous, entry.Delivery.ID)
+		case "dispatching":
+			delete(r.pending, entry.Delivery.ID)
+			r.ambiguous[entry.Delivery.ID] = entry.Delivery
 		case "delivered":
 			delete(r.pending, entry.Delivery.ID)
+			delete(r.ambiguous, entry.Delivery.ID)
+		case "acknowledged":
+			delete(r.pending, entry.Delivery.ID)
+			delete(r.ambiguous, entry.Delivery.ID)
 		}
 		if entry.Delivery.ID != "" {
 			r.nextID++
@@ -395,12 +417,134 @@ func (r *Runner) nextDeliveryID(now time.Time) string {
 func (r *Runner) refreshSinkPendingCounts() {
 	for _, state := range r.sinks {
 		state.Pending = 0
+		state.Ambiguous = 0
 	}
 	for _, delivery := range r.pending {
 		if state := r.sinks[delivery.HandlerKey]; state != nil {
 			state.Pending++
 		}
 	}
+	for _, delivery := range r.ambiguous {
+		if state := r.sinks[delivery.HandlerKey]; state != nil {
+			state.Ambiguous++
+		}
+	}
+}
+
+// RequeueAmbiguous moves ambiguous deliveries back into the pending queue so
+// they can be retried explicitly. If no ids are provided, all ambiguous
+// deliveries are requeued.
+func (r *Runner) RequeueAmbiguous(ids ...string) (int, error) {
+	if r == nil {
+		return 0, nil
+	}
+	r.execMu.Lock()
+	defer r.execMu.Unlock()
+
+	selected, err := r.selectAmbiguous(ids...)
+	if err != nil {
+		return 0, err
+	}
+
+	requeued := 0
+	for _, original := range selected {
+		delivery := cloneDelivery(original)
+		delivery.NextAttemptAt = time.Time{}
+		delivery.LastError = "requeued after ambiguous delivery recovery"
+
+		r.mu.Lock()
+		if r.maxPendingDeliveries > 0 && len(r.pending) >= r.maxPendingDeliveries {
+			r.mu.Unlock()
+			return requeued, fmt.Errorf("workflow pending delivery queue full: limit %d", r.maxPendingDeliveries)
+		}
+		delete(r.ambiguous, delivery.ID)
+		r.adjustSinkAmbiguousLocked(delivery.HandlerKey, -1)
+		r.pending[delivery.ID] = delivery
+		r.adjustSinkPendingLocked(delivery.HandlerKey, 1)
+		r.mu.Unlock()
+
+		if err := r.appendJournal("queued", delivery); err != nil {
+			r.mu.Lock()
+			delete(r.pending, delivery.ID)
+			r.adjustSinkPendingLocked(delivery.HandlerKey, -1)
+			r.ambiguous[delivery.ID] = original
+			r.adjustSinkAmbiguousLocked(delivery.HandlerKey, 1)
+			r.mu.Unlock()
+			return requeued, err
+		}
+		requeued++
+	}
+	return requeued, nil
+}
+
+// AcknowledgeAmbiguous removes ambiguous deliveries without replaying them. If
+// no ids are provided, all ambiguous deliveries are acknowledged.
+func (r *Runner) AcknowledgeAmbiguous(ids ...string) (int, error) {
+	if r == nil {
+		return 0, nil
+	}
+	r.execMu.Lock()
+	defer r.execMu.Unlock()
+
+	selected, err := r.selectAmbiguous(ids...)
+	if err != nil {
+		return 0, err
+	}
+
+	acked := 0
+	for _, delivery := range selected {
+		r.mu.Lock()
+		delete(r.ambiguous, delivery.ID)
+		r.adjustSinkAmbiguousLocked(delivery.HandlerKey, -1)
+		r.mu.Unlock()
+
+		if err := r.appendJournal("acknowledged", delivery); err != nil {
+			r.mu.Lock()
+			r.ambiguous[delivery.ID] = delivery
+			r.adjustSinkAmbiguousLocked(delivery.HandlerKey, 1)
+			r.mu.Unlock()
+			return acked, err
+		}
+		acked++
+	}
+	return acked, nil
+}
+
+func (r *Runner) selectAmbiguous(ids ...string) ([]Delivery, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if len(ids) == 0 {
+		ids = make([]string, 0, len(r.ambiguous))
+		for id := range r.ambiguous {
+			ids = append(ids, id)
+		}
+		slices.Sort(ids)
+	}
+
+	seen := make(map[string]struct{}, len(ids))
+	selected := make([]Delivery, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		delivery, ok := r.ambiguous[id]
+		if !ok {
+			return nil, fmt.Errorf("unknown ambiguous delivery %q", id)
+		}
+		selected = append(selected, cloneDelivery(delivery))
+	}
+	return selected, nil
+}
+
+func cloneDelivery(delivery Delivery) Delivery {
+	delivery.Outcome = expert.Outcome{
+		Rule:   delivery.Outcome.Rule,
+		Name:   delivery.Outcome.Name,
+		Params: cloneMap(delivery.Outcome.Params),
+	}
+	return delivery
 }
 
 func sinkHandlerKey(spec arbiter.ArbiterHandler) string {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -90,6 +91,7 @@ type SinkSnapshot struct {
 	Target              string    `json:"target,omitempty"`
 	Available           bool      `json:"available"`
 	Pending             int       `json:"pending,omitempty"`
+	Ambiguous           int       `json:"ambiguous,omitempty"`
 	ConsecutiveFailures int       `json:"consecutive_failures,omitempty"`
 	LastError           string    `json:"last_error,omitempty"`
 	LastAttemptAt       time.Time `json:"last_attempt_at,omitempty"`
@@ -134,6 +136,7 @@ type Runner struct {
 	sources              map[string]*sourceState
 	sinks                map[string]*sinkState
 	pending              map[string]Delivery
+	ambiguous            map[string]Delivery
 	initialBackoff       time.Duration
 	maxBackoff           time.Duration
 	sourceAttempts       int
@@ -210,6 +213,7 @@ func NewRunner(w *Workflow, opts RunnerOptions) (*Runner, error) {
 		sources:              make(map[string]*sourceState),
 		sinks:                make(map[string]*sinkState),
 		pending:              make(map[string]Delivery),
+		ambiguous:            make(map[string]Delivery),
 		initialBackoff:       opts.InitialBackoff,
 		maxBackoff:           opts.MaxBackoff,
 		sourceAttempts:       opts.SourceAttempts,
@@ -397,6 +401,30 @@ func (r *Runner) sinkStatesLocked() map[string]SinkSnapshot {
 	out := make(map[string]SinkSnapshot, len(r.sinks))
 	for key, state := range r.sinks {
 		out[key] = state.SinkSnapshot
+	}
+	return out
+}
+
+// AmbiguousDeliveries returns deliveries whose last persisted state was
+// dispatching, which means a prior process may have completed the side effect
+// before crashing. They are not auto-replayed.
+func (r *Runner) AmbiguousDeliveries() []Delivery {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	ids := make([]string, 0, len(r.ambiguous))
+	for id := range r.ambiguous {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+
+	out := make([]Delivery, 0, len(ids))
+	for _, id := range ids {
+		delivery := r.ambiguous[id]
+		out = append(out, cloneDelivery(delivery))
 	}
 	return out
 }

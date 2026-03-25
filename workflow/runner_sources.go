@@ -218,6 +218,7 @@ func sinkEnvelopeMeta(state SinkSnapshot) map[string]any {
 		"target":               state.Target,
 		"available":            state.Available,
 		"pending":              float64(state.Pending),
+		"ambiguous":            float64(state.Ambiguous),
 		"consecutive_failures": float64(state.ConsecutiveFailures),
 	}
 	if state.LastError != "" {
