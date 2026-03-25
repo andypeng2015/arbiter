@@ -118,6 +118,86 @@ expert rule AlertOnStaleSource priority 5 {
 	}
 }
 
+func TestRunnerTickKeepsSourceSnapshotsReadableDuringSlowLoad(t *testing.T) {
+	src := []byte(`
+arbiter sales {
+	poll 1s
+	source https://feed.internal/facts
+}
+
+expert rule QualifyLead priority 10 per_fact {
+	when {
+		any lead in facts.Lead { lead.score >= 90 }
+	}
+	then emit Qualified {
+		key: lead.key,
+	}
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	loadStarted := make(chan struct{})
+	releaseLoad := make(chan struct{})
+	runner, err := NewRunner(w, RunnerOptions{
+		Loader: func(_ context.Context, target string) ([]expert.Fact, error) {
+			if target != "https://feed.internal/facts" {
+				t.Fatalf("unexpected target %q", target)
+			}
+			close(loadStarted)
+			<-releaseLoad
+			return []expert.Fact{{
+				Type: "Lead",
+				Key:  "lead-1",
+				Fields: map[string]any{
+					"score": float64(95),
+				},
+			}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner: %v", err)
+	}
+
+	tickDone := make(chan error, 1)
+	go func() {
+		_, err := runner.Tick(context.Background())
+		tickDone <- err
+	}()
+
+	select {
+	case <-loadStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for source load to start")
+	}
+
+	snapshotDone := make(chan map[string]SourceSnapshot, 1)
+	go func() {
+		snapshotDone <- runner.SourceStates()
+	}()
+
+	select {
+	case sources := <-snapshotDone:
+		state, ok := sources["https://feed.internal/facts"]
+		if !ok {
+			t.Fatalf("source snapshot missing target: %+v", sources)
+		}
+		if state.Target != "https://feed.internal/facts" {
+			t.Fatalf("unexpected source snapshot: %+v", state)
+		}
+	case <-time.After(50 * time.Millisecond):
+		t.Fatal("SourceStates blocked during slow source load")
+	}
+
+	close(releaseLoad)
+	if err := <-tickDone; err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+}
+
 func TestRunnerRestoresPendingSinkDeliveriesFromJournal(t *testing.T) {
 	src := []byte(`
 arbiter sales {
@@ -332,6 +412,91 @@ func TestRunnerDrainRetriesPendingDeliveriesUntilBackoffExpires(t *testing.T) {
 	}
 }
 
+func TestRunnerDrainKeepsSinkSnapshotsReadableDuringBackoffWait(t *testing.T) {
+	attempts := 0
+	firstFailure := make(chan struct{})
+	runner := &Runner{
+		now:            time.Now,
+		pending:        make(map[string]Delivery),
+		sinks:          make(map[string]*sinkState),
+		handlers:       make(map[arbiter.ArbiterHandlerKind]OutcomeHandler),
+		initialBackoff: 200 * time.Millisecond,
+		maxBackoff:     200 * time.Millisecond,
+	}
+	handlerKey := "webhook\x00https://hooks.internal/snapshot"
+	runner.handlers[arbiter.ArbiterHandlerWebhook] = OutcomeHandlerFunc(func(_ context.Context, _ Delivery) error {
+		attempts++
+		if attempts == 1 {
+			close(firstFailure)
+			return errors.New("temporary failure")
+		}
+		return nil
+	})
+	runner.sinks[handlerKey] = &sinkState{
+		SinkSnapshot: SinkSnapshot{
+			Key:       handlerKey,
+			Alias:     "hooks_internal_snapshot",
+			Kind:      string(arbiter.ArbiterHandlerWebhook),
+			Target:    "https://hooks.internal/snapshot",
+			Available: true,
+		},
+	}
+
+	now := time.Now().UTC()
+	if err := runner.queueDelivery(Delivery{
+		Handler: arbiter.ArbiterHandler{
+			Kind:   arbiter.ArbiterHandlerWebhook,
+			Target: "https://hooks.internal/snapshot",
+		},
+		HandlerKey: handlerKey,
+		Outcome: expert.Outcome{
+			Name: "Qualified",
+		},
+		EnqueuedAt: now,
+	}); err != nil {
+		t.Fatalf("queueDelivery: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	drainDone := make(chan error, 1)
+	go func() {
+		_, _, err := runner.Drain(ctx)
+		drainDone <- err
+	}()
+
+	select {
+	case <-firstFailure:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first delivery failure")
+	}
+
+	time.Sleep(10 * time.Millisecond)
+
+	snapshotDone := make(chan map[string]SinkSnapshot, 1)
+	go func() {
+		snapshotDone <- runner.SinkStates()
+	}()
+
+	select {
+	case sinks := <-snapshotDone:
+		sink := sinks[handlerKey]
+		if sink.Pending != 1 {
+			t.Fatalf("sink pending = %d, want 1 while delivery is waiting for retry", sink.Pending)
+		}
+		if sink.Available {
+			t.Fatalf("sink available = %v, want false after failed attempt", sink.Available)
+		}
+	case <-time.After(50 * time.Millisecond):
+		t.Fatal("SinkStates blocked during drain backoff wait")
+	}
+
+	if err := <-drainDone; err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+}
+
 func TestRunnerFiltersWebhookDeliveriesByOutcomeFields(t *testing.T) {
 	src := []byte(`
 arbiter alerts {
@@ -417,6 +582,95 @@ expert rule EmitAlerts priority 10 per_fact {
 	sink := tick.Sinks["webhook\x00https://hooks.internal/critical"]
 	if sink.Pending != 0 || !sink.Available {
 		t.Fatalf("sink state = %+v, want available with no backlog", sink)
+	}
+}
+
+func TestRunnerTickKeepsSinkSnapshotsReadableDuringSlowDelivery(t *testing.T) {
+	src := []byte(`
+arbiter sales {
+	poll 1s
+	source https://feed.internal/facts
+	on Qualified webhook https://hooks.internal/qualified
+}
+
+expert rule QualifyLead priority 10 per_fact {
+	when {
+		any lead in facts.Lead { lead.score >= 90 }
+	}
+	then emit Qualified {
+		key: lead.key,
+	}
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	deliveryStarted := make(chan struct{})
+	releaseDelivery := make(chan struct{})
+	runner, err := NewRunner(w, RunnerOptions{
+		Loader: func(_ context.Context, _ string) ([]expert.Fact, error) {
+			return []expert.Fact{{
+				Type: "Lead",
+				Key:  "lead-1",
+				Fields: map[string]any{
+					"score": float64(95),
+				},
+			}}, nil
+		},
+		Handlers: map[arbiter.ArbiterHandlerKind]OutcomeHandler{
+			arbiter.ArbiterHandlerWebhook: OutcomeHandlerFunc(func(_ context.Context, delivery Delivery) error {
+				if delivery.Handler.Target != "https://hooks.internal/qualified" {
+					t.Fatalf("unexpected delivery target %q", delivery.Handler.Target)
+				}
+				close(deliveryStarted)
+				<-releaseDelivery
+				return nil
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner: %v", err)
+	}
+
+	tickDone := make(chan error, 1)
+	go func() {
+		_, err := runner.Tick(context.Background())
+		tickDone <- err
+	}()
+
+	select {
+	case <-deliveryStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for delivery to start")
+	}
+
+	snapshotDone := make(chan map[string]SinkSnapshot, 1)
+	go func() {
+		snapshotDone <- runner.SinkStates()
+	}()
+
+	select {
+	case sinks := <-snapshotDone:
+		sink, ok := sinks["webhook\x00https://hooks.internal/qualified"]
+		if !ok {
+			t.Fatalf("sink snapshot missing target: %+v", sinks)
+		}
+		if sink.Target != "https://hooks.internal/qualified" {
+			t.Fatalf("unexpected sink snapshot: %+v", sink)
+		}
+		if sink.Pending != 1 {
+			t.Fatalf("sink pending = %d, want 1 during slow delivery", sink.Pending)
+		}
+	case <-time.After(50 * time.Millisecond):
+		t.Fatal("SinkStates blocked during slow delivery")
+	}
+
+	close(releaseDelivery)
+	if err := <-tickDone; err != nil {
+		t.Fatalf("Tick: %v", err)
 	}
 }
 

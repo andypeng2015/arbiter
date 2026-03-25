@@ -25,22 +25,31 @@ func (r *Runner) syncSources(ctx context.Context) error {
 }
 
 func (r *Runner) syncSourceTarget(ctx context.Context, target string) error {
-	state := r.sources[target]
+	state := r.sourceState(target)
 	if state == nil {
 		return nil
 	}
 
 	now := r.now().UTC()
-	if sourceRetryPending(state, now) {
-		return r.restoreSourceFacts(target, state)
+	r.mu.RLock()
+	retryPending := sourceRetryPending(state, now)
+	lastFacts := cloneExpertFacts(state.lastFacts)
+	r.mu.RUnlock()
+	if retryPending {
+		return r.restoreSourceFacts(target, lastFacts)
 	}
 
-	facts, err := r.loadSourceWithRetry(ctx, state)
+	facts, err := r.loadSourceWithRetry(ctx, target)
 	if err != nil {
-		return r.restoreSourceFacts(target, state)
+		r.mu.RLock()
+		lastFacts = cloneExpertFacts(state.lastFacts)
+		r.mu.RUnlock()
+		return r.restoreSourceFacts(target, lastFacts)
 	}
 
+	r.mu.Lock()
 	r.markSourceLoadSuccess(state, facts, now)
+	r.mu.Unlock()
 	return r.workflow.SetSourceFacts(target, facts)
 }
 
@@ -48,11 +57,11 @@ func sourceRetryPending(state *sourceState, now time.Time) bool {
 	return !state.NextRetryAt.IsZero() && now.Before(state.NextRetryAt)
 }
 
-func (r *Runner) restoreSourceFacts(target string, state *sourceState) error {
-	if len(state.lastFacts) == 0 {
+func (r *Runner) restoreSourceFacts(target string, facts []expert.Fact) error {
+	if len(facts) == 0 {
 		return r.workflow.SetSourceFacts(target, nil)
 	}
-	return r.workflow.SetSourceFacts(target, state.lastFacts)
+	return r.workflow.SetSourceFacts(target, facts)
 }
 
 func (r *Runner) markSourceLoadSuccess(state *sourceState, facts []expert.Fact, now time.Time) {
@@ -65,7 +74,8 @@ func (r *Runner) markSourceLoadSuccess(state *sourceState, facts []expert.Fact, 
 	state.lastFacts = cloneExpertFacts(facts)
 }
 
-func (r *Runner) loadSourceWithRetry(ctx context.Context, state *sourceState) ([]expert.Fact, error) {
+func (r *Runner) loadSourceWithRetry(ctx context.Context, target string) ([]expert.Fact, error) {
+	state := r.sourceState(target)
 	if state == nil {
 		return nil, fmt.Errorf("nil source state")
 	}
@@ -74,7 +84,9 @@ func (r *Runner) loadSourceWithRetry(ctx context.Context, state *sourceState) ([
 	var lastErr error
 	for attempt := 1; attempt <= r.sourceAttempts; attempt++ {
 		now := r.now().UTC()
+		r.mu.Lock()
 		state.LastAttemptAt = now
+		r.mu.Unlock()
 		facts, err := r.loader(ctx, state.Target)
 		if err == nil {
 			return facts, nil
@@ -92,15 +104,22 @@ func (r *Runner) loadSourceWithRetry(ctx context.Context, state *sourceState) ([
 		backoff = nextBackoff(backoff, r.maxBackoff)
 	}
 
+	r.mu.Lock()
 	state.Available = false
 	state.LastError = lastErr.Error()
 	state.ConsecutiveFailures++
 	state.NextRetryAt = r.now().UTC().Add(backoff)
 	state.FactCount = len(state.lastFacts)
+	r.mu.Unlock()
 	return nil, lastErr
 }
 
 func (r *Runner) syncArbiterEnvelopes() {
+	r.mu.RLock()
+	sources := r.sourceStatesLocked()
+	sinks := r.sinkStatesLocked()
+	r.mu.RUnlock()
+	now := r.now().UTC()
 	for _, name := range r.workflow.order {
 		arb := r.workflow.arbiters[name]
 		if arb == nil || arb.session == nil {
@@ -110,28 +129,27 @@ func (r *Runner) syncArbiterEnvelopes() {
 		if envelope == nil {
 			envelope = make(map[string]any)
 		}
-		if src := r.sourceEnvelope(arb); len(src) > 0 {
+		if src := sourceEnvelope(arb, sources, now); len(src) > 0 {
 			envelope["source"] = src
 		}
-		if sink := r.sinkEnvelope(arb); len(sink) > 0 {
+		if sink := sinkEnvelope(arb, sinks); len(sink) > 0 {
 			envelope["sink"] = sink
 		}
 		arb.session.SetEnvelope(envelope)
 	}
 }
 
-func (r *Runner) sourceEnvelope(arb *runtimeArbiter) map[string]any {
+func sourceEnvelope(arb *runtimeArbiter, states map[string]SourceSnapshot, now time.Time) map[string]any {
 	if arb == nil {
 		return nil
 	}
-	now := r.now().UTC()
 	out := make(map[string]any)
 	for _, source := range arb.decl.Sources {
 		if isChainSourceTarget(source.Target) {
 			continue
 		}
-		state := r.sources[source.Target]
-		if state == nil {
+		state, ok := states[source.Target]
+		if !ok {
 			continue
 		}
 		out[state.Alias] = sourceEnvelopeMeta(state, now)
@@ -142,7 +160,7 @@ func (r *Runner) sourceEnvelope(arb *runtimeArbiter) map[string]any {
 	return out
 }
 
-func (r *Runner) sinkEnvelope(arb *runtimeArbiter) map[string]any {
+func sinkEnvelope(arb *runtimeArbiter, states map[string]SinkSnapshot) map[string]any {
 	if arb == nil {
 		return nil
 	}
@@ -151,8 +169,8 @@ func (r *Runner) sinkEnvelope(arb *runtimeArbiter) map[string]any {
 		if handler.Kind == arbiter.ArbiterHandlerChain {
 			continue
 		}
-		state := r.sinks[sinkHandlerKey(handler)]
-		if state == nil {
+		state, ok := states[sinkHandlerKey(handler)]
+		if !ok {
 			continue
 		}
 		out[state.Alias] = sinkEnvelopeMeta(state)
@@ -163,7 +181,7 @@ func (r *Runner) sinkEnvelope(arb *runtimeArbiter) map[string]any {
 	return out
 }
 
-func sourceEnvelopeMeta(state *sourceState, now time.Time) map[string]any {
+func sourceEnvelopeMeta(state SourceSnapshot, now time.Time) map[string]any {
 	meta := map[string]any{
 		"target":               state.Target,
 		"alias":                state.Alias,
@@ -187,14 +205,14 @@ func sourceEnvelopeMeta(state *sourceState, now time.Time) map[string]any {
 	return meta
 }
 
-func sourceAgeSeconds(state *sourceState, now time.Time) float64 {
+func sourceAgeSeconds(state SourceSnapshot, now time.Time) float64 {
 	if state.LastSuccessAt.IsZero() || now.Before(state.LastSuccessAt) {
 		return 0
 	}
 	return float64(int64(now.Sub(state.LastSuccessAt).Seconds()))
 }
 
-func sinkEnvelopeMeta(state *sinkState) map[string]any {
+func sinkEnvelopeMeta(state SinkSnapshot) map[string]any {
 	meta := map[string]any{
 		"kind":                 state.Kind,
 		"target":               state.Target,
@@ -215,6 +233,15 @@ func sinkEnvelopeMeta(state *sinkState) map[string]any {
 		meta["next_retry_at"] = float64(state.NextRetryAt.Unix())
 	}
 	return meta
+}
+
+func (r *Runner) sourceState(target string) *sourceState {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.sources[target]
 }
 
 func toExpertFacts(facts []factsource.Fact) []expert.Fact {

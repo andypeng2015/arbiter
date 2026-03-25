@@ -123,6 +123,7 @@ type TickResult struct {
 }
 
 type Runner struct {
+	execMu               sync.Mutex
 	mu                   sync.RWMutex
 	workflow             *Workflow
 	now                  func() time.Time
@@ -242,6 +243,8 @@ func (r *Runner) Close() error {
 	if r == nil {
 		return nil
 	}
+	r.execMu.Lock()
+	defer r.execMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.closeLocked()
@@ -263,12 +266,8 @@ func (r *Runner) Tick(ctx context.Context) (TickResult, error) {
 	if r == nil || r.workflow == nil {
 		return TickResult{}, fmt.Errorf("nil runner")
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.tickLocked(ctx)
-}
-
-func (r *Runner) tickLocked(ctx context.Context) (TickResult, error) {
+	r.execMu.Lock()
+	defer r.execMu.Unlock()
 	if err := r.syncSources(ctx); err != nil {
 		return TickResult{}, err
 	}
@@ -284,15 +283,19 @@ func (r *Runner) tickLocked(ctx context.Context) (TickResult, error) {
 		return TickResult{}, err
 	}
 	delivered, retried, err := r.deliverReady(ctx)
+	r.mu.Lock()
+	r.refreshSinkPendingCounts()
+	sources := r.sourceStatesLocked()
+	sinks := r.sinkStatesLocked()
+	r.mu.Unlock()
 	if err != nil {
 		return TickResult{}, err
 	}
-	r.refreshSinkPendingCounts()
 
 	return TickResult{
 		Workflow:  workflowResult,
-		Sources:   r.sourceStatesLocked(),
-		Sinks:     r.sinkStatesLocked(),
+		Sources:   sources,
+		Sinks:     sinks,
 		Delivered: delivered,
 		Retried:   retried,
 		Enqueued:  enqueued,
@@ -304,43 +307,44 @@ func (r *Runner) Drain(ctx context.Context) (int, int, error) {
 	if r == nil {
 		return 0, 0, nil
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.drainLocked(ctx)
-}
+	r.execMu.Lock()
+	defer r.execMu.Unlock()
 
-func (r *Runner) drainLocked(ctx context.Context) (int, int, error) {
 	drained := 0
 	retried := 0
 	for {
 		if err := ctx.Err(); err != nil {
+			r.mu.Lock()
 			r.refreshSinkPendingCounts()
+			r.mu.Unlock()
 			return drained, retried, err
 		}
 		deliveredNow, retriedNow, err := r.deliverReady(ctx)
 		drained += deliveredNow
 		retried += retriedNow
+		r.mu.Lock()
 		r.refreshSinkPendingCounts()
 		if err != nil {
+			r.mu.Unlock()
 			return drained, retried, err
 		}
 		if len(r.pending) == 0 {
+			r.mu.Unlock()
 			return drained, retried, nil
 		}
 		next, ok := r.nextPendingAttemptAtLocked()
 		now := r.now().UTC()
 		if !ok || !next.After(now) {
+			r.mu.Unlock()
 			continue
 		}
-		timer := time.NewTimer(next.Sub(now))
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
+		wait := next.Sub(now)
+		r.mu.Unlock()
+		if err := sleepContext(ctx, wait); err != nil {
+			r.mu.Lock()
 			r.refreshSinkPendingCounts()
-			return drained, retried, ctx.Err()
-		case <-timer.C:
+			r.mu.Unlock()
+			return drained, retried, err
 		}
 	}
 }

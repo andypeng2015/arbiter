@@ -14,11 +14,12 @@ func (r *Runner) applyWorkerExecution(arbiterName string, worker arbiter.WorkerD
 	if err != nil {
 		return err
 	}
-	state := r.workerSourceState(worker.Name)
+	state := r.sourceState(workerSourceTarget(worker.Name))
 	if state == nil {
 		return nil
 	}
 	now := r.now().UTC()
+	r.mu.Lock()
 	state.Available = true
 	state.LastError = ""
 	state.ConsecutiveFailures = 0
@@ -27,6 +28,7 @@ func (r *Runner) applyWorkerExecution(arbiterName string, worker arbiter.WorkerD
 	state.NextRetryAt = time.Time{}
 	state.FactCount = len(facts)
 	state.lastFacts = cloneExpertFacts(facts)
+	r.mu.Unlock()
 	return r.workflow.setRuntimeSourceFacts(workerSourceTarget(worker.Name), facts)
 }
 
@@ -34,7 +36,13 @@ func (r *Runner) markWorkerSourceFailure(workerName string, now time.Time, err e
 	if r == nil || err == nil {
 		return
 	}
-	state := r.workerSourceState(workerName)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.markWorkerSourceFailureLocked(workerName, now, err)
+}
+
+func (r *Runner) markWorkerSourceFailureLocked(workerName string, now time.Time, err error) {
+	state := r.sources[workerSourceTarget(workerName)]
 	if state == nil {
 		return
 	}
@@ -43,13 +51,6 @@ func (r *Runner) markWorkerSourceFailure(workerName string, now time.Time, err e
 	state.ConsecutiveFailures++
 	state.LastAttemptAt = now
 	state.FactCount = len(state.lastFacts)
-}
-
-func (r *Runner) workerSourceState(workerName string) *sourceState {
-	if r == nil {
-		return nil
-	}
-	return r.sources[workerSourceTarget(workerName)]
 }
 
 func materializeWorkerFacts(arbiterName string, worker arbiter.WorkerDeclaration, result WorkerExecution) ([]expert.Fact, error) {

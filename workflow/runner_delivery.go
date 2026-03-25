@@ -32,14 +32,18 @@ func (r *Runner) enqueueWorkflowDeliveries(result Result) (int, error) {
 func (r *Runner) deliverReady(ctx context.Context) (delivered int, retried int, err error) {
 	now := r.now().UTC()
 	for _, id := range r.pendingDeliveryIDs() {
-		delivery := r.pending[id]
+		delivery, ok := r.pendingDelivery(id)
+		if !ok {
+			continue
+		}
 		if !deliveryReady(now, delivery) {
 			continue
 		}
-		if err := r.processDeliveryAttempt(ctx, id, now); err != nil {
+		stillPending, err := r.processDeliveryAttempt(ctx, id, now)
+		if err != nil {
 			return delivered, retried, err
 		}
-		if _, ok := r.pending[id]; ok {
+		if stillPending {
 			retried++
 			continue
 		}
@@ -108,19 +112,28 @@ func newDelivery(now time.Time, arbiterName string, handler compiledDispatchHand
 }
 
 func (r *Runner) queueDelivery(delivery Delivery) error {
+	r.mu.Lock()
 	if r.maxPendingDeliveries > 0 && len(r.pending) >= r.maxPendingDeliveries {
+		r.mu.Unlock()
 		return fmt.Errorf("workflow pending delivery queue full: limit %d", r.maxPendingDeliveries)
 	}
 	delivery.ID = r.nextDeliveryID(delivery.EnqueuedAt)
 	r.pending[delivery.ID] = delivery
+	r.adjustSinkPendingLocked(delivery.HandlerKey, 1)
+	r.mu.Unlock()
 	if err := r.appendJournal("queued", delivery); err != nil {
+		r.mu.Lock()
 		delete(r.pending, delivery.ID)
+		r.adjustSinkPendingLocked(delivery.HandlerKey, -1)
+		r.mu.Unlock()
 		return err
 	}
 	return nil
 }
 
 func (r *Runner) pendingDeliveryIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	ids := make([]string, 0, len(r.pending))
 	for id := range r.pending {
 		ids = append(ids, id)
@@ -129,50 +142,69 @@ func (r *Runner) pendingDeliveryIDs() []string {
 	return ids
 }
 
+func (r *Runner) pendingDelivery(id string) (Delivery, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	delivery, ok := r.pending[id]
+	return delivery, ok
+}
+
 func deliveryReady(now time.Time, delivery Delivery) bool {
 	return delivery.NextAttemptAt.IsZero() || !now.Before(delivery.NextAttemptAt)
 }
 
-func (r *Runner) processDeliveryAttempt(ctx context.Context, id string, now time.Time) error {
-	delivery := r.pending[id]
-	state := r.beginDeliveryAttempt(id, now)
-	delivery = r.pending[id]
-	if err := r.dispatch(ctx, delivery); err != nil {
-		return r.recordDeliveryFailure(id, delivery, state, now, err)
+func (r *Runner) processDeliveryAttempt(ctx context.Context, id string, now time.Time) (bool, error) {
+	delivery, ok := r.beginDeliveryAttempt(id, now)
+	if !ok {
+		return false, nil
 	}
-	return r.recordDeliverySuccess(id, delivery, state, now)
+	if err := r.dispatch(ctx, delivery); err != nil {
+		return true, r.recordDeliveryFailure(id, delivery, now, err)
+	}
+	return false, r.recordDeliverySuccess(id, delivery, now)
 }
 
-func (r *Runner) beginDeliveryAttempt(id string, now time.Time) *sinkState {
-	delivery := r.pending[id]
+func (r *Runner) beginDeliveryAttempt(id string, now time.Time) (Delivery, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delivery, ok := r.pending[id]
+	if !ok {
+		return Delivery{}, false
+	}
 	state := r.sinks[delivery.HandlerKey]
 	if state != nil {
 		state.LastAttemptAt = now
 	}
 	delivery.LastAttemptAt = now
 	r.pending[id] = delivery
-	return state
+	return delivery, true
 }
 
-func (r *Runner) recordDeliveryFailure(id string, delivery Delivery, state *sinkState, now time.Time, err error) error {
+func (r *Runner) recordDeliveryFailure(id string, delivery Delivery, now time.Time, err error) error {
 	delivery.Attempt++
 	delivery.LastError = err.Error()
 	delivery.NextAttemptAt = now.Add(deliveryBackoff(delivery.Attempt, r.initialBackoff, r.maxBackoff))
+	r.mu.Lock()
 	r.pending[id] = delivery
 	if delivery.Worker != "" {
-		r.markWorkerSourceFailure(delivery.Worker, now, err)
+		r.markWorkerSourceFailureLocked(delivery.Worker, now, err)
 	}
+	state := r.sinks[delivery.HandlerKey]
 	if state != nil {
 		state.Available = false
 		state.LastError = delivery.LastError
 		state.ConsecutiveFailures++
 		state.NextRetryAt = delivery.NextAttemptAt
 	}
+	r.mu.Unlock()
 	return r.appendJournal("failed", delivery)
 }
 
-func (r *Runner) recordDeliverySuccess(id string, delivery Delivery, state *sinkState, now time.Time) error {
+func (r *Runner) recordDeliverySuccess(id string, delivery Delivery, now time.Time) error {
+	r.mu.Lock()
 	delete(r.pending, id)
+	r.adjustSinkPendingLocked(delivery.HandlerKey, -1)
+	state := r.sinks[delivery.HandlerKey]
 	if state != nil {
 		state.Available = true
 		state.LastError = ""
@@ -180,7 +212,19 @@ func (r *Runner) recordDeliverySuccess(id string, delivery Delivery, state *sink
 		state.LastSuccessAt = now
 		state.NextRetryAt = time.Time{}
 	}
+	r.mu.Unlock()
 	return r.appendJournal("delivered", delivery)
+}
+
+func (r *Runner) adjustSinkPendingLocked(handlerKey string, delta int) {
+	state := r.sinks[handlerKey]
+	if state == nil || delta == 0 {
+		return
+	}
+	state.Pending += delta
+	if state.Pending < 0 {
+		state.Pending = 0
+	}
 }
 
 func (r *Runner) dispatch(ctx context.Context, delivery Delivery) error {
