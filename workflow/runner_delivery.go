@@ -345,17 +345,18 @@ func (r *Runner) dispatchWorker(ctx context.Context, delivery Delivery) error {
 		Kind:    worker.Kind,
 		Target:  worker.Target,
 	}
-	if handler := r.workerHandlers[worker.Kind]; handler != nil {
-		result, err := handler.Execute(ctx, WorkerInvocation{
-			Worker:   worker,
-			Delivery: resolved,
-		})
-		if err != nil {
-			return err
-		}
-		return r.applyWorkerExecution(delivery.Arbiter, worker, result)
+	handler := r.workerHandlers[worker.Kind]
+	if handler == nil {
+		return fmt.Errorf("no worker runtime registered for %s", worker.Kind)
 	}
-	return r.dispatch(ctx, resolved)
+	result, err := handler.Execute(ctx, WorkerInvocation{
+		Worker:   worker,
+		Delivery: resolved,
+	})
+	if err != nil {
+		return err
+	}
+	return r.applyWorkerExecution(delivery.Arbiter, worker, result)
 }
 
 func (r *Runner) deliverAudit(ctx context.Context, delivery Delivery) error {

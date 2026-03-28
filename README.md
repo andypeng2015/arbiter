@@ -395,7 +395,9 @@ expert rule HaltOnStaleFeed priority 0 {
 
 `workflow` still owns `chain://...` and `worker://...` sources, validates that chain handlers and worker sources point at declared runtime objects, and rejects cyclic arbiter graphs. `chain` and `worker` remain reserved handler kinds, and `stdout` remains the only targetless runtime kind. Everything else is host-owned capability space: Go hosts can register sink and worker kinds directly through `RunnerOptions.Handlers` and `RunnerOptions.WorkerHandlers`, and non-Go runtimes can expose the gRPC `CapabilityService` and bind it through `capability.NewGRPCAdapter` or `arbiter-runtime --capability-grpc ...`. Built-in delivery implementations still cover `audit` and `stdout`, while transport kinds like `webhook`, `slack`, `exec`, `grpc`, or your own identifiers stay deployment-defined.
 
-That same capability surface is now visible to operators too: when a reference runtime is connected to a plugin sidecar, `/status` includes the plugin name/version plus the registered source schemes, sink kinds, and worker kinds so custom behavior is inspectable before a bundle ever fires.
+Keep the transport algebra explicit: a sink kind is not automatically a worker runtime. Workers are typed capabilities with typed results, so their runtime kinds must be registered through `RunnerOptions.WorkerHandlers` (or the capability plugin's worker surface), not inferred from delivery handlers.
+
+That same capability surface is now visible to operators too: `/status` reports one unified runtime view of source schemes, sink kinds, and worker runtimes tagged by owner (`core`, `host`, or `plugin`), and also includes the connected plugin manifest metadata when a sidecar is present.
 
 Arbiters are always killable by default. There is no `kill_switch` keyword inside an `arbiter` block because the loop should run unless a runtime stop path is used. The exact stop path can vary by deployment, but the invariant is the same: every arbiter must be stoppable quickly. In practice that can be wired through several control paths, including a control-plane override, a local override file, parent-context cancellation, or ordinary process shutdown/signal handling.
 
@@ -1139,7 +1141,7 @@ It handles the full lifecycle:
 - **Delivery retry** — outcomes route to registered handlers with durable retry journal
 - **Bounded parallelism** — independent sources and handler targets can run concurrently inside one tick without changing per-target ordering
 - **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
-- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats, connected capability manifest)
+- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats, unified capability surface, connected plugin metadata)
 
 Build:
 

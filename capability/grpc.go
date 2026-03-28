@@ -88,6 +88,15 @@ func (a *GRPCAdapter) BindRunnerOptions(ctx context.Context, opts workflow.Runne
 	if err != nil {
 		return opts, nil, err
 	}
+	if len(manifest.Sources) > 0 && opts.SourceCapabilities == nil {
+		opts.SourceCapabilities = make(map[string]workflow.SourceCapabilitySpec, len(manifest.Sources))
+	}
+	for scheme, item := range manifest.Sources {
+		opts.SourceCapabilities[scheme] = workflow.SourceCapabilitySpec{
+			Owner:       workflow.CapabilityOwnerPlugin,
+			Description: item.Description,
+		}
+	}
 
 	baseLoader := opts.Loader
 	if baseLoader == nil {
@@ -108,9 +117,16 @@ func (a *GRPCAdapter) BindRunnerOptions(ctx context.Context, opts workflow.Runne
 	if len(manifest.Sinks) > 0 && opts.Handlers == nil {
 		opts.Handlers = make(map[arbiter.ArbiterHandlerKind]workflow.OutcomeHandler, len(manifest.Sinks))
 	}
+	if len(manifest.Sinks) > 0 && opts.SinkCapabilities == nil {
+		opts.SinkCapabilities = make(map[arbiter.ArbiterHandlerKind]workflow.HandlerCapabilitySpec, len(manifest.Sinks))
+	}
 	for kind := range manifest.Sinks {
 		if _, exists := opts.Handlers[kind]; exists {
 			return opts, nil, fmt.Errorf("capability sink kind %q already registered", kind)
+		}
+		opts.SinkCapabilities[kind] = workflow.HandlerCapabilitySpec{
+			Owner:       workflow.CapabilityOwnerPlugin,
+			Description: manifest.Sinks[kind].Description,
 		}
 		opts.Handlers[kind] = workflow.OutcomeHandlerFunc(func(ctx context.Context, delivery workflow.Delivery) error {
 			req, err := protoDeliverOutcomeRequest(delivery)
@@ -125,9 +141,16 @@ func (a *GRPCAdapter) BindRunnerOptions(ctx context.Context, opts workflow.Runne
 	if len(manifest.Workers) > 0 && opts.WorkerHandlers == nil {
 		opts.WorkerHandlers = make(map[arbiter.ArbiterHandlerKind]workflow.WorkerHandler, len(manifest.Workers))
 	}
+	if len(manifest.Workers) > 0 && opts.WorkerCapabilities == nil {
+		opts.WorkerCapabilities = make(map[arbiter.ArbiterHandlerKind]workflow.HandlerCapabilitySpec, len(manifest.Workers))
+	}
 	for kind := range manifest.Workers {
 		if _, exists := opts.WorkerHandlers[kind]; exists {
 			return opts, nil, fmt.Errorf("capability worker kind %q already registered", kind)
+		}
+		opts.WorkerCapabilities[kind] = workflow.HandlerCapabilitySpec{
+			Owner:       workflow.CapabilityOwnerPlugin,
+			Description: manifest.Workers[kind].Description,
 		}
 		opts.WorkerHandlers[kind] = workflow.WorkerHandlerFunc(func(ctx context.Context, invocation workflow.WorkerInvocation) (workflow.WorkerExecution, error) {
 			req, err := protoExecuteWorkerRequest(invocation)

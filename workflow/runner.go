@@ -59,8 +59,11 @@ func (f WorkerHandlerFunc) Execute(ctx context.Context, invocation WorkerInvocat
 // RunnerOptions configure one reliable workflow runtime.
 type RunnerOptions struct {
 	Loader                   SourceLoader
+	SourceCapabilities       map[string]SourceCapabilitySpec
 	Handlers                 map[arbiter.ArbiterHandlerKind]OutcomeHandler
+	SinkCapabilities         map[arbiter.ArbiterHandlerKind]HandlerCapabilitySpec
 	WorkerHandlers           map[arbiter.ArbiterHandlerKind]WorkerHandler
+	WorkerCapabilities       map[arbiter.ArbiterHandlerKind]HandlerCapabilitySpec
 	Now                      func() time.Time
 	InitialBackoff           time.Duration
 	MaxBackoff               time.Duration
@@ -135,6 +138,7 @@ type Runner struct {
 	workflow                 *Workflow
 	now                      func() time.Time
 	loader                   SourceLoader
+	capabilities             CapabilitySurface
 	handlers                 map[arbiter.ArbiterHandlerKind]OutcomeHandler
 	workerHandlers           map[arbiter.ArbiterHandlerKind]WorkerHandler
 	dispatchers              map[string][]compiledDispatchHandler
@@ -182,6 +186,7 @@ func NewRunner(w *Workflow, opts RunnerOptions) (*Runner, error) {
 	if w == nil {
 		return nil, fmt.Errorf("nil workflow")
 	}
+	usesDefaultLoader := opts.Loader == nil
 	if opts.Loader == nil {
 		opts.Loader = func(_ context.Context, target string) ([]expert.Fact, error) {
 			facts, err := factsource.Load(target)
@@ -220,6 +225,7 @@ func NewRunner(w *Workflow, opts RunnerOptions) (*Runner, error) {
 		workflow:                 w,
 		now:                      opts.Now,
 		loader:                   opts.Loader,
+		capabilities:             buildCapabilitySurface(opts, usesDefaultLoader),
 		handlers:                 opts.Handlers,
 		workerHandlers:           opts.WorkerHandlers,
 		dispatchers:              make(map[string][]compiledDispatchHandler, len(w.order)),
@@ -332,6 +338,16 @@ func (r *Runner) Tick(ctx context.Context) (TickResult, error) {
 		Retried:   retried,
 		Enqueued:  enqueued,
 	}, nil
+}
+
+// Capabilities returns the runtime's inspectable source, sink, and worker surface.
+func (r *Runner) Capabilities() CapabilitySurface {
+	if r == nil {
+		return CapabilitySurface{}
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return cloneCapabilitySurface(r.capabilities)
 }
 
 // Drain attempts to flush pending deliveries without running a new workflow tick.
@@ -525,14 +541,6 @@ func (r *Runner) supportsHandler(kind arbiter.ArbiterHandlerKind) bool {
 }
 
 func (r *Runner) supportsWorkerRuntime(kind arbiter.ArbiterHandlerKind) bool {
-	switch kind {
-	case arbiter.ArbiterHandlerAudit, arbiter.ArbiterHandlerStdout:
-		return true
-	default:
-		if _, ok := r.workerHandlers[kind]; ok {
-			return true
-		}
-		_, ok := r.handlers[kind]
-		return ok
-	}
+	_, ok := r.workerHandlers[kind]
+	return ok
 }

@@ -96,6 +96,12 @@ expert rule EmitAlert priority 10 per_fact {
 	if err != nil {
 		t.Fatalf("NewRunner: %v", err)
 	}
+	if !hasSourceCapability(runner.Capabilities().Sources, "acme", workflow.CapabilityOwnerPlugin) {
+		t.Fatalf("runner capabilities missing plugin source: %+v", runner.Capabilities().Sources)
+	}
+	if !hasHandlerCapability(runner.Capabilities().Sinks, "discord", workflow.CapabilityOwnerPlugin) {
+		t.Fatalf("runner capabilities missing plugin sink: %+v", runner.Capabilities().Sinks)
+	}
 
 	tick, err := runner.Tick(context.Background())
 	if err != nil {
@@ -207,6 +213,9 @@ expert rule QualifyLead priority 10 per_fact {
 	if err != nil {
 		t.Fatalf("NewRunner: %v", err)
 	}
+	if !hasHandlerCapability(runner.Capabilities().Workers, "python", workflow.CapabilityOwnerPlugin) {
+		t.Fatalf("runner capabilities missing plugin worker: %+v", runner.Capabilities().Workers)
+	}
 
 	tick, err := runner.Tick(context.Background())
 	if err != nil {
@@ -296,6 +305,24 @@ func newCapabilityClient(t *testing.T, srv arbiterv1.CapabilityServiceServer) (a
 		_ = listener.Close()
 	}
 	return arbiterv1.NewCapabilityServiceClient(conn), cleanup
+}
+
+func hasSourceCapability(items []workflow.SourceCapability, scheme string, owner workflow.CapabilityOwner) bool {
+	for _, item := range items {
+		if item.Scheme == scheme && item.Owner == owner {
+			return true
+		}
+	}
+	return false
+}
+
+func hasHandlerCapability(items []workflow.HandlerCapability, kind string, owner workflow.CapabilityOwner) bool {
+	for _, item := range items {
+		if item.Kind == kind && item.Owner == owner {
+			return true
+		}
+	}
+	return false
 }
 
 func mustStruct(t *testing.T, m map[string]any) *structpb.Struct {

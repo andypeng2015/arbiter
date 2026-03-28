@@ -1068,7 +1068,8 @@ expert rule QualifyLead priority 10 per_fact {
 	}
 
 	deliveries := 0
-	handler := OutcomeHandlerFunc(func(_ context.Context, delivery Delivery) error {
+	handler := WorkerHandlerFunc(func(_ context.Context, invocation WorkerInvocation) (WorkerExecution, error) {
+		delivery := invocation.Delivery
 		deliveries++
 		if delivery.Worker != "notify_sales" {
 			t.Fatalf("unexpected worker name %q", delivery.Worker)
@@ -1079,7 +1080,7 @@ expert rule QualifyLead priority 10 per_fact {
 		if delivery.Outcome.Name != "Qualified" || delivery.Outcome.Params["key"] != "lead-1" {
 			t.Fatalf("unexpected outcome: %+v", delivery.Outcome)
 		}
-		return nil
+		return WorkerExecution{}, nil
 	})
 
 	runner, err := NewRunner(w, RunnerOptions{
@@ -1092,7 +1093,7 @@ expert rule QualifyLead priority 10 per_fact {
 				},
 			}}, nil
 		},
-		Handlers: map[arbiter.ArbiterHandlerKind]OutcomeHandler{
+		WorkerHandlers: map[arbiter.ArbiterHandlerKind]WorkerHandler{
 			arbiter.ArbiterHandlerWebhook: handler,
 		},
 	})
@@ -1432,4 +1433,154 @@ expert rule ObserveSinkFailure priority 20 {
 	if secondSink.Pending != 0 || !secondSink.Available {
 		t.Fatalf("second sink state = %+v, want recovered sink", secondSink)
 	}
+}
+
+func TestRunnerCapabilitiesSeparateSinkAndWorkerSurfaces(t *testing.T) {
+	src := []byte(`
+fact WorkerReceipt {
+	status: string
+}
+
+outcome Qualified {
+	key: string
+}
+
+worker notify_sales {
+	input Qualified
+	output WorkerReceipt
+	python "sdk://notify-sales"
+}
+
+arbiter sales {
+	poll 1s
+	source kafka://feed/leads
+	on Qualified worker notify_sales
+}
+
+expert rule QualifyLead priority 10 {
+	when { false }
+	then emit Qualified { key: "never" }
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	runner, err := NewRunner(w, RunnerOptions{
+		Loader: func(_ context.Context, _ string) ([]expert.Fact, error) {
+			return nil, nil
+		},
+		SourceCapabilities: map[string]SourceCapabilitySpec{
+			"kafka": {
+				Owner:       CapabilityOwnerPlugin,
+				Description: "stream facts",
+			},
+		},
+		Handlers: map[arbiter.ArbiterHandlerKind]OutcomeHandler{
+			"discord": OutcomeHandlerFunc(func(context.Context, Delivery) error { return nil }),
+		},
+		SinkCapabilities: map[arbiter.ArbiterHandlerKind]HandlerCapabilitySpec{
+			"discord": {
+				Owner:       CapabilityOwnerHost,
+				Description: "discord sink",
+			},
+		},
+		WorkerHandlers: map[arbiter.ArbiterHandlerKind]WorkerHandler{
+			"python": WorkerHandlerFunc(func(context.Context, WorkerInvocation) (WorkerExecution, error) {
+				return WorkerExecution{}, nil
+			}),
+		},
+		WorkerCapabilities: map[arbiter.ArbiterHandlerKind]HandlerCapabilitySpec{
+			"python": {
+				Owner:       CapabilityOwnerPlugin,
+				Description: "python worker runtime",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner: %v", err)
+	}
+
+	caps := runner.Capabilities()
+	if got := findSourceCapability(caps.Sources, "kafka"); got == nil || got.Owner != CapabilityOwnerPlugin {
+		t.Fatalf("missing kafka source capability: %+v", caps.Sources)
+	}
+	if got := findHandlerCapability(caps.Sinks, "discord"); got == nil || got.Owner != CapabilityOwnerHost {
+		t.Fatalf("missing discord sink capability: %+v", caps.Sinks)
+	}
+	if got := findHandlerCapability(caps.Sinks, "worker"); got == nil || got.Owner != CapabilityOwnerCore {
+		t.Fatalf("missing core worker sink capability: %+v", caps.Sinks)
+	}
+	if got := findHandlerCapability(caps.Workers, "python"); got == nil || got.Owner != CapabilityOwnerPlugin {
+		t.Fatalf("missing python worker capability: %+v", caps.Workers)
+	}
+	if got := findHandlerCapability(caps.Workers, "discord"); got != nil {
+		t.Fatalf("sink-only capability leaked into worker runtimes: %+v", caps.Workers)
+	}
+}
+
+func TestRunnerRejectsSinkOnlyHandlerAsWorkerRuntime(t *testing.T) {
+	src := []byte(`
+fact WorkerReceipt {
+	status: string
+}
+
+outcome Qualified {
+	key: string
+}
+
+worker notify_sales {
+	input Qualified
+	output WorkerReceipt
+	discord "room://sales"
+}
+
+arbiter sales {
+	poll 1s
+	source https://feed.internal/leads
+	on Qualified worker notify_sales
+}
+
+expert rule QualifyLead priority 10 {
+	when { false }
+	then emit Qualified { key: "never" }
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	_, err = NewRunner(w, RunnerOptions{
+		Loader: func(_ context.Context, _ string) ([]expert.Fact, error) {
+			return nil, nil
+		},
+		Handlers: map[arbiter.ArbiterHandlerKind]OutcomeHandler{
+			"discord": OutcomeHandlerFunc(func(context.Context, Delivery) error { return nil }),
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "no runtime handler registered for worker notify_sales (discord)") {
+		t.Fatalf("NewRunner error = %v, want explicit worker runtime rejection", err)
+	}
+}
+
+func findSourceCapability(items []SourceCapability, scheme string) *SourceCapability {
+	for i := range items {
+		if items[i].Scheme == scheme {
+			return &items[i]
+		}
+	}
+	return nil
+}
+
+func findHandlerCapability(items []HandlerCapability, kind string) *HandlerCapability {
+	for i := range items {
+		if items[i].Kind == kind {
+			return &items[i]
+		}
+	}
+	return nil
 }

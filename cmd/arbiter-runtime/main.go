@@ -18,8 +18,6 @@ import (
 	"os"
 	"os/signal"
 	goruntime "runtime"
-	"slices"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -144,7 +142,9 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 
 	runnerOpts := workflow.RunnerOptions{
 		Handlers:                 defaultOutcomeHandlers(logger),
+		SinkCapabilities:         defaultOutcomeCapabilitySpecs(),
 		WorkerHandlers:           defaultWorkerHandlers(),
+		WorkerCapabilities:       defaultWorkerCapabilitySpecs(),
 		DeliveryLog:              config.deliveryLog,
 		MaxConcurrentSourceLoads: config.sourceParallelism,
 		MaxConcurrentDeliveries:  config.deliveryParallelism,
@@ -334,66 +334,66 @@ func (rt *runtime) handleReadyz(w http.ResponseWriter, _ *http.Request) {
 func (rt *runtime) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	rt.mu.RLock()
 	status := map[string]any{
-		"ready":        rt.ready,
-		"ticks":        rt.tickCount,
-		"errors":       rt.errors,
-		"last_tick":    rt.lastTick,
-		"sources":      rt.lastResult.Sources,
-		"sinks":        rt.lastResult.Sinks,
-		"delivered":    rt.lastResult.Delivered,
-		"enqueued":     rt.lastResult.Enqueued,
-		"retried":      rt.lastResult.Retried,
-		"capabilities": capabilityStatus(rt.caps),
+		"ready":              rt.ready,
+		"ticks":              rt.tickCount,
+		"errors":             rt.errors,
+		"last_tick":          rt.lastTick,
+		"sources":            rt.lastResult.Sources,
+		"sinks":              rt.lastResult.Sinks,
+		"delivered":          rt.lastResult.Delivered,
+		"enqueued":           rt.lastResult.Enqueued,
+		"retried":            rt.lastResult.Retried,
+		"capabilities":       capabilityStatus(rt.runner.Capabilities()),
+		"capability_plugins": capabilityPluginsStatus(rt.caps),
 	}
 	rt.mu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
 }
 
-func capabilityStatus(manifest *capability.Manifest) map[string]any {
-	if manifest == nil {
-		return nil
-	}
-	sources := make([]map[string]any, 0, len(manifest.Sources))
-	for _, item := range manifest.Sources {
+func capabilityStatus(surface workflow.CapabilitySurface) map[string]any {
+	sources := make([]map[string]any, 0, len(surface.Sources))
+	for _, item := range surface.Sources {
 		sources = append(sources, map[string]any{
 			"scheme":      item.Scheme,
+			"owner":       string(item.Owner),
 			"description": item.Description,
 		})
 	}
-	slices.SortFunc(sources, func(a, b map[string]any) int {
-		return strings.Compare(a["scheme"].(string), b["scheme"].(string))
-	})
 
-	sinks := make([]map[string]any, 0, len(manifest.Sinks))
-	for _, item := range manifest.Sinks {
+	sinks := make([]map[string]any, 0, len(surface.Sinks))
+	for _, item := range surface.Sinks {
 		sinks = append(sinks, map[string]any{
-			"kind":        string(item.Kind),
+			"kind":        item.Kind,
+			"owner":       string(item.Owner),
 			"description": item.Description,
 		})
 	}
-	slices.SortFunc(sinks, func(a, b map[string]any) int {
-		return strings.Compare(a["kind"].(string), b["kind"].(string))
-	})
 
-	workers := make([]map[string]any, 0, len(manifest.Workers))
-	for _, item := range manifest.Workers {
+	workers := make([]map[string]any, 0, len(surface.Workers))
+	for _, item := range surface.Workers {
 		workers = append(workers, map[string]any{
-			"kind":        string(item.Kind),
+			"kind":        item.Kind,
+			"owner":       string(item.Owner),
 			"description": item.Description,
 		})
 	}
-	slices.SortFunc(workers, func(a, b map[string]any) int {
-		return strings.Compare(a["kind"].(string), b["kind"].(string))
-	})
 
 	return map[string]any{
-		"name":    manifest.Name,
-		"version": manifest.Version,
 		"sources": sources,
 		"sinks":   sinks,
 		"workers": workers,
 	}
+}
+
+func capabilityPluginsStatus(manifest *capability.Manifest) []map[string]any {
+	if manifest == nil {
+		return nil
+	}
+	return []map[string]any{{
+		"name":    manifest.Name,
+		"version": manifest.Version,
+	}}
 }
 
 // --- Default Handlers ---
@@ -415,10 +415,44 @@ func defaultOutcomeHandlers(logger *slog.Logger) map[arbiter.ArbiterHandlerKind]
 	}
 }
 
+func defaultOutcomeCapabilitySpecs() map[arbiter.ArbiterHandlerKind]workflow.HandlerCapabilitySpec {
+	return map[arbiter.ArbiterHandlerKind]workflow.HandlerCapabilitySpec{
+		arbiter.ArbiterHandlerWebhook: {
+			Owner:       workflow.CapabilityOwnerHost,
+			Description: "POST deliveries to an HTTP endpoint",
+		},
+		arbiter.ArbiterHandlerExec: {
+			Owner:       workflow.CapabilityOwnerHost,
+			Description: "Run a local command for each delivery",
+		},
+		arbiter.ArbiterHandlerSlack: {
+			Owner:       workflow.CapabilityOwnerHost,
+			Description: "Reference-runtime sink placeholder that logs deliveries",
+		},
+		arbiter.ArbiterHandlerGRPC: {
+			Owner:       workflow.CapabilityOwnerHost,
+			Description: "Reference-runtime sink placeholder that logs deliveries",
+		},
+	}
+}
+
 func defaultWorkerHandlers() map[arbiter.ArbiterHandlerKind]workflow.WorkerHandler {
 	return map[arbiter.ArbiterHandlerKind]workflow.WorkerHandler{
 		arbiter.ArbiterHandlerExec:    workflow.WorkerHandlerFunc(executeWorkerExec),
 		arbiter.ArbiterHandlerWebhook: workflow.WorkerHandlerFunc(executeWorkerWebhook),
+	}
+}
+
+func defaultWorkerCapabilitySpecs() map[arbiter.ArbiterHandlerKind]workflow.HandlerCapabilitySpec {
+	return map[arbiter.ArbiterHandlerKind]workflow.HandlerCapabilitySpec{
+		arbiter.ArbiterHandlerExec: {
+			Owner:       workflow.CapabilityOwnerHost,
+			Description: "Run a local command and decode structured worker output",
+		},
+		arbiter.ArbiterHandlerWebhook: {
+			Owner:       workflow.CapabilityOwnerHost,
+			Description: "POST a worker invocation and decode the response payload",
+		},
 	}
 }
 
