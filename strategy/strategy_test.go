@@ -68,9 +68,10 @@ outcome CheckoutPath {
 }
 
 strategy CheckoutRouting returns CheckoutPath {
+	rollout 20
 	when {
 		user.country == "US"
-	} rollout 20 then Canary {
+	} then Canary {
 		target: "canary",
 	}
 
@@ -130,9 +131,10 @@ outcome CheckoutPath {
 }
 
 strategy CheckoutRouting returns CheckoutPath {
+	kill_switch on
 	when {
 		user.country == "US"
-	} kill_switch on then Disabled {
+	} then Disabled {
 		target: "disabled",
 	}
 
@@ -175,9 +177,10 @@ outcome CheckoutPath {
 }
 
 strategy CheckoutRouting returns CheckoutPath {
+	kill_switch off
 	when {
 		user.country == "US"
-	} kill_switch off then Enabled {
+	} then Enabled {
 		target: "enabled",
 	}
 

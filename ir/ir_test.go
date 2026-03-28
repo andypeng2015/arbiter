@@ -36,6 +36,7 @@ segment US {
 rule AgeCheck priority 10 {
     requires Upstream
     excludes Blocked
+    rollout percent 50 by user.id namespace "beta"
     when segment US {
         user.age >= MIN_AGE
     }
@@ -43,7 +44,6 @@ rule AgeCheck priority 10 {
         reason: "adult"
     }
     otherwise deny {}
-    rollout percent 50 by user.id namespace "beta"
 }
 `)
 
@@ -194,10 +194,11 @@ outcome CheckoutPath {
 }
 
 strategy CheckoutRouting returns CheckoutPath {
+	rollout 20
 	when segment US {
 		let new_stack = user.country == "US"
 		new_stack
-	} rollout 20 then Domestic {
+	} then Domestic {
 		target: "domestic"
 		reason: "local"
 	}

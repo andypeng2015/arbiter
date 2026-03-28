@@ -46,9 +46,9 @@ rule BaseDecision {
 
 rule EnterpriseDecision {
 	requires BaseDecision
+	rollout 100
 	when segment enterprise { user.cart_total >= 100 }
 	then Approved { tier: "gold" }
-	rollout 100
 }
 `
 
@@ -308,7 +308,7 @@ allow if {
 }
 
 func BenchmarkArbiterGovernedRules(b *testing.B) {
-	full, err := arbiter.CompileFull([]byte(governedSource))
+	prog, err := arbiter.Compile([]byte(governedSource))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -320,12 +320,12 @@ func BenchmarkArbiterGovernedRules(b *testing.B) {
 		},
 		"user.id": "u_123",
 	}
-	dc := arbiter.DataFromMap(ctxMap, full.Ruleset)
+	dc := arbiter.DataFromMap(ctxMap, prog)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		matched, _, err := arbiter.EvalGoverned(full.Ruleset, dc, full.Segments, ctxMap)
+		matched, _, err := arbiter.EvalGoverned(prog, dc, prog.Segments, ctxMap)
 		if err != nil {
 			b.Fatal(err)
 		}

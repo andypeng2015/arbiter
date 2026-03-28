@@ -85,11 +85,11 @@ Rules support governance keywords directly:
 rule EnhancedRiskCheck priority 1 {
     kill_switch on
     requires BasicRiskCheck
+    rollout 20
     when segment high_risk {
         tx.amount > 5000
     }
     then Flag { level: "hold" }
-    rollout 20
 }
 ```
 
@@ -111,6 +111,8 @@ segment high_value {
 
 Strategies handle ordered stateless governed evaluation over recognized decision shapes in current facts/state, with exactly-one routing and a required fallback.
 
+Across governed declarations, the canonical shape is: governance prelude, then matching/binding, then effect.
+
 ```arb
 outcome CheckoutPath {
     target: string
@@ -118,6 +120,7 @@ outcome CheckoutPath {
 }
 
 strategy CheckoutRouting returns CheckoutPath {
+    kill_switch off
     when {
         risk.requires_review == true
     } then Manual {
@@ -149,7 +152,7 @@ flag checkout_v2 type multivariate default "control" {
     }
 
     when beta_users then "treatment"
-    when { user.country == "US" } rollout 50 then "treatment"
+    rollout 50 when { user.country == "US" } then "treatment"
 }
 ```
 
@@ -162,6 +165,7 @@ Forward-chaining rules that reason until quiescence. Facts build on facts. Rules
 ```arb
 expert rule ComputeAGI priority 15 {
     requires ComputeGrossIncome
+    rollout 50
     when {
         any gi in facts.GrossIncome { true }
     }
@@ -812,6 +816,7 @@ include "segments.arb"
 rule RuleName priority 1 {
     kill_switch on                 # optional: instant disable ("off" is explicit no-op)
     requires OtherRule             # optional: prerequisite
+    rollout 50                     # optional: percentage gate
     when segment high_value {      # optional: segment gate
         user.cart_total >= 100
     }
@@ -822,7 +827,6 @@ rule RuleName priority 1 {
     otherwise FallbackAction {     # optional: when condition is false
         reason: "not eligible",
     }
-    rollout 50                     # optional: percentage gate
 }
 ```
 
@@ -834,12 +838,12 @@ expert rule RuleName priority 1 {
     no_loop
     requires OtherRule
     activation_group Resolution
+    rollout 50
     when { income.wages > 0 }
     then assert GrossIncome {      # assert: mutate working memory
         key: "total",
         amount: income.wages + income.interest,
     }
-    rollout 50
 }
 
 expert rule EmitResult priority 99 {
@@ -1193,6 +1197,7 @@ rule InstantBlock priority 0 {
 
 rule GeoMismatch priority 3 {
     requires InstantBlock
+    rollout 50
     when segment untrusted_region {
         tx.amount > 100
         and account.has_2fa == false
@@ -1201,7 +1206,6 @@ rule GeoMismatch priority 3 {
         type: "sms_otp",
         timeout: "5m",
     }
-    rollout 50
 }
 ```
 

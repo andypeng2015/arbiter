@@ -478,14 +478,6 @@
     "strategy_when_candidate": {
       "members": [
         {
-          "content": {
-            "name": "when_block",
-            "type": "SYMBOL"
-          },
-          "name": "condition",
-          "type": "FIELD"
-        },
-        {
           "members": [
             {
               "content": {
@@ -516,6 +508,14 @@
             }
           ],
           "type": "CHOICE"
+        },
+        {
+          "content": {
+            "name": "when_block",
+            "type": "SYMBOL"
+          },
+          "name": "condition",
+          "type": "FIELD"
         },
         {
           "type": "STRING",
@@ -1355,6 +1355,22 @@
           "type": "REPEAT"
         },
         {
+          "members": [
+            {
+              "content": {
+                "name": "rule_rollout",
+                "type": "SYMBOL"
+              },
+              "name": "rollout",
+              "type": "FIELD"
+            },
+            {
+              "type": "BLANK"
+            }
+          ],
+          "type": "CHOICE"
+        },
+        {
           "content": {
             "name": "when_block",
             "type": "SYMBOL"
@@ -1378,22 +1394,6 @@
                 "type": "SYMBOL"
               },
               "name": "fallback",
-              "type": "FIELD"
-            },
-            {
-              "type": "BLANK"
-            }
-          ],
-          "type": "CHOICE"
-        },
-        {
-          "members": [
-            {
-              "content": {
-                "name": "rule_rollout",
-                "type": "SYMBOL"
-              },
-              "name": "rollout",
               "type": "FIELD"
             },
             {
@@ -1679,20 +1679,20 @@
           "type": "CHOICE"
         },
         {
-          "content": {
-            "members": [
-              {
-                "name": "rule_requires",
+          "members": [
+            {
+              "content": {
+                "name": "rule_rollout",
                 "type": "SYMBOL"
               },
-              {
-                "name": "rule_excludes",
-                "type": "SYMBOL"
-              }
-            ],
-            "type": "CHOICE"
-          },
-          "type": "REPEAT"
+              "name": "rollout",
+              "type": "FIELD"
+            },
+            {
+              "type": "BLANK"
+            }
+          ],
+          "type": "CHOICE"
         },
         {
           "content": {
@@ -1709,22 +1709,6 @@
           },
           "name": "action",
           "type": "FIELD"
-        },
-        {
-          "members": [
-            {
-              "content": {
-                "name": "rule_rollout",
-                "type": "SYMBOL"
-              },
-              "name": "rollout",
-              "type": "FIELD"
-            },
-            {
-              "type": "BLANK"
-            }
-          ],
-          "type": "CHOICE"
         },
         {
           "type": "STRING",
@@ -2773,6 +2757,22 @@
           "type": "CHOICE"
         },
         {
+          "members": [
+            {
+              "content": {
+                "name": "rule_rollout",
+                "type": "SYMBOL"
+              },
+              "name": "rollout",
+              "type": "FIELD"
+            },
+            {
+              "type": "BLANK"
+            }
+          ],
+          "type": "CHOICE"
+        },
+        {
           "type": "STRING",
           "value": "when"
         },
@@ -2838,22 +2838,6 @@
           },
           "name": "condition",
           "type": "FIELD"
-        },
-        {
-          "members": [
-            {
-              "content": {
-                "name": "rule_rollout",
-                "type": "SYMBOL"
-              },
-              "name": "rollout",
-              "type": "FIELD"
-            },
-            {
-              "type": "BLANK"
-            }
-          ],
-          "type": "CHOICE"
         },
         {
           "members": [

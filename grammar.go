@@ -148,9 +148,9 @@ func ArbiterGrammar() *Grammar {
 	))
 
 	g.Define("strategy_when_candidate", Seq(
-		Field("condition", Sym("when_block")),
 		Optional(Field("kill_switch", Sym("kill_switch"))),
 		Optional(Field("rollout", Sym("rule_rollout"))),
+		Field("condition", Sym("when_block")),
 		Str("then"),
 		Field("action_name", Sym("identifier")),
 		Str("{"),
@@ -340,10 +340,10 @@ func ArbiterGrammar() *Grammar {
 		Str("{"),
 		Optional(Field("kill_switch", Sym("kill_switch"))),
 		Repeat(Choice(Sym("rule_requires"), Sym("rule_excludes"))),
+		Optional(Field("rollout", Sym("rule_rollout"))),
 		Field("condition", Sym("when_block")),
 		Field("action", Sym("then_block")),
 		Optional(Field("fallback", Sym("otherwise_block"))),
-		Optional(Field("rollout", Sym("rule_rollout"))),
 		Str("}"),
 	))
 
@@ -393,10 +393,9 @@ func ArbiterGrammar() *Grammar {
 		Optional(Field("stable", Sym("stable"))),
 		Repeat(Choice(Sym("rule_requires"), Sym("rule_excludes"))),
 		Optional(Field("activation_group", Sym("expert_activation_group"))),
-		Repeat(Choice(Sym("rule_requires"), Sym("rule_excludes"))),
+		Optional(Field("rollout", Sym("rule_rollout"))),
 		Field("condition", Sym("expert_when_block")),
 		Field("action", Sym("expert_then_block")),
-		Optional(Field("rollout", Sym("rule_rollout"))),
 		Str("}"),
 	))
 
@@ -629,18 +628,18 @@ func ArbiterGrammar() *Grammar {
 		Field("flag_name", Sym("qualified_name")),
 	))
 
-	// when segment_name [rollout N] then "variant"
-	// when { expr } [rollout N] then "variant"
-	// when segment_name { expr } [rollout N] then "variant"
+	// [rollout N] when segment_name then "variant"
+	// [rollout N] when { expr } then "variant"
+	// [rollout N] when segment_name { expr } then "variant"
 	g.Define("flag_rule", Seq(
 		Optional(Str("else")),
+		Optional(Field("rollout", Sym("rule_rollout"))),
 		Str("when"),
 		Field("condition", Choice(
 			Seq(Field("segment", Sym("identifier")), Str("{"), Field("expr", Sym("_expr")), Str("}")), // segment + inline
 			Sym("identifier"), // segment reference only
 			Seq(Str("{"), Field("expr", Sym("_expr")), Str("}")), // inline condition only
 		)),
-		Optional(Field("rollout", Sym("rule_rollout"))),
 		Choice(
 			Seq(
 				Str("then"),

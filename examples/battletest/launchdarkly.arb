@@ -54,7 +54,7 @@ flag dark_mode type boolean default "false" {
     owner: "platform"
     ticket: "PLAT-200"
 
-    when { true } rollout 100 then "true"
+    rollout 100 when { true } then "true"
 }
 
 # Kill switch demo - starts disabled, can be flipped at runtime
@@ -72,8 +72,8 @@ flag new_dashboard type boolean default "false" {
 
     when internal_users then "true"
     when beta_cohort then "true"
-    when { user.plan == "enterprise" } rollout 50 then "true"
-    when { true } rollout 10 then "true"
+    rollout 50 when { user.plan == "enterprise" } then "true"
+    rollout 10 when { true } then "true"
 }
 
 # ── Multivariate Flags ───────────────────────────────────────
@@ -106,7 +106,7 @@ flag checkout_flow type multivariate default "control" {
     when internal_users then "multi_step_upsell"
     when beta_cohort then "multi_step"
     when enterprise_plan { user.country == "US" } then "single_page"
-    when { user.lifetime_spend > 500 } rollout 30 then "multi_step"
+    rollout 30 when { user.lifetime_spend > 500 } then "multi_step"
 }
 
 # Pricing experiment with numeric payloads
@@ -134,7 +134,7 @@ flag pricing_tier type multivariate default "standard" {
 
     when high_value then "aggressive"
     when enterprise_plan then "moderate"
-    when { user.signup_days < 7 } rollout 50 then "aggressive"
+    rollout 50 when { user.signup_days < 7 } then "aggressive"
 }
 
 # Region-specific feature with platform targeting
@@ -157,5 +157,5 @@ flag search_v2 type multivariate default "legacy" {
     when internal_users then "ai_powered"
     when us_region { user.plan == "enterprise" } then "ai_powered"
     when eu_region then "hybrid"
-    when mobile_client { user.plan != "free" } rollout 20 then "hybrid"
+    rollout 20 when mobile_client { user.plan != "free" } then "hybrid"
 }

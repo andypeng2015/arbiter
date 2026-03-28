@@ -282,11 +282,11 @@ rule EnhancedRiskCheck priority 1 {
     requires prior_hold
     excludes LegacyPath
     excludes ManualReview
+    rollout 20
     when segment high_risk {
         tx.amount > 5000
     }
     then Hold {}
-    rollout 20
 }
 `
 	rs := compileSource(t, src)
@@ -382,9 +382,9 @@ rule SoftLaunch {
 func TestCompileRuleExplicitRolloutSpec(t *testing.T) {
 	src := `
 rule TargetedRollout {
+	rollout percent 0.25 by account.id namespace "launch_q2"
 	when { true }
 	then Allow {}
-	rollout percent 0.25 by account.id namespace "launch_q2"
 }
 `
 	rs := compileSource(t, src)

@@ -37,7 +37,7 @@ flag checkout_v2 type multivariate default "control" {
     when internal
         then "treatment"
 
-    when enterprise_us rollout 20
+    rollout 20 when enterprise_us
         then "treatment"
 
     when beta_users

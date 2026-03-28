@@ -6,43 +6,43 @@ segment premium {
 }
 
 rule Rollout20 priority 1 {
+    rollout 20
     when segment premium {
         true
     }
     then Match20 {
         reason: "20pct rollout",
     }
-    rollout 20
 }
 
 rule Rollout50 priority 2 {
+    rollout 50
     when {
         user.active == true
     }
     then Match50 {
         reason: "50pct rollout",
     }
-    rollout 50
 }
 
 rule Rollout80 priority 3 {
+    rollout 80
     when {
         user.active == true
     }
     then Match80 {
         reason: "80pct rollout",
     }
-    rollout 80
 }
 
 rule Rollout100 priority 4 {
+    rollout 100
     when {
         user.active == true
     }
     then Match100 {
         reason: "100pct rollout",
     }
-    rollout 100
 }
 
 rule NoRollout priority 5 {

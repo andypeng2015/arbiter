@@ -94,9 +94,9 @@ func TestCompileFileMapsSemanticErrorsToIncludedFiles(t *testing.T) {
 	dir := t.TempDir()
 	bad := writeTestFile(t, dir, "bad.arb", `
 rule BadRollout {
+	rollout 101
 	when { true }
 	then Approved {}
-	rollout 101
 }
 `)
 	main := writeTestFile(t, dir, "main.arb", `include "bad.arb"`)

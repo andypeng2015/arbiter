@@ -126,9 +126,9 @@ strategy_candidate = strategy_when_candidate
                    | strategy_else_candidate ;
 
 strategy_when_candidate
-                   = when_clause
-                     [ kill_switch_clause ]
+                   = [ kill_switch_clause ]
                      [ rollout_clause ]
+                     when_clause
                      "then" action_block ;
 
 strategy_else_candidate
@@ -143,10 +143,10 @@ rule_declaration   = "rule" identifier { priority_clause | tag_clause } rule_blo
 rule_block         = "{"
                        [ kill_switch_clause ]
                        { requires_clause | excludes_clause }
+                       [ rollout_clause ]
                        when_clause
                        then_clause
                        [ otherwise_clause ]
-                       [ rollout_clause ]
                      "}" ;
 
 priority_clause    = "priority" integer_literal ;
@@ -185,8 +185,9 @@ variant_declaration = "variant" string_literal "{" { param_assignment } "}" ;
 
 defaults_block     = "defaults" "{" { param_assignment } "}" ;
 
-flag_rule          = [ "else" ] "when" flag_condition
+flag_rule          = [ "else" ]
                      [ rollout_clause ]
+                     "when" flag_condition
                      ( "then" primary_expr | flag_split_block ) ;
 
 flag_condition     = identifier "{" expression "}"
@@ -218,10 +219,9 @@ expert_rule_block  = "{"
                        [ "stable" ]
                        { requires_clause | excludes_clause }
                        [ activation_group_clause ]
-                       { requires_clause | excludes_clause }
+                       [ rollout_clause ]
                        expert_when_clause
                        expert_then_clause
-                       [ rollout_clause ]
                      "}" ;
 
 activation_group_clause

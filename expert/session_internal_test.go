@@ -586,11 +586,11 @@ expert rule RouteReview {
 func TestEvalRuleSkipsWhenRolloutSubjectMissing(t *testing.T) {
 	program := mustCompiledProgram(t, []byte(`
 expert rule RouteReview {
+	rollout percent 100 by applicant.id namespace "expert.test"
 	when { true }
 	then emit ManualReview {
 		queue: "risk",
 	}
-	rollout percent 100 by applicant.id namespace "expert.test"
 }
 `))
 

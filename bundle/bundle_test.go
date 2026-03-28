@@ -177,9 +177,9 @@ func TestObfuscatedBundle(t *testing.T) {
 segment vip { user.tier == "gold" }
 
 rule VIPOffer {
+	rollout 50
 	when segment vip { user.cart > 50 }
 	then Offer { discount: 20 }
-	rollout 50
 }
 
 rule Default {

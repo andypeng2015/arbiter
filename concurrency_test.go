@@ -56,9 +56,9 @@ segment vip {
 }
 
 rule VIPOffer {
+	rollout 50
 	when segment vip { user.cart_total > 50 }
 	then Offer { discount: 20 }
-	rollout 50
 }
 
 rule StandardOffer {
@@ -135,4 +135,3 @@ strategy Routing returns Route {
 	}
 	wg.Wait()
 }
-

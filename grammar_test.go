@@ -28,6 +28,25 @@ func parseArb(t *testing.T, input string) string {
 	return sexp
 }
 
+func parseArbExpectError(t *testing.T, input string) string {
+	t.Helper()
+	lang, err := getArbiterLanguage()
+	if err != nil {
+		t.Fatalf("language generation: %v", err)
+	}
+	parser := gotreesitter.NewParser(lang)
+	tree, err := parser.Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	root := tree.RootNode()
+	sexp := root.SExpr(lang)
+	if !root.HasError() {
+		t.Fatalf("expected parse error, got: %s", sexp)
+	}
+	return sexp
+}
+
 func transpileArb(t *testing.T, input string) map[string]any {
 	t.Helper()
 	out, err := Transpile([]byte(input))
@@ -287,6 +306,7 @@ outcome CheckoutPath {
 }
 
 strategy CheckoutRouting returns CheckoutPath {
+	kill_switch off
 	when {
 		user.country == "US"
 	} then Domestic {
@@ -307,6 +327,24 @@ strategy CheckoutRouting returns CheckoutPath {
 	if strings.Count(sexp, "strategy_else_candidate") != 1 {
 		t.Fatalf("expected 1 strategy_else_candidate node, got: %s", sexp)
 	}
+}
+
+func TestParseRejectsPostConditionStrategyGovernance(t *testing.T) {
+	parseArbExpectError(t, `
+outcome CheckoutPath {
+	target: string
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	when { user.country == "US" } kill_switch on then Domestic {
+		target: "domestic"
+	}
+
+	else Global {
+		target: "global"
+	}
+}
+`)
 }
 
 func TestParseQuantityLiteral(t *testing.T) {
@@ -607,7 +645,7 @@ func TestParseFlag(t *testing.T) {
 		ticket: "ENG-1234"
 		requires payments_enabled
 		when internal then "treatment"
-		when enterprise_us rollout 20 then "treatment"
+		rollout 20 when enterprise_us then "treatment"
 	}`
 	result := parseArb(t, input)
 	if !strings.Contains(result, "flag_declaration") {
@@ -661,13 +699,13 @@ segment enterprise_us {
 	user.plan == "enterprise" and user.country == "US"
 }
 
-flag checkout_v2 type multivariate default "control" {
+	flag checkout_v2 type multivariate default "control" {
 	owner: "oscar"
 	ticket: "ENG-1234"
 	expires: "2026-06-01"
 	requires payments_enabled
 	when internal then "treatment"
-	when enterprise_us rollout 20 then "treatment"
+	rollout 20 when enterprise_us then "treatment"
 }
 
 flag payments_enabled type boolean default false {
@@ -693,11 +731,11 @@ func TestParseGovernedRule(t *testing.T) {
 rule EnhancedRiskCheck priority 1 {
 	kill_switch on
 	requires BasicRiskCheck
+	rollout 20
 	when segment high_risk {
 		tx.amount > 5000
 	}
 	then Hold {}
-	rollout 20
 }
 `
 	result := parseArb(t, input)
@@ -710,6 +748,24 @@ rule EnhancedRiskCheck priority 1 {
 	if !strings.Contains(result, "rule_rollout") {
 		t.Error("expected rule_rollout node")
 	}
+}
+
+func TestParseRejectsPostWhenFlagRollout(t *testing.T) {
+	parseArbExpectError(t, `
+flag checkout_v2 type multivariate default "control" {
+	when enterprise_us rollout 20 then "treatment"
+}
+`)
+}
+
+func TestParseRejectsPostEffectRuleRollout(t *testing.T) {
+	parseArbExpectError(t, `
+rule EnhancedRiskCheck {
+	when { true }
+	then Hold {}
+	rollout 20
+}
+`)
 }
 
 // =============================================================================

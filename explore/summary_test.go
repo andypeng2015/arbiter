@@ -24,7 +24,7 @@ outcome HeatWarning {
 }
 
 strategy RouteHeat returns HeatWarning {
-	when { input.hot == true } kill_switch off then AlertNow {
+	kill_switch off when { input.hot == true } then AlertNow {
 		zone: "zone-a",
 	}
 

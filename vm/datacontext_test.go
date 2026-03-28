@@ -46,6 +46,21 @@ func TestNestedMapContext(t *testing.T) {
 	}
 }
 
+func TestMapContextExactDottedKey(t *testing.T) {
+	pool := NewStringPool([]string{"user.id"})
+	dc := DataFromMap(map[string]any{
+		"user.id": "flat",
+	}, pool)
+
+	v := dc.Get("user.id")
+	if v.Typ != TypeString {
+		t.Fatalf("user.id type: got %d, want %d", v.Typ, TypeString)
+	}
+	if got, ok := v.Any.(string); !ok || got != "flat" {
+		t.Fatalf("user.id value = %#v, want %q", v.Any, "flat")
+	}
+}
+
 func TestJSONContext(t *testing.T) {
 	pool := NewStringPool([]string{"name", "bob"})
 	dc, err := DataFromJSON(`{"name": "bob"}`, pool)

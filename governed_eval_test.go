@@ -196,9 +196,9 @@ rule ExplicitlyEnabled {
 func TestEvalGovernedRolloutGatesMatches(t *testing.T) {
 	src := []byte(`
 rule SlowRoll {
+	rollout 1
 	when { true }
 	then Allow {}
-	rollout 1
 }
 `)
 

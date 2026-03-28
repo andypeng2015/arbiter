@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	dec "github.com/odvcencio/arbiter/decimal"
 	"github.com/odvcencio/arbiter/units"
@@ -19,8 +20,9 @@ const (
 // StringPool holds compiled string constants and optionally supports
 // additional caller-managed interning. All methods are safe for concurrent use.
 type StringPool struct {
-	mu    sync.RWMutex
+	mu    sync.Mutex
 	strs  []string
+	view  atomic.Value
 	index map[string]uint16
 	err   error
 }
@@ -39,30 +41,26 @@ func NewStringPool(strs []string) *StringPool {
 	for i, s := range owned {
 		idx[s] = uint16(i)
 	}
-	return &StringPool{strs: owned, index: idx, err: poolErr}
+	sp := &StringPool{strs: owned, index: idx, err: poolErr}
+	sp.view.Store(owned)
+	return sp
 }
 
 func (sp *StringPool) Get(idx uint16) string {
-	sp.mu.RLock()
-	defer sp.mu.RUnlock()
-	if int(idx) >= len(sp.strs) {
+	if sp == nil {
 		return ""
 	}
-	return sp.strs[idx]
+	strs, _ := sp.view.Load().([]string)
+	if int(idx) >= len(strs) {
+		return ""
+	}
+	return strs[idx]
 }
 
 // Intern returns the index for a string, adding it to the pool if not present.
 func (sp *StringPool) Intern(s string) uint16 {
-	sp.mu.RLock()
-	if idx, ok := sp.index[s]; ok {
-		sp.mu.RUnlock()
-		return idx
-	}
-	sp.mu.RUnlock()
-
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	// Double-check after acquiring write lock.
 	if idx, ok := sp.index[s]; ok {
 		return idx
 	}
@@ -75,6 +73,7 @@ func (sp *StringPool) Intern(s string) uint16 {
 	idx := uint16(len(sp.strs))
 	sp.strs = append(sp.strs, s)
 	sp.index[s] = idx
+	sp.view.Store(sp.strs)
 	return idx
 }
 
@@ -83,8 +82,8 @@ func (sp *StringPool) Err() error {
 	if sp == nil {
 		return nil
 	}
-	sp.mu.RLock()
-	defer sp.mu.RUnlock()
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
 	return sp.err
 }
 
@@ -114,14 +113,23 @@ func DataFromJSON(jsonStr string, pool *StringPool) (DataContext, error) {
 }
 
 func (mc *mapContext) Get(key string) Value {
+	if val, ok := mc.data[key]; ok {
+		return anyToValue(val, mc.pool)
+	}
 	val := resolve(mc.data, key)
 	return anyToValue(val, mc.pool)
 }
 
 // resolve walks dot-separated keys through nested values.
 func resolve(current any, key string) any {
-	parts := strings.Split(key, ".")
-	for _, part := range parts {
+	for len(key) > 0 {
+		part := key
+		if dot := strings.IndexByte(key, '.'); dot >= 0 {
+			part = key[:dot]
+			key = key[dot+1:]
+		} else {
+			key = ""
+		}
 		current = resolvePart(current, part)
 		if current == nil {
 			return nil

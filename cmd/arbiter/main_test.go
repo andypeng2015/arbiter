@@ -65,9 +65,9 @@ func TestCheckRejectsCompileErrorsInIncludedFiles(t *testing.T) {
 	mainPath := writeCLIFile(t, dir, "main.arb", `include "bad.arb"`)
 	badPath := writeCLIFile(t, dir, "bad.arb", `
 rule BadRollout {
+	rollout 101
 	when { true }
 	then Approved {}
-	rollout 101
 }
 `)
 
