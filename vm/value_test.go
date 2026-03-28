@@ -3,6 +3,7 @@ package vm
 
 import (
 	"testing"
+	"unsafe"
 
 	dec "github.com/odvcencio/arbiter/decimal"
 )
@@ -38,5 +39,14 @@ func TestValueIsNull(t *testing.T) {
 	}
 	if NumVal(0).IsNull() {
 		t.Error("NumVal(0) should not be null")
+	}
+}
+
+func TestValueSize64Bit(t *testing.T) {
+	if unsafe.Sizeof(uintptr(0)) != 8 {
+		t.Skip("size assertion is only stable on 64-bit builds")
+	}
+	if got := unsafe.Sizeof(Value{}); got != 32 {
+		t.Fatalf("Value size = %d, want 32", got)
 	}
 }

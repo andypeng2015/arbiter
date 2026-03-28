@@ -30,6 +30,7 @@ type Rule struct {
 	Priority        int
 	Kind            ActionKind
 	Target          string
+	KillSwitch      ir.KillSwitchState
 	Prereqs         []string
 	Excludes        []string
 	FactDeps        []string
@@ -190,17 +191,18 @@ func lowerExpertRule(program *ir.Program, expertRule *ir.ExpertRule, segmentDeps
 		return Rule{}, ir.Rule{}, fmt.Errorf("nil expert rule")
 	}
 	rule := Rule{
-		Name:     expertRule.Name,
-		Tags:     append([]string(nil), expertRule.Tags...),
-		Priority: int(expertRule.Priority),
-		Kind:     ActionKind(expertRule.ActionKind),
-		Target:   expertRule.Target,
-		Prereqs:  append([]string(nil), expertRule.Prereqs...),
-		Excludes: append([]string(nil), expertRule.Excludes...),
-		NoLoop:   expertRule.NoLoop,
-		Stable:   expertRule.Stable,
-		PerFact:  expertRule.PerFact,
-		Group:    expertRule.ActivationGroup,
+		Name:       expertRule.Name,
+		Tags:       append([]string(nil), expertRule.Tags...),
+		Priority:   int(expertRule.Priority),
+		Kind:       ActionKind(expertRule.ActionKind),
+		Target:     expertRule.Target,
+		KillSwitch: expertRule.KillSwitch,
+		Prereqs:    append([]string(nil), expertRule.Prereqs...),
+		Excludes:   append([]string(nil), expertRule.Excludes...),
+		NoLoop:     expertRule.NoLoop,
+		Stable:     expertRule.Stable,
+		PerFact:    expertRule.PerFact,
+		Group:      expertRule.ActivationGroup,
 	}
 	if expertRule.PerFact && hasTemporalRule(expertRule) {
 		return Rule{}, ir.Rule{}, fmt.Errorf("expert rule %s: temporal operators are not supported on per_fact rules", rule.Name)

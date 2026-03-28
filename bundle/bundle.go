@@ -14,6 +14,7 @@ import (
 	"github.com/odvcencio/arbiter/compiler"
 	dec "github.com/odvcencio/arbiter/decimal"
 	"github.com/odvcencio/arbiter/intern"
+	"github.com/odvcencio/arbiter/ir"
 )
 
 // Magic bytes and version for the binary format.
@@ -538,6 +539,16 @@ func writeBool(w *bytes.Buffer, v bool) {
 		w.WriteByte(0)
 	}
 }
+func writeKillSwitchState(w *bytes.Buffer, v ir.KillSwitchState) {
+	switch v {
+	case ir.KillSwitchOn:
+		w.WriteByte(1)
+	case ir.KillSwitchOff:
+		w.WriteByte(2)
+	default:
+		w.WriteByte(0)
+	}
+}
 func writeString(w *bytes.Buffer, s string) {
 	writeU32(w, uint32(len(s)))
 	w.WriteString(s)
@@ -549,7 +560,7 @@ func writeRuleHeader(w *bytes.Buffer, r compiler.RuleHeader) {
 	writeU32(w, r.ConditionLen)
 	writeU16(w, r.ActionIdx)
 	writeU16(w, r.FallbackIdx)
-	writeBool(w, r.KillSwitch)
+	writeKillSwitchState(w, r.KillSwitch)
 	writeBool(w, r.HasRollout)
 	writeU16(w, r.RolloutBps)
 	writeU16(w, r.RolloutSubjectIdx)
@@ -663,6 +674,21 @@ func (d *bundleDecoder) readBool() (bool, error) {
 	return v != 0, nil
 }
 
+func (d *bundleDecoder) readKillSwitchState() (ir.KillSwitchState, error) {
+	v, err := d.readU8()
+	if err != nil {
+		return ir.KillSwitchUnset, err
+	}
+	switch v {
+	case 1:
+		return ir.KillSwitchOn, nil
+	case 2:
+		return ir.KillSwitchOff, nil
+	default:
+		return ir.KillSwitchUnset, nil
+	}
+}
+
 func (d *bundleDecoder) readString() (string, error) {
 	n, err := d.readU32()
 	if err != nil {
@@ -743,7 +769,7 @@ func (d *bundleDecoder) readRuleHeader() (compiler.RuleHeader, error) {
 	if err != nil {
 		return compiler.RuleHeader{}, err
 	}
-	killSwitch, err := d.readBool()
+	killSwitch, err := d.readKillSwitchState()
 	if err != nil {
 		return compiler.RuleHeader{}, err
 	}
@@ -827,4 +853,3 @@ func (d *bundleDecoder) readRuleHeader() (compiler.RuleHeader, error) {
 		HasSegment:          hasSegment,
 	}, nil
 }
-

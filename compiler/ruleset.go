@@ -5,6 +5,7 @@ import (
 	"regexp"
 
 	"github.com/odvcencio/arbiter/intern"
+	"github.com/odvcencio/arbiter/ir"
 )
 
 // CompiledRuleset is the output of compilation — everything the VM needs.
@@ -37,7 +38,7 @@ type RuleHeader struct {
 	ConditionLen        uint32 // byte length of condition bytecode
 	ActionIdx           uint16 // index into Actions table
 	FallbackIdx         uint16 // 0 = none
-	KillSwitch          bool
+	KillSwitch          ir.KillSwitchState
 	HasRollout          bool
 	RolloutBps          uint16
 	RolloutSubjectIdx   uint16

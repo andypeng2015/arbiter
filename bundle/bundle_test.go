@@ -7,6 +7,7 @@ import (
 
 	arbiter "github.com/odvcencio/arbiter"
 	"github.com/odvcencio/arbiter/bundle"
+	"github.com/odvcencio/arbiter/ir"
 	"github.com/odvcencio/arbiter/vm"
 )
 
@@ -116,6 +117,58 @@ rule StandardShipping {
 	}
 	if matched[0].Params["method"] != "free" {
 		t.Errorf("expected free, got %v", matched[0].Params["method"])
+	}
+}
+
+func TestRoundTripPreservesKillSwitchState(t *testing.T) {
+	prog, err := arbiter.Compile([]byte(`
+rule Enabled {
+	kill_switch on
+	when { true }
+	then Allow {}
+}
+
+rule ExplicitOff {
+	kill_switch off
+	when { true }
+	then Review {}
+}
+
+rule Unset {
+	when { true }
+	then Route {}
+}
+`))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	blob, err := bundle.Marshal(prog.Ruleset)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	restored, err := bundle.Unmarshal(blob)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	got := []ir.KillSwitchState{
+		restored.Rules[0].KillSwitch,
+		restored.Rules[1].KillSwitch,
+		restored.Rules[2].KillSwitch,
+	}
+	want := []ir.KillSwitchState{
+		ir.KillSwitchOn,
+		ir.KillSwitchOff,
+		ir.KillSwitchUnset,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected rule count: got %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("rule %d kill_switch = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 

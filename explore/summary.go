@@ -41,29 +41,30 @@ type ConstantSummary struct {
 }
 
 type RuleSummary struct {
-	Name       string   `json:"name"`
-	Tags       []string `json:"tags,omitempty"`
-	Priority   int      `json:"priority"`
-	Segment    string   `json:"segment,omitempty"`
-	KillSwitch bool     `json:"kill_switch,omitempty"`
-	Action     string   `json:"action"`
+	Name       string             `json:"name"`
+	Tags       []string           `json:"tags,omitempty"`
+	Priority   int                `json:"priority"`
+	Segment    string             `json:"segment,omitempty"`
+	KillSwitch ir.KillSwitchState `json:"kill_switch,omitempty"`
+	Action     string             `json:"action"`
 }
 
 type ExpertRuleSummary struct {
-	Name            string   `json:"name"`
-	Tags            []string `json:"tags,omitempty"`
-	Priority        int      `json:"priority"`
-	Kind            string   `json:"kind"`
-	Target          string   `json:"target"`
-	PerFact         bool     `json:"per_fact,omitempty"`
-	NoLoop          bool     `json:"no_loop,omitempty"`
-	Stable          bool     `json:"stable,omitempty"`
-	ActivationGroup string   `json:"activation_group,omitempty"`
-	For             string   `json:"for,omitempty"`
-	Within          string   `json:"within,omitempty"`
-	StableFor       string   `json:"stable_for,omitempty"`
-	Cooldown        string   `json:"cooldown,omitempty"`
-	Debounce        string   `json:"debounce,omitempty"`
+	Name            string             `json:"name"`
+	Tags            []string           `json:"tags,omitempty"`
+	Priority        int                `json:"priority"`
+	Kind            string             `json:"kind"`
+	Target          string             `json:"target"`
+	KillSwitch      ir.KillSwitchState `json:"kill_switch,omitempty"`
+	PerFact         bool               `json:"per_fact,omitempty"`
+	NoLoop          bool               `json:"no_loop,omitempty"`
+	Stable          bool               `json:"stable,omitempty"`
+	ActivationGroup string             `json:"activation_group,omitempty"`
+	For             string             `json:"for,omitempty"`
+	Within          string             `json:"within,omitempty"`
+	StableFor       string             `json:"stable_for,omitempty"`
+	Cooldown        string             `json:"cooldown,omitempty"`
+	Debounce        string             `json:"debounce,omitempty"`
 }
 
 type StrategySummary struct {
@@ -73,12 +74,12 @@ type StrategySummary struct {
 }
 
 type StrategyCandidateSummary struct {
-	Label      string `json:"label"`
-	Condition  string `json:"condition,omitempty"`
-	Segment    string `json:"segment,omitempty"`
-	KillSwitch bool   `json:"kill_switch,omitempty"`
-	Rollout    string `json:"rollout,omitempty"`
-	Else       bool   `json:"else,omitempty"`
+	Label      string             `json:"label"`
+	Condition  string             `json:"condition,omitempty"`
+	Segment    string             `json:"segment,omitempty"`
+	KillSwitch ir.KillSwitchState `json:"kill_switch,omitempty"`
+	Rollout    string             `json:"rollout,omitempty"`
+	Else       bool               `json:"else,omitempty"`
 }
 
 type WorkerSummary struct {
@@ -185,6 +186,7 @@ func BuildSummary(program *ir.Program) *Summary {
 			Priority:        int(rule.Priority),
 			Kind:            string(rule.ActionKind),
 			Target:          rule.Target,
+			KillSwitch:      rule.KillSwitch,
 			PerFact:         rule.PerFact,
 			NoLoop:          rule.NoLoop,
 			Stable:          rule.Stable,

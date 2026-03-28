@@ -130,13 +130,33 @@ type Segment struct {
 	Condition ExprID
 }
 
+// KillSwitchState records whether a declaration omitted kill_switch, enabled it,
+// or explicitly set it off.
+type KillSwitchState string
+
+const (
+	KillSwitchUnset KillSwitchState = ""
+	KillSwitchOn    KillSwitchState = "on"
+	KillSwitchOff   KillSwitchState = "off"
+)
+
+// IsSet reports whether the declaration mentioned kill_switch explicitly.
+func (s KillSwitchState) IsSet() bool {
+	return s != KillSwitchUnset
+}
+
+// Enabled reports whether the declaration enables the kill switch.
+func (s KillSwitchState) Enabled() bool {
+	return s == KillSwitchOn
+}
+
 // Rule is one top-level standard rule declaration.
 type Rule struct {
 	Name         string
 	Span         Span
 	Tags         []string
 	Priority     int32
-	KillSwitch   bool
+	KillSwitch   KillSwitchState
 	Prereqs      []string
 	Excludes     []string
 	Segment      string
@@ -164,7 +184,7 @@ type StrategyCandidate struct {
 	Lets         []LetBinding
 	Condition    ExprID
 	HasCondition bool
-	KillSwitch   bool
+	KillSwitch   KillSwitchState
 	Rollout      *Rollout
 	Params       []ActionParam
 	IsElse       bool
@@ -195,7 +215,7 @@ type Flag struct {
 	Tags       []string
 	Type       FlagType
 	Default    string
-	KillSwitch bool
+	KillSwitch KillSwitchState
 	Requires   []string
 	Rules      []FlagRule
 	Variants   []Variant
@@ -261,7 +281,7 @@ type ExpertRule struct {
 	Span             Span
 	Tags             []string
 	Priority         int32
-	KillSwitch       bool
+	KillSwitch       KillSwitchState
 	Prereqs          []string
 	Excludes         []string
 	Segment          string

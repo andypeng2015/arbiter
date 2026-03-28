@@ -440,7 +440,7 @@ func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *go
 	rc.Enter(def.Key)
 	defer rc.Leave(def.Key)
 
-	if govern.IsKillSwitched(f.effectiveFlagKillSwitch(def, bundleID, view), trace) {
+	if f.effectiveFlagKillSwitch(def, bundleID, view).Record(trace, "kill_switch") {
 		return result
 	}
 
@@ -590,14 +590,14 @@ func (f *Flags) assignVariant(flagKey string, ruleIndex int, rule FlagRule, rc *
 	return assigned, true
 }
 
-func (f *Flags) effectiveFlagKillSwitch(def *FlagDef, bundleID string, view overrides.View) bool {
-	if view == nil {
-		return def.KillSwitch
+func (f *Flags) effectiveFlagKillSwitch(def *FlagDef, bundleID string, view overrides.View) govern.KillSwitchDecision {
+	var override *bool
+	if view != nil {
+		if ov, ok := view.Flag(bundleID, def.Key); ok {
+			override = ov.KillSwitch
+		}
 	}
-	if ov, ok := view.Flag(bundleID, def.Key); ok && ov.KillSwitch != nil {
-		return *ov.KillSwitch
-	}
-	return def.KillSwitch
+	return govern.ResolveKillSwitch(def.KillSwitch.IsSet(), def.KillSwitch.Enabled(), override)
 }
 
 func (f *Flags) effectiveRuleRollout(flagKey string, ruleIndex int, rule FlagRule, bundleID string, view overrides.View) *govern.PercentRollout {
@@ -663,9 +663,13 @@ func buildHTTPContext(r *http.Request) map[string]any {
 
 func buildReason(def *FlagDef, variant string, trace []TraceStep) string {
 	if variant == def.Default {
+		killSwitchDisabled := ""
 		for _, step := range trace {
 			if step.Check == "kill_switch" && step.Result {
 				return "kill-switched"
+			}
+			if step.Check == "kill_switch" && !step.Result && killSwitchDisabled == "" {
+				killSwitchDisabled = step.Detail
 			}
 			if step.Check == "cycle detection" && !step.Result {
 				return "prerequisite cycle detected"
@@ -673,6 +677,9 @@ func buildReason(def *FlagDef, variant string, trace []TraceStep) string {
 			if strings.HasPrefix(step.Check, "requires ") && !step.Result {
 				return fmt.Sprintf("prerequisite %s not met", strings.TrimPrefix(step.Check, "requires "))
 			}
+		}
+		if killSwitchDisabled != "" {
+			return killSwitchDisabled + "; no rules matched"
 		}
 		return "no rules matched"
 	}

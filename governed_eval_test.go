@@ -152,6 +152,47 @@ rule WithFallback {
 	}
 }
 
+func TestEvalGovernedKillSwitchOffTracesDeclaration(t *testing.T) {
+	src := []byte(`
+rule ExplicitlyEnabled {
+	kill_switch off
+	when { true }
+	then Allow {}
+}
+`)
+
+	result, err := CompileFull(src)
+	if err != nil {
+		t.Fatalf("CompileFull: %v", err)
+	}
+
+	ctx := map[string]any{}
+	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
+	matched, trace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
+	if err != nil {
+		t.Fatalf("EvalGoverned: %v", err)
+	}
+	if len(matched) != 1 || matched[0].Name != "ExplicitlyEnabled" {
+		t.Fatalf("unexpected matched rules: %+v", matched)
+	}
+
+	found := false
+	for _, step := range trace.Steps {
+		if step.Check == "kill_switch" {
+			found = true
+			if step.Result {
+				t.Fatalf("expected kill_switch off trace to be false, got %#v", step)
+			}
+			if step.Detail != "kill_switch declared off" {
+				t.Fatalf("unexpected kill_switch detail: %#v", step)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected explicit kill_switch off trace step")
+	}
+}
+
 func TestEvalGovernedRolloutGatesMatches(t *testing.T) {
 	src := []byte(`
 rule SlowRoll {

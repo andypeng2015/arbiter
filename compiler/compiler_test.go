@@ -7,6 +7,7 @@ import (
 	arbiter "github.com/odvcencio/arbiter"
 	"github.com/odvcencio/arbiter/compiler"
 	"github.com/odvcencio/arbiter/intern"
+	"github.com/odvcencio/arbiter/ir"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 )
 
@@ -294,8 +295,8 @@ rule EnhancedRiskCheck priority 1 {
 	}
 
 	rh := rs.Rules[0]
-	if !rh.KillSwitch {
-		t.Fatal("expected KillSwitch to be set")
+	if rh.KillSwitch != ir.KillSwitchOn {
+		t.Fatalf("KillSwitch = %q, want %q", rh.KillSwitch, ir.KillSwitchOn)
 	}
 	if !rh.HasSegment {
 		t.Fatal("expected HasSegment to be set")
@@ -357,8 +358,24 @@ rule SoftLaunch {
 	if len(rs.Rules) != 1 {
 		t.Fatalf("expected 1 rule, got %d", len(rs.Rules))
 	}
-	if rs.Rules[0].KillSwitch {
-		t.Fatal("expected KillSwitch to remain unset")
+	if rs.Rules[0].KillSwitch != ir.KillSwitchOff {
+		t.Fatalf("KillSwitch = %q, want %q", rs.Rules[0].KillSwitch, ir.KillSwitchOff)
+	}
+}
+
+func TestCompileRuleKillSwitchUnset(t *testing.T) {
+	src := `
+rule SoftLaunch {
+    when { true }
+    then Allow {}
+}
+`
+	rs := compileSource(t, src)
+	if len(rs.Rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rs.Rules))
+	}
+	if rs.Rules[0].KillSwitch != ir.KillSwitchUnset {
+		t.Fatalf("KillSwitch = %q, want unset", rs.Rules[0].KillSwitch)
 	}
 }
 

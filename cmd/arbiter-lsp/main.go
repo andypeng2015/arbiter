@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/odvcencio/arbiter/format"
+	"github.com/odvcencio/arbiter/ir"
 )
 
 func main() {
@@ -460,13 +461,13 @@ func computeHover(source []byte, word string) string {
 	// Check rules.
 	for _, r := range summary.Rules {
 		if r.Name == word {
-			return fmt.Sprintf("**rule** `%s` (priority %d) → `%s`", r.Name, r.Priority, r.Action)
+			return fmt.Sprintf("**rule** `%s` (priority %d%s) → `%s`", r.Name, r.Priority, hoverKillSwitch(r.KillSwitch), r.Action)
 		}
 	}
 	// Check expert rules.
 	for _, r := range summary.ExpertRules {
 		if r.Name == word {
-			return fmt.Sprintf("**expert rule** `%s` (priority %d) → %s `%s`", r.Name, r.Priority, r.Kind, r.Target)
+			return fmt.Sprintf("**expert rule** `%s` (priority %d%s) → %s `%s`", r.Name, r.Priority, hoverKillSwitch(r.KillSwitch), r.Kind, r.Target)
 		}
 	}
 	// Check strategies.
@@ -476,6 +477,13 @@ func computeHover(source []byte, word string) string {
 		}
 	}
 	return ""
+}
+
+func hoverKillSwitch(state ir.KillSwitchState) string {
+	if !state.IsSet() {
+		return ""
+	}
+	return ", kill_switch " + string(state)
 }
 
 // --- Definition ---

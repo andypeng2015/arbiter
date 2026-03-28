@@ -24,7 +24,7 @@ outcome HeatWarning {
 }
 
 strategy RouteHeat returns HeatWarning {
-	when { input.hot == true } then AlertNow {
+	when { input.hot == true } kill_switch off then AlertNow {
 		zone: "zone-a",
 	}
 
@@ -47,11 +47,13 @@ arbiter greenhouse {
 }
 
 rule CheckTemp {
+	kill_switch on
 	when { sensor.temperature > SAFE_TEMP }
 	then Alert {}
 }
 
 expert rule HeatStress cooldown 15m {
+	kill_switch off
 	when { input.hot == true } for 10m
 	then emit HeatWarning {
 		zone: "zone-a",
@@ -93,8 +95,17 @@ expert rule HeatStress cooldown 15m {
 	if len(summary.Rules) != 1 || summary.Rules[0].Name != "CheckTemp" {
 		t.Fatalf("unexpected rules: %+v", summary.Rules)
 	}
+	if summary.Rules[0].KillSwitch != ir.KillSwitchOn {
+		t.Fatalf("expected rule kill_switch on, got %+v", summary.Rules[0])
+	}
+	if got := summary.Strategies[0].Candidates[0].KillSwitch; got != ir.KillSwitchOff {
+		t.Fatalf("expected strategy candidate kill_switch off, got %+v", summary.Strategies[0].Candidates[0])
+	}
 	if len(summary.ExpertRules) != 1 {
 		t.Fatalf("unexpected expert rules: %+v", summary.ExpertRules)
+	}
+	if summary.ExpertRules[0].KillSwitch != ir.KillSwitchOff {
+		t.Fatalf("expected expert kill_switch off, got %+v", summary.ExpertRules[0])
 	}
 	if summary.ExpertRules[0].For != "10m" || summary.ExpertRules[0].Cooldown != "15m" {
 		t.Fatalf("expected temporal metadata in expert summary, got %+v", summary.ExpertRules[0])

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/odvcencio/arbiter/govern"
+	"github.com/odvcencio/arbiter/ir"
 )
 
 // FlagType represents boolean or multivariate flags.
@@ -44,7 +45,7 @@ type FlagDef struct {
 	Tags          []string
 	Type          FlagType
 	Default       string // default variant name ("false", "control", etc.)
-	KillSwitch    bool
+	KillSwitch    ir.KillSwitchState
 	Prerequisites []string               // flag keys that must be enabled
 	Rules         []FlagRule             // ordered targeting rules
 	Variants      map[string]*VariantDef // declared variant definitions (nil if undeclared)

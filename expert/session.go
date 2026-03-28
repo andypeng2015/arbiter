@@ -1292,7 +1292,7 @@ func (s *Session) evalRule(rule Rule, header compiler.RuleHeader, evaluator *vm.
 }
 
 func (s *Session) ruleAllowedByGovernance(rule Rule, header compiler.RuleHeader, rc *govern.RequestCache) bool {
-	if govern.IsKillSwitched(effectiveRuleKillSwitch(header, rule, s.opts.BundleID, s.opts.Overrides), nil) {
+	if effectiveRuleKillSwitch(header, rule, s.opts.BundleID, s.opts.Overrides).Enabled {
 		return false
 	}
 	if !rc.CheckPrerequisites(rule.Prereqs, nil) {
@@ -1504,15 +1504,14 @@ func (s *Session) hasPendingWork(dirtyRules map[string]struct{}) bool {
 	return false
 }
 
-func effectiveRuleKillSwitch(header compiler.RuleHeader, rule Rule, bundleID string, view overrides.View) bool {
-	killSwitch := header.KillSwitch
-	if view == nil {
-		return killSwitch
+func effectiveRuleKillSwitch(header compiler.RuleHeader, rule Rule, bundleID string, view overrides.View) govern.KillSwitchDecision {
+	var override *bool
+	if view != nil {
+		if ov, ok := view.Rule(bundleID, rule.Name); ok {
+			override = ov.KillSwitch
+		}
 	}
-	if ov, ok := view.Rule(bundleID, rule.Name); ok && ov.KillSwitch != nil {
-		return *ov.KillSwitch
-	}
-	return killSwitch
+	return govern.ResolveKillSwitch(header.KillSwitch.IsSet(), header.KillSwitch.Enabled(), override)
 }
 
 func effectiveRuleRollout(header compiler.RuleHeader, rule Rule, rs *compiler.CompiledRuleset, bundleID string, view overrides.View) *govern.PercentRollout {

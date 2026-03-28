@@ -474,7 +474,7 @@ func (v *programValidator) validateStrategy(strategy *ir.Strategy) error {
 			if i != len(strategy.Candidates)-1 {
 				return spanError(candidate.Span, "strategy %s: else arm must be last", strategy.Name)
 			}
-			if candidate.HasCondition || len(candidate.Lets) > 0 || candidate.Segment != "" || candidate.KillSwitch || candidate.Rollout != nil {
+			if candidate.HasCondition || len(candidate.Lets) > 0 || candidate.Segment != "" || candidate.KillSwitch.IsSet() || candidate.Rollout != nil {
 				return spanError(candidate.Span, "strategy %s candidate %s: else arm cannot declare conditions or governance", strategy.Name, candidate.Label)
 			}
 			sawElse = true

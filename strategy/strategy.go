@@ -30,7 +30,7 @@ type Candidate struct {
 	Label      string
 	Segment    string
 	Condition  string
-	KillSwitch bool
+	KillSwitch ir.KillSwitchState
 	Rollout    *govern.PercentRollout
 	IsElse     bool
 }
@@ -96,8 +96,7 @@ func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bund
 		checkPrefix := "strategy:" + def.Name + "/" + candidate.Label + ":"
 		killSwitch, rollout := effectiveCandidateGovernance(bundleID, def.Name, candidate, view)
 
-		if killSwitch {
-			trace.Append(checkPrefix+"kill_switch", false, "candidate kill_switch enabled")
+		if killSwitch.Record(trace, checkPrefix+"kill_switch") {
 			continue
 		}
 
@@ -296,23 +295,23 @@ func cloneRollout(rollout *ir.Rollout) *ir.Rollout {
 	return &clone
 }
 
-func effectiveCandidateGovernance(bundleID, strategyName string, candidate Candidate, view overrides.View) (bool, *govern.PercentRollout) {
-	killSwitch := candidate.KillSwitch
+func effectiveCandidateGovernance(bundleID, strategyName string, candidate Candidate, view overrides.View) (govern.KillSwitchDecision, *govern.PercentRollout) {
 	rollout := candidate.Rollout
+	var override *bool
 	if view == nil {
-		return killSwitch, rollout
+		return govern.ResolveKillSwitch(candidate.KillSwitch.IsSet(), candidate.KillSwitch.Enabled(), nil), rollout
 	}
 	ov, ok := view.Strategy(bundleID, strategyName, candidate.Label)
 	if !ok {
-		return killSwitch, rollout
+		return govern.ResolveKillSwitch(candidate.KillSwitch.IsSet(), candidate.KillSwitch.Enabled(), nil), rollout
 	}
 	if ov.KillSwitch != nil {
-		killSwitch = *ov.KillSwitch
+		override = ov.KillSwitch
 	}
 	if ov.Rollout != nil {
 		rollout = overrideCandidateRollout(bundleID, strategyName, candidate, *ov.Rollout)
 	}
-	return killSwitch, rollout
+	return govern.ResolveKillSwitch(candidate.KillSwitch.IsSet(), candidate.KillSwitch.Enabled(), override), rollout
 }
 
 func overrideCandidateRollout(bundleID, strategyName string, candidate Candidate, rolloutBps uint16) *govern.PercentRollout {

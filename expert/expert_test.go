@@ -11,6 +11,7 @@ import (
 	arbiter "github.com/odvcencio/arbiter"
 	dec "github.com/odvcencio/arbiter/decimal"
 	"github.com/odvcencio/arbiter/expert"
+	"github.com/odvcencio/arbiter/ir"
 )
 
 func TestCompileExtractsExpertRules(t *testing.T) {
@@ -47,6 +48,9 @@ expert rule SeedHighRisk priority 10 {
 	}
 	if rules[0].Kind != expert.ActionAssert {
 		t.Fatalf("unexpected rule kind %q", rules[0].Kind)
+	}
+	if rules[0].KillSwitch != ir.KillSwitchUnset {
+		t.Fatalf("unexpected kill switch state %q", rules[0].KillSwitch)
 	}
 
 	compiled, err := arbiter.CompileFull(src)

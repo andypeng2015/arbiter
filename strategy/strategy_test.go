@@ -154,8 +154,8 @@ strategy CheckoutRouting returns CheckoutPath {
 	want := []govern.TraceStep{
 		{
 			Check:  "strategy:CheckoutRouting/Disabled:kill_switch",
-			Result: false,
-			Detail: "candidate kill_switch enabled",
+			Result: true,
+			Detail: "kill_switch declared on",
 		},
 		{
 			Check:  "strategy:CheckoutRouting/Stable:fallback",
@@ -196,10 +196,20 @@ strategy CheckoutRouting returns CheckoutPath {
 	if result.Selected != "Enabled" {
 		t.Fatalf("Selected = %q, want Enabled", result.Selected)
 	}
-	for _, step := range result.Trace.Steps {
-		if strings.Contains(step.Check, "kill_switch") {
-			t.Fatalf("unexpected kill_switch trace step: %#v", step)
-		}
+	want := []govern.TraceStep{
+		{
+			Check:  "strategy:CheckoutRouting/Enabled:kill_switch",
+			Result: false,
+			Detail: "kill_switch declared off",
+		},
+		{
+			Check:  "strategy:CheckoutRouting/Enabled:condition",
+			Result: true,
+			Detail: "user.country == \"US\"",
+		},
+	}
+	if !reflect.DeepEqual(result.Trace.Steps, want) {
+		t.Fatalf("trace steps = %#v, want %#v", result.Trace.Steps, want)
 	}
 }
 

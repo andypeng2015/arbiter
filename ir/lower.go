@@ -397,14 +397,19 @@ func (l *lowerer) lowerSegment(n *gotreesitter.Node) (Segment, error) {
 	}, nil
 }
 
-func (l *lowerer) lowerKillSwitch(n *gotreesitter.Node) bool {
+func (l *lowerer) lowerKillSwitch(n *gotreesitter.Node) KillSwitchState {
 	if n == nil {
-		return false
+		return KillSwitchUnset
 	}
 	if stateNode := n.ChildByFieldName("state", l.lang); stateNode != nil {
-		return l.text(stateNode) != "off"
+		switch l.text(stateNode) {
+		case "off":
+			return KillSwitchOff
+		case "on":
+			return KillSwitchOn
+		}
 	}
-	return true
+	return KillSwitchOn
 }
 
 func (l *lowerer) lowerRule(n *gotreesitter.Node) (Rule, error) {

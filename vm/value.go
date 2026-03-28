@@ -14,14 +14,15 @@ const (
 	TypeDecimal uint8 = 6
 )
 
-// Value is the VM's stack value. Designed to avoid heap allocation.
+// Value is the VM's stack value. Keep small scalars packed ahead of Num/Any so
+// the inline VM stack stays compact on 64-bit builds.
 type Value struct {
 	Typ     uint8
-	Num     float64
-	Str     uint16 // constant pool string index when Any is nil
 	Bool    bool
+	Str     uint16 // constant pool string index when Any is nil
 	ListIdx uint16 // index into constant pool lists
 	ListLen uint16
+	Num     float64
 	Any     any // runtime strings, objects, dynamic lists, decimals
 }
 

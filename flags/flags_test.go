@@ -143,6 +143,32 @@ flag dark_mode type boolean default false kill_switch off {
 	}
 }
 
+func TestFlagExplainKillSwitchOff(t *testing.T) {
+	f, err := Load([]byte(`
+flag dark_mode type boolean default false kill_switch off {
+	when { false } then true
+}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	eval := f.Explain("dark_mode", map[string]any{})
+
+	if eval.Variant.Name != "false" {
+		t.Fatalf("variant: got %q, want false", eval.Variant.Name)
+	}
+	if eval.Reason != "kill_switch declared off; no rules matched" {
+		t.Fatalf("reason: got %q", eval.Reason)
+	}
+	if len(eval.Trace) < 2 {
+		t.Fatalf("expected trace steps, got %#v", eval.Trace)
+	}
+	if step := eval.Trace[0]; step.Check != "kill_switch" || step.Result || step.Detail != "kill_switch declared off" {
+		t.Fatalf("unexpected first trace step: %#v", step)
+	}
+}
+
 func TestFlagPrerequisite(t *testing.T) {
 	f, err := Load([]byte(fullFlagSource))
 	if err != nil {

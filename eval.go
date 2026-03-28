@@ -251,12 +251,12 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 			continue
 		}
 		ruleName := evaluator.String(rule.NameIdx)
-		killSwitch := rule.KillSwitch
+		var killSwitchOverride *bool
 		var rolloutOverride *uint16
 		if view != nil {
 			if ov, ok := view.Rule(bundleID, ruleName); ok {
 				if ov.KillSwitch != nil {
-					killSwitch = *ov.KillSwitch
+					killSwitchOverride = ov.KillSwitch
 				}
 				if ov.Rollout != nil {
 					rolloutOverride = ov.Rollout
@@ -264,7 +264,8 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 			}
 		}
 
-		if govern.IsKillSwitched(killSwitch, trace) {
+		killSwitch := govern.ResolveKillSwitch(rule.KillSwitch.IsSet(), rule.KillSwitch.Enabled(), killSwitchOverride)
+		if killSwitch.Record(trace, "kill_switch") {
 			rc.RecordRuleResult(ruleName, false)
 			continue
 		}
