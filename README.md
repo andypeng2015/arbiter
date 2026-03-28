@@ -401,7 +401,7 @@ expert rule HaltOnStaleFeed priority 0 {
 
 Keep the transport algebra explicit: a sink kind is not automatically a worker runtime. Workers are typed capabilities with typed results, so their runtime kinds must be registered through `RunnerOptions.WorkerHandlers` (or the capability plugin's worker surface), not inferred from delivery handlers.
 
-That same capability surface is now visible to operators too: `/status` reports one unified runtime view of source schemes, sink kinds, and worker runtimes tagged by owner (`core`, `host`, or `plugin`), and also includes the connected plugin manifest metadata when a sidecar is present.
+That same capability surface is now visible to operators too: `/status` reports one unified runtime view of source schemes, sink kinds, and worker runtimes tagged by owner (`core`, `host`, or `plugin`), includes the connected plugin manifest metadata when a sidecar is present, and now exposes the runtime's control-surface auth/TLS posture plus capability-plugin transport settings directly instead of forcing operators to infer them from flags.
 
 Arbiters are always killable by default. There is no `kill_switch` keyword inside an `arbiter` block because the loop should run unless a runtime stop path is used. The exact stop path can vary by deployment, but the invariant is the same: every arbiter must be stoppable quickly. In practice that can be wired through several control paths, including a control-plane override, a local override file, parent-context cancellation, or ordinary process shutdown/signal handling.
 
@@ -597,7 +597,7 @@ Set `--ready-max-staleness 30s` or `ARBITER_AGENT_READY_MAX_STALENESS=30s` if yo
 
 Use `--upstream-token`, `--upstream-ca-file`, `--upstream-server-name`, or `--upstream-plaintext` when the upstream control plane is protected with auth and TLS.
 
-`arbiter runtime-capabilities` accepts `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure runtime control, or `--plaintext` to force insecure transport against a bare target.
+`arbiter runtime-capabilities` accepts `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure runtime control, or `--plaintext` to force insecure transport against a bare target. The response now includes both the runtime control surface posture (`auth`, `tls`, `mtls`, `public_listener`) and the bound capability-plugin transport posture (`target`, `auth`, `tls`, `server_name`) when one is configured.
 
 ### Self-Hosted Profile
 
@@ -1152,8 +1152,8 @@ It handles the full lifecycle:
 - **Delivery retry** — outcomes route to registered handlers with durable retry journal
 - **Bounded parallelism** — independent sources and handler targets can run concurrently inside one tick without changing per-target ordering
 - **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
-- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats, unified capability surface, connected plugin metadata)
-- **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` exposes the same unified capability surface over gRPC for SDKs and CLI clients
+- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats, unified capability surface, connected plugin metadata, control-surface auth/TLS posture, capability-plugin transport posture)
+- **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` exposes the same unified capability surface plus transport posture over gRPC for SDKs and CLI clients
 
 Runtime transport is now opinionated instead of ad hoc:
 

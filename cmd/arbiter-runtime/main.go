@@ -174,6 +174,7 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 	serverTokens := []string(nil)
 	var serverTLSConfig *tls.Config
 	controlTransport := runtimeControlTransport{}
+	var err error
 	if config.grpcAddr != "" {
 		serverTokens, err = grpcutil.LoadAuthTokens(config.authTokens, config.authTokenFile)
 		if err != nil {
@@ -263,14 +264,14 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 		"delivery_parallelism", config.deliveryParallelism)
 
 	return &runtime{
-		config: config,
-		runner: runner,
-		wf:     wf,
-		full:   full,
-		logger: logger,
-		name:   bundlePath,
-		conn:   capabilityConn,
-		caps:   capabilityManifest,
+		config:              config,
+		runner:              runner,
+		wf:                  wf,
+		full:                full,
+		logger:              logger,
+		name:                bundlePath,
+		conn:                capabilityConn,
+		caps:                capabilityManifest,
 		serverTokens:        serverTokens,
 		serverTLSConfig:     serverTLSConfig,
 		controlTransport:    controlTransport,

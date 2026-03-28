@@ -974,6 +974,27 @@ func runtimeCapabilitiesCmd(cfg runtimeCapabilitiesConfig) error {
 	}
 
 	fmt.Println("runtime capabilities")
+	if control := resp.GetControlTransport(); control != nil {
+		fmt.Println("control transport:")
+		if control.GetEnabled() {
+			fmt.Printf("  - %s\n", control.GetAddress())
+			fmt.Printf("    auth=%t tls=%t mtls=%t public=%t\n", control.GetAuthEnabled(), control.GetTlsEnabled(), control.GetMutualTlsEnabled(), control.GetPublicListener())
+		} else {
+			fmt.Println("  - disabled")
+		}
+	}
+	if capabilityTransport := resp.GetCapabilityTransport(); capabilityTransport != nil {
+		fmt.Println("capability transport:")
+		if capabilityTransport.GetConfigured() {
+			fmt.Printf("  - %s\n", capabilityTransport.GetTarget())
+			fmt.Printf("    auth=%t tls=%t\n", capabilityTransport.GetAuthEnabled(), capabilityTransport.GetTlsEnabled())
+			if serverName := strings.TrimSpace(capabilityTransport.GetServerName()); serverName != "" {
+				fmt.Printf("    server_name=%s\n", serverName)
+			}
+		} else {
+			fmt.Println("  - not configured")
+		}
+	}
 	if len(resp.GetPlugins()) > 0 {
 		fmt.Println("plugins:")
 		for _, plugin := range resp.GetPlugins() {

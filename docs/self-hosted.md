@@ -74,6 +74,8 @@ Apply the same rule to `arbiter-runtime`: protect `--grpc` with `--auth-token` /
 
 If `arbiter-runtime` talks to a remote capability plugin, make that transport explicit too: prefer `grpcs://...` plus `--capability-token`, `--capability-ca-file`, and `--capability-server-name` over ambient network trust.
 
+Do not treat that posture as hidden configuration. Check `/status` or `RuntimeService.GetRuntimeCapabilities` and verify the runtime is actually reporting the auth/TLS/public-listener and capability-transport shape you intended.
+
 ## Container defaults
 
 [`deploy/Dockerfile`](../deploy/Dockerfile) now defaults to:

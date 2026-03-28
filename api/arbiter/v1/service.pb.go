@@ -1351,19 +1351,181 @@ func (x *RuntimePluginInfo) GetVersion() string {
 	return ""
 }
 
-type GetRuntimeCapabilitiesResponse struct {
-	state         protoimpl.MessageState      `protogen:"open.v1"`
-	Sources       []*RuntimeSourceCapability  `protobuf:"bytes,1,rep,name=sources,proto3" json:"sources,omitempty"`
-	Sinks         []*RuntimeHandlerCapability `protobuf:"bytes,2,rep,name=sinks,proto3" json:"sinks,omitempty"`
-	Workers       []*RuntimeHandlerCapability `protobuf:"bytes,3,rep,name=workers,proto3" json:"workers,omitempty"`
-	Plugins       []*RuntimePluginInfo        `protobuf:"bytes,4,rep,name=plugins,proto3" json:"plugins,omitempty"`
+type RuntimeControlTransport struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Enabled          bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Address          string                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
+	PublicListener   bool                   `protobuf:"varint,3,opt,name=public_listener,json=publicListener,proto3" json:"public_listener,omitempty"`
+	AuthEnabled      bool                   `protobuf:"varint,4,opt,name=auth_enabled,json=authEnabled,proto3" json:"auth_enabled,omitempty"`
+	TlsEnabled       bool                   `protobuf:"varint,5,opt,name=tls_enabled,json=tlsEnabled,proto3" json:"tls_enabled,omitempty"`
+	MutualTlsEnabled bool                   `protobuf:"varint,6,opt,name=mutual_tls_enabled,json=mutualTlsEnabled,proto3" json:"mutual_tls_enabled,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RuntimeControlTransport) Reset() {
+	*x = RuntimeControlTransport{}
+	mi := &file_arbiter_v1_service_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeControlTransport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeControlTransport) ProtoMessage() {}
+
+func (x *RuntimeControlTransport) ProtoReflect() protoreflect.Message {
+	mi := &file_arbiter_v1_service_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeControlTransport.ProtoReflect.Descriptor instead.
+func (*RuntimeControlTransport) Descriptor() ([]byte, []int) {
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *RuntimeControlTransport) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *RuntimeControlTransport) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *RuntimeControlTransport) GetPublicListener() bool {
+	if x != nil {
+		return x.PublicListener
+	}
+	return false
+}
+
+func (x *RuntimeControlTransport) GetAuthEnabled() bool {
+	if x != nil {
+		return x.AuthEnabled
+	}
+	return false
+}
+
+func (x *RuntimeControlTransport) GetTlsEnabled() bool {
+	if x != nil {
+		return x.TlsEnabled
+	}
+	return false
+}
+
+func (x *RuntimeControlTransport) GetMutualTlsEnabled() bool {
+	if x != nil {
+		return x.MutualTlsEnabled
+	}
+	return false
+}
+
+type RuntimeCapabilityTransport struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Configured    bool                   `protobuf:"varint,1,opt,name=configured,proto3" json:"configured,omitempty"`
+	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	AuthEnabled   bool                   `protobuf:"varint,3,opt,name=auth_enabled,json=authEnabled,proto3" json:"auth_enabled,omitempty"`
+	TlsEnabled    bool                   `protobuf:"varint,4,opt,name=tls_enabled,json=tlsEnabled,proto3" json:"tls_enabled,omitempty"`
+	ServerName    string                 `protobuf:"bytes,5,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *RuntimeCapabilityTransport) Reset() {
+	*x = RuntimeCapabilityTransport{}
+	mi := &file_arbiter_v1_service_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeCapabilityTransport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeCapabilityTransport) ProtoMessage() {}
+
+func (x *RuntimeCapabilityTransport) ProtoReflect() protoreflect.Message {
+	mi := &file_arbiter_v1_service_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeCapabilityTransport.ProtoReflect.Descriptor instead.
+func (*RuntimeCapabilityTransport) Descriptor() ([]byte, []int) {
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RuntimeCapabilityTransport) GetConfigured() bool {
+	if x != nil {
+		return x.Configured
+	}
+	return false
+}
+
+func (x *RuntimeCapabilityTransport) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *RuntimeCapabilityTransport) GetAuthEnabled() bool {
+	if x != nil {
+		return x.AuthEnabled
+	}
+	return false
+}
+
+func (x *RuntimeCapabilityTransport) GetTlsEnabled() bool {
+	if x != nil {
+		return x.TlsEnabled
+	}
+	return false
+}
+
+func (x *RuntimeCapabilityTransport) GetServerName() string {
+	if x != nil {
+		return x.ServerName
+	}
+	return ""
+}
+
+type GetRuntimeCapabilitiesResponse struct {
+	state               protoimpl.MessageState      `protogen:"open.v1"`
+	Sources             []*RuntimeSourceCapability  `protobuf:"bytes,1,rep,name=sources,proto3" json:"sources,omitempty"`
+	Sinks               []*RuntimeHandlerCapability `protobuf:"bytes,2,rep,name=sinks,proto3" json:"sinks,omitempty"`
+	Workers             []*RuntimeHandlerCapability `protobuf:"bytes,3,rep,name=workers,proto3" json:"workers,omitempty"`
+	Plugins             []*RuntimePluginInfo        `protobuf:"bytes,4,rep,name=plugins,proto3" json:"plugins,omitempty"`
+	ControlTransport    *RuntimeControlTransport    `protobuf:"bytes,5,opt,name=control_transport,json=controlTransport,proto3" json:"control_transport,omitempty"`
+	CapabilityTransport *RuntimeCapabilityTransport `protobuf:"bytes,6,opt,name=capability_transport,json=capabilityTransport,proto3" json:"capability_transport,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
 func (x *GetRuntimeCapabilitiesResponse) Reset() {
 	*x = GetRuntimeCapabilitiesResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[20]
+	mi := &file_arbiter_v1_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1375,7 +1537,7 @@ func (x *GetRuntimeCapabilitiesResponse) String() string {
 func (*GetRuntimeCapabilitiesResponse) ProtoMessage() {}
 
 func (x *GetRuntimeCapabilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[20]
+	mi := &file_arbiter_v1_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1388,7 +1550,7 @@ func (x *GetRuntimeCapabilitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRuntimeCapabilitiesResponse.ProtoReflect.Descriptor instead.
 func (*GetRuntimeCapabilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{20}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetRuntimeCapabilitiesResponse) GetSources() []*RuntimeSourceCapability {
@@ -1419,6 +1581,20 @@ func (x *GetRuntimeCapabilitiesResponse) GetPlugins() []*RuntimePluginInfo {
 	return nil
 }
 
+func (x *GetRuntimeCapabilitiesResponse) GetControlTransport() *RuntimeControlTransport {
+	if x != nil {
+		return x.ControlTransport
+	}
+	return nil
+}
+
+func (x *GetRuntimeCapabilitiesResponse) GetCapabilityTransport() *RuntimeCapabilityTransport {
+	if x != nil {
+		return x.CapabilityTransport
+	}
+	return nil
+}
+
 type BundleOverrides struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
 	BundleId      string                   `protobuf:"bytes,1,opt,name=bundle_id,json=bundleId,proto3" json:"bundle_id,omitempty"`
@@ -1432,7 +1608,7 @@ type BundleOverrides struct {
 
 func (x *BundleOverrides) Reset() {
 	*x = BundleOverrides{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[21]
+	mi := &file_arbiter_v1_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1444,7 +1620,7 @@ func (x *BundleOverrides) String() string {
 func (*BundleOverrides) ProtoMessage() {}
 
 func (x *BundleOverrides) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[21]
+	mi := &file_arbiter_v1_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1457,7 +1633,7 @@ func (x *BundleOverrides) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BundleOverrides.ProtoReflect.Descriptor instead.
 func (*BundleOverrides) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{21}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *BundleOverrides) GetBundleId() string {
@@ -1509,7 +1685,7 @@ type RuleOverrideEntry struct {
 
 func (x *RuleOverrideEntry) Reset() {
 	*x = RuleOverrideEntry{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[22]
+	mi := &file_arbiter_v1_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1521,7 +1697,7 @@ func (x *RuleOverrideEntry) String() string {
 func (*RuleOverrideEntry) ProtoMessage() {}
 
 func (x *RuleOverrideEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[22]
+	mi := &file_arbiter_v1_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1534,7 +1710,7 @@ func (x *RuleOverrideEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleOverrideEntry.ProtoReflect.Descriptor instead.
 func (*RuleOverrideEntry) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{22}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *RuleOverrideEntry) GetRuleName() string {
@@ -1591,7 +1767,7 @@ type FlagOverrideEntry struct {
 
 func (x *FlagOverrideEntry) Reset() {
 	*x = FlagOverrideEntry{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[23]
+	mi := &file_arbiter_v1_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1603,7 +1779,7 @@ func (x *FlagOverrideEntry) String() string {
 func (*FlagOverrideEntry) ProtoMessage() {}
 
 func (x *FlagOverrideEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[23]
+	mi := &file_arbiter_v1_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1616,7 +1792,7 @@ func (x *FlagOverrideEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlagOverrideEntry.ProtoReflect.Descriptor instead.
 func (*FlagOverrideEntry) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{23}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *FlagOverrideEntry) GetFlagKey() string {
@@ -1659,7 +1835,7 @@ type FlagRuleOverrideEntry struct {
 
 func (x *FlagRuleOverrideEntry) Reset() {
 	*x = FlagRuleOverrideEntry{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[24]
+	mi := &file_arbiter_v1_service_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1671,7 +1847,7 @@ func (x *FlagRuleOverrideEntry) String() string {
 func (*FlagRuleOverrideEntry) ProtoMessage() {}
 
 func (x *FlagRuleOverrideEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[24]
+	mi := &file_arbiter_v1_service_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1684,7 +1860,7 @@ func (x *FlagRuleOverrideEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlagRuleOverrideEntry.ProtoReflect.Descriptor instead.
 func (*FlagRuleOverrideEntry) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{24}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *FlagRuleOverrideEntry) GetFlagKey() string {
@@ -1730,7 +1906,7 @@ type StrategyOverrideEntry struct {
 
 func (x *StrategyOverrideEntry) Reset() {
 	*x = StrategyOverrideEntry{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[25]
+	mi := &file_arbiter_v1_service_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1742,7 +1918,7 @@ func (x *StrategyOverrideEntry) String() string {
 func (*StrategyOverrideEntry) ProtoMessage() {}
 
 func (x *StrategyOverrideEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[25]
+	mi := &file_arbiter_v1_service_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1755,7 +1931,7 @@ func (x *StrategyOverrideEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StrategyOverrideEntry.ProtoReflect.Descriptor instead.
 func (*StrategyOverrideEntry) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{25}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *StrategyOverrideEntry) GetStrategyName() string {
@@ -1827,7 +2003,7 @@ type OverrideEvent struct {
 
 func (x *OverrideEvent) Reset() {
 	*x = OverrideEvent{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[26]
+	mi := &file_arbiter_v1_service_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1839,7 +2015,7 @@ func (x *OverrideEvent) String() string {
 func (*OverrideEvent) ProtoMessage() {}
 
 func (x *OverrideEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[26]
+	mi := &file_arbiter_v1_service_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1852,7 +2028,7 @@ func (x *OverrideEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverrideEvent.ProtoReflect.Descriptor instead.
 func (*OverrideEvent) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{26}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *OverrideEvent) GetType() OverrideEventType {
@@ -1955,7 +2131,7 @@ type TraceStep struct {
 
 func (x *TraceStep) Reset() {
 	*x = TraceStep{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[27]
+	mi := &file_arbiter_v1_service_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1967,7 +2143,7 @@ func (x *TraceStep) String() string {
 func (*TraceStep) ProtoMessage() {}
 
 func (x *TraceStep) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[27]
+	mi := &file_arbiter_v1_service_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1980,7 +2156,7 @@ func (x *TraceStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TraceStep.ProtoReflect.Descriptor instead.
 func (*TraceStep) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{27}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *TraceStep) GetCheck() string {
@@ -2052,7 +2228,7 @@ type RuleMatch struct {
 
 func (x *RuleMatch) Reset() {
 	*x = RuleMatch{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[28]
+	mi := &file_arbiter_v1_service_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2064,7 +2240,7 @@ func (x *RuleMatch) String() string {
 func (*RuleMatch) ProtoMessage() {}
 
 func (x *RuleMatch) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[28]
+	mi := &file_arbiter_v1_service_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2077,7 +2253,7 @@ func (x *RuleMatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleMatch.ProtoReflect.Descriptor instead.
 func (*RuleMatch) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{28}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RuleMatch) GetName() string {
@@ -2127,7 +2303,7 @@ type EvaluateRulesRequest struct {
 
 func (x *EvaluateRulesRequest) Reset() {
 	*x = EvaluateRulesRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[29]
+	mi := &file_arbiter_v1_service_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2139,7 +2315,7 @@ func (x *EvaluateRulesRequest) String() string {
 func (*EvaluateRulesRequest) ProtoMessage() {}
 
 func (x *EvaluateRulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[29]
+	mi := &file_arbiter_v1_service_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2152,7 +2328,7 @@ func (x *EvaluateRulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateRulesRequest.ProtoReflect.Descriptor instead.
 func (*EvaluateRulesRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{29}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *EvaluateRulesRequest) GetBundleId() string {
@@ -2193,7 +2369,7 @@ type EvaluateRulesResponse struct {
 
 func (x *EvaluateRulesResponse) Reset() {
 	*x = EvaluateRulesResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[30]
+	mi := &file_arbiter_v1_service_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2205,7 +2381,7 @@ func (x *EvaluateRulesResponse) String() string {
 func (*EvaluateRulesResponse) ProtoMessage() {}
 
 func (x *EvaluateRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[30]
+	mi := &file_arbiter_v1_service_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2218,7 +2394,7 @@ func (x *EvaluateRulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateRulesResponse.ProtoReflect.Descriptor instead.
 func (*EvaluateRulesResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{30}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *EvaluateRulesResponse) GetMatched() []*RuleMatch {
@@ -2248,7 +2424,7 @@ type ResolveFlagRequest struct {
 
 func (x *ResolveFlagRequest) Reset() {
 	*x = ResolveFlagRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[31]
+	mi := &file_arbiter_v1_service_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2260,7 +2436,7 @@ func (x *ResolveFlagRequest) String() string {
 func (*ResolveFlagRequest) ProtoMessage() {}
 
 func (x *ResolveFlagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[31]
+	mi := &file_arbiter_v1_service_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2273,7 +2449,7 @@ func (x *ResolveFlagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveFlagRequest.ProtoReflect.Descriptor instead.
 func (*ResolveFlagRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{31}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ResolveFlagRequest) GetBundleId() string {
@@ -2324,7 +2500,7 @@ type ResolveFlagResponse struct {
 
 func (x *ResolveFlagResponse) Reset() {
 	*x = ResolveFlagResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[32]
+	mi := &file_arbiter_v1_service_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2336,7 +2512,7 @@ func (x *ResolveFlagResponse) String() string {
 func (*ResolveFlagResponse) ProtoMessage() {}
 
 func (x *ResolveFlagResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[32]
+	mi := &file_arbiter_v1_service_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2349,7 +2525,7 @@ func (x *ResolveFlagResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveFlagResponse.ProtoReflect.Descriptor instead.
 func (*ResolveFlagResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{32}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ResolveFlagResponse) GetVariant() string {
@@ -2400,7 +2576,7 @@ type EvaluateStrategyRequest struct {
 
 func (x *EvaluateStrategyRequest) Reset() {
 	*x = EvaluateStrategyRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[33]
+	mi := &file_arbiter_v1_service_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2412,7 +2588,7 @@ func (x *EvaluateStrategyRequest) String() string {
 func (*EvaluateStrategyRequest) ProtoMessage() {}
 
 func (x *EvaluateStrategyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[33]
+	mi := &file_arbiter_v1_service_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2425,7 +2601,7 @@ func (x *EvaluateStrategyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateStrategyRequest.ProtoReflect.Descriptor instead.
 func (*EvaluateStrategyRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{33}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *EvaluateStrategyRequest) GetBundleId() string {
@@ -2475,7 +2651,7 @@ type EvaluateStrategyResponse struct {
 
 func (x *EvaluateStrategyResponse) Reset() {
 	*x = EvaluateStrategyResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[34]
+	mi := &file_arbiter_v1_service_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2487,7 +2663,7 @@ func (x *EvaluateStrategyResponse) String() string {
 func (*EvaluateStrategyResponse) ProtoMessage() {}
 
 func (x *EvaluateStrategyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[34]
+	mi := &file_arbiter_v1_service_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2500,7 +2676,7 @@ func (x *EvaluateStrategyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateStrategyResponse.ProtoReflect.Descriptor instead.
 func (*EvaluateStrategyResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{34}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *EvaluateStrategyResponse) GetOutcome() string {
@@ -2542,7 +2718,7 @@ type ExpertFact struct {
 
 func (x *ExpertFact) Reset() {
 	*x = ExpertFact{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[35]
+	mi := &file_arbiter_v1_service_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2554,7 +2730,7 @@ func (x *ExpertFact) String() string {
 func (*ExpertFact) ProtoMessage() {}
 
 func (x *ExpertFact) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[35]
+	mi := &file_arbiter_v1_service_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2567,7 +2743,7 @@ func (x *ExpertFact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExpertFact.ProtoReflect.Descriptor instead.
 func (*ExpertFact) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{35}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ExpertFact) GetType() string {
@@ -2602,7 +2778,7 @@ type ExpertOutcome struct {
 
 func (x *ExpertOutcome) Reset() {
 	*x = ExpertOutcome{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[36]
+	mi := &file_arbiter_v1_service_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2614,7 +2790,7 @@ func (x *ExpertOutcome) String() string {
 func (*ExpertOutcome) ProtoMessage() {}
 
 func (x *ExpertOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[36]
+	mi := &file_arbiter_v1_service_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2627,7 +2803,7 @@ func (x *ExpertOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExpertOutcome.ProtoReflect.Descriptor instead.
 func (*ExpertOutcome) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{36}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ExpertOutcome) GetRule() string {
@@ -2667,7 +2843,7 @@ type ExpertActivation struct {
 
 func (x *ExpertActivation) Reset() {
 	*x = ExpertActivation{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[37]
+	mi := &file_arbiter_v1_service_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2679,7 +2855,7 @@ func (x *ExpertActivation) String() string {
 func (*ExpertActivation) ProtoMessage() {}
 
 func (x *ExpertActivation) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[37]
+	mi := &file_arbiter_v1_service_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2692,7 +2868,7 @@ func (x *ExpertActivation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExpertActivation.ProtoReflect.Descriptor instead.
 func (*ExpertActivation) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{37}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ExpertActivation) GetRound() uint32 {
@@ -2763,7 +2939,7 @@ type StartSessionRequest struct {
 
 func (x *StartSessionRequest) Reset() {
 	*x = StartSessionRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[38]
+	mi := &file_arbiter_v1_service_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2775,7 +2951,7 @@ func (x *StartSessionRequest) String() string {
 func (*StartSessionRequest) ProtoMessage() {}
 
 func (x *StartSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[38]
+	mi := &file_arbiter_v1_service_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2788,7 +2964,7 @@ func (x *StartSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartSessionRequest.ProtoReflect.Descriptor instead.
 func (*StartSessionRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{38}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *StartSessionRequest) GetBundleId() string {
@@ -2829,7 +3005,7 @@ type StartSessionResponse struct {
 
 func (x *StartSessionResponse) Reset() {
 	*x = StartSessionResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[39]
+	mi := &file_arbiter_v1_service_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2841,7 +3017,7 @@ func (x *StartSessionResponse) String() string {
 func (*StartSessionResponse) ProtoMessage() {}
 
 func (x *StartSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[39]
+	mi := &file_arbiter_v1_service_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2854,7 +3030,7 @@ func (x *StartSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartSessionResponse.ProtoReflect.Descriptor instead.
 func (*StartSessionResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{39}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *StartSessionResponse) GetSessionId() string {
@@ -2881,7 +3057,7 @@ type RunSessionRequest struct {
 
 func (x *RunSessionRequest) Reset() {
 	*x = RunSessionRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[40]
+	mi := &file_arbiter_v1_service_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2893,7 +3069,7 @@ func (x *RunSessionRequest) String() string {
 func (*RunSessionRequest) ProtoMessage() {}
 
 func (x *RunSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[40]
+	mi := &file_arbiter_v1_service_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2906,7 +3082,7 @@ func (x *RunSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunSessionRequest.ProtoReflect.Descriptor instead.
 func (*RunSessionRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{40}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *RunSessionRequest) GetSessionId() string {
@@ -2937,7 +3113,7 @@ type RunSessionResponse struct {
 
 func (x *RunSessionResponse) Reset() {
 	*x = RunSessionResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[41]
+	mi := &file_arbiter_v1_service_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2949,7 +3125,7 @@ func (x *RunSessionResponse) String() string {
 func (*RunSessionResponse) ProtoMessage() {}
 
 func (x *RunSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[41]
+	mi := &file_arbiter_v1_service_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2962,7 +3138,7 @@ func (x *RunSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunSessionResponse.ProtoReflect.Descriptor instead.
 func (*RunSessionResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{41}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *RunSessionResponse) GetOutcomes() []*ExpertOutcome {
@@ -3017,7 +3193,7 @@ type AssertFactsRequest struct {
 
 func (x *AssertFactsRequest) Reset() {
 	*x = AssertFactsRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[42]
+	mi := &file_arbiter_v1_service_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3029,7 +3205,7 @@ func (x *AssertFactsRequest) String() string {
 func (*AssertFactsRequest) ProtoMessage() {}
 
 func (x *AssertFactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[42]
+	mi := &file_arbiter_v1_service_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3042,7 +3218,7 @@ func (x *AssertFactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssertFactsRequest.ProtoReflect.Descriptor instead.
 func (*AssertFactsRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{42}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *AssertFactsRequest) GetSessionId() string {
@@ -3067,7 +3243,7 @@ type AssertFactsResponse struct {
 
 func (x *AssertFactsResponse) Reset() {
 	*x = AssertFactsResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[43]
+	mi := &file_arbiter_v1_service_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3079,7 +3255,7 @@ func (x *AssertFactsResponse) String() string {
 func (*AssertFactsResponse) ProtoMessage() {}
 
 func (x *AssertFactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[43]
+	mi := &file_arbiter_v1_service_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3092,7 +3268,7 @@ func (x *AssertFactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssertFactsResponse.ProtoReflect.Descriptor instead.
 func (*AssertFactsResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{43}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{45}
 }
 
 type FactRef struct {
@@ -3105,7 +3281,7 @@ type FactRef struct {
 
 func (x *FactRef) Reset() {
 	*x = FactRef{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[44]
+	mi := &file_arbiter_v1_service_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3117,7 +3293,7 @@ func (x *FactRef) String() string {
 func (*FactRef) ProtoMessage() {}
 
 func (x *FactRef) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[44]
+	mi := &file_arbiter_v1_service_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3130,7 +3306,7 @@ func (x *FactRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FactRef.ProtoReflect.Descriptor instead.
 func (*FactRef) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{44}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *FactRef) GetType() string {
@@ -3157,7 +3333,7 @@ type RetractFactsRequest struct {
 
 func (x *RetractFactsRequest) Reset() {
 	*x = RetractFactsRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[45]
+	mi := &file_arbiter_v1_service_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3169,7 +3345,7 @@ func (x *RetractFactsRequest) String() string {
 func (*RetractFactsRequest) ProtoMessage() {}
 
 func (x *RetractFactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[45]
+	mi := &file_arbiter_v1_service_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3182,7 +3358,7 @@ func (x *RetractFactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetractFactsRequest.ProtoReflect.Descriptor instead.
 func (*RetractFactsRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{45}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *RetractFactsRequest) GetSessionId() string {
@@ -3207,7 +3383,7 @@ type RetractFactsResponse struct {
 
 func (x *RetractFactsResponse) Reset() {
 	*x = RetractFactsResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[46]
+	mi := &file_arbiter_v1_service_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3219,7 +3395,7 @@ func (x *RetractFactsResponse) String() string {
 func (*RetractFactsResponse) ProtoMessage() {}
 
 func (x *RetractFactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[46]
+	mi := &file_arbiter_v1_service_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3232,7 +3408,7 @@ func (x *RetractFactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetractFactsResponse.ProtoReflect.Descriptor instead.
 func (*RetractFactsResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{46}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{48}
 }
 
 type GetSessionTraceRequest struct {
@@ -3244,7 +3420,7 @@ type GetSessionTraceRequest struct {
 
 func (x *GetSessionTraceRequest) Reset() {
 	*x = GetSessionTraceRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[47]
+	mi := &file_arbiter_v1_service_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3256,7 +3432,7 @@ func (x *GetSessionTraceRequest) String() string {
 func (*GetSessionTraceRequest) ProtoMessage() {}
 
 func (x *GetSessionTraceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[47]
+	mi := &file_arbiter_v1_service_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3269,7 +3445,7 @@ func (x *GetSessionTraceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionTraceRequest.ProtoReflect.Descriptor instead.
 func (*GetSessionTraceRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{47}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GetSessionTraceRequest) GetSessionId() string {
@@ -3293,7 +3469,7 @@ type GetSessionTraceResponse struct {
 
 func (x *GetSessionTraceResponse) Reset() {
 	*x = GetSessionTraceResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[48]
+	mi := &file_arbiter_v1_service_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3305,7 +3481,7 @@ func (x *GetSessionTraceResponse) String() string {
 func (*GetSessionTraceResponse) ProtoMessage() {}
 
 func (x *GetSessionTraceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[48]
+	mi := &file_arbiter_v1_service_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3318,7 +3494,7 @@ func (x *GetSessionTraceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionTraceResponse.ProtoReflect.Descriptor instead.
 func (*GetSessionTraceResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{48}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GetSessionTraceResponse) GetOutcomes() []*ExpertOutcome {
@@ -3372,7 +3548,7 @@ type CloseSessionRequest struct {
 
 func (x *CloseSessionRequest) Reset() {
 	*x = CloseSessionRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[49]
+	mi := &file_arbiter_v1_service_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3384,7 +3560,7 @@ func (x *CloseSessionRequest) String() string {
 func (*CloseSessionRequest) ProtoMessage() {}
 
 func (x *CloseSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[49]
+	mi := &file_arbiter_v1_service_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3397,7 +3573,7 @@ func (x *CloseSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseSessionRequest.ProtoReflect.Descriptor instead.
 func (*CloseSessionRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{49}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *CloseSessionRequest) GetSessionId() string {
@@ -3415,7 +3591,7 @@ type CloseSessionResponse struct {
 
 func (x *CloseSessionResponse) Reset() {
 	*x = CloseSessionResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[50]
+	mi := &file_arbiter_v1_service_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3427,7 +3603,7 @@ func (x *CloseSessionResponse) String() string {
 func (*CloseSessionResponse) ProtoMessage() {}
 
 func (x *CloseSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[50]
+	mi := &file_arbiter_v1_service_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3440,7 +3616,7 @@ func (x *CloseSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseSessionResponse.ProtoReflect.Descriptor instead.
 func (*CloseSessionResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{50}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{52}
 }
 
 type SetRuleOverrideRequest struct {
@@ -3455,7 +3631,7 @@ type SetRuleOverrideRequest struct {
 
 func (x *SetRuleOverrideRequest) Reset() {
 	*x = SetRuleOverrideRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[51]
+	mi := &file_arbiter_v1_service_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3467,7 +3643,7 @@ func (x *SetRuleOverrideRequest) String() string {
 func (*SetRuleOverrideRequest) ProtoMessage() {}
 
 func (x *SetRuleOverrideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[51]
+	mi := &file_arbiter_v1_service_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3480,7 +3656,7 @@ func (x *SetRuleOverrideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRuleOverrideRequest.ProtoReflect.Descriptor instead.
 func (*SetRuleOverrideRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{51}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *SetRuleOverrideRequest) GetBundleId() string {
@@ -3519,7 +3695,7 @@ type SetRuleOverrideResponse struct {
 
 func (x *SetRuleOverrideResponse) Reset() {
 	*x = SetRuleOverrideResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[52]
+	mi := &file_arbiter_v1_service_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3531,7 +3707,7 @@ func (x *SetRuleOverrideResponse) String() string {
 func (*SetRuleOverrideResponse) ProtoMessage() {}
 
 func (x *SetRuleOverrideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[52]
+	mi := &file_arbiter_v1_service_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3544,7 +3720,7 @@ func (x *SetRuleOverrideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRuleOverrideResponse.ProtoReflect.Descriptor instead.
 func (*SetRuleOverrideResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{52}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{54}
 }
 
 type SetFlagOverrideRequest struct {
@@ -3558,7 +3734,7 @@ type SetFlagOverrideRequest struct {
 
 func (x *SetFlagOverrideRequest) Reset() {
 	*x = SetFlagOverrideRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[53]
+	mi := &file_arbiter_v1_service_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3570,7 +3746,7 @@ func (x *SetFlagOverrideRequest) String() string {
 func (*SetFlagOverrideRequest) ProtoMessage() {}
 
 func (x *SetFlagOverrideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[53]
+	mi := &file_arbiter_v1_service_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3583,7 +3759,7 @@ func (x *SetFlagOverrideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetFlagOverrideRequest.ProtoReflect.Descriptor instead.
 func (*SetFlagOverrideRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{53}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *SetFlagOverrideRequest) GetBundleId() string {
@@ -3615,7 +3791,7 @@ type SetFlagOverrideResponse struct {
 
 func (x *SetFlagOverrideResponse) Reset() {
 	*x = SetFlagOverrideResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[54]
+	mi := &file_arbiter_v1_service_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3627,7 +3803,7 @@ func (x *SetFlagOverrideResponse) String() string {
 func (*SetFlagOverrideResponse) ProtoMessage() {}
 
 func (x *SetFlagOverrideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[54]
+	mi := &file_arbiter_v1_service_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3640,7 +3816,7 @@ func (x *SetFlagOverrideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetFlagOverrideResponse.ProtoReflect.Descriptor instead.
 func (*SetFlagOverrideResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{54}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{56}
 }
 
 type SetFlagRuleOverrideRequest struct {
@@ -3655,7 +3831,7 @@ type SetFlagRuleOverrideRequest struct {
 
 func (x *SetFlagRuleOverrideRequest) Reset() {
 	*x = SetFlagRuleOverrideRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[55]
+	mi := &file_arbiter_v1_service_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3667,7 +3843,7 @@ func (x *SetFlagRuleOverrideRequest) String() string {
 func (*SetFlagRuleOverrideRequest) ProtoMessage() {}
 
 func (x *SetFlagRuleOverrideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[55]
+	mi := &file_arbiter_v1_service_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3680,7 +3856,7 @@ func (x *SetFlagRuleOverrideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetFlagRuleOverrideRequest.ProtoReflect.Descriptor instead.
 func (*SetFlagRuleOverrideRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{55}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *SetFlagRuleOverrideRequest) GetBundleId() string {
@@ -3719,7 +3895,7 @@ type SetFlagRuleOverrideResponse struct {
 
 func (x *SetFlagRuleOverrideResponse) Reset() {
 	*x = SetFlagRuleOverrideResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[56]
+	mi := &file_arbiter_v1_service_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3731,7 +3907,7 @@ func (x *SetFlagRuleOverrideResponse) String() string {
 func (*SetFlagRuleOverrideResponse) ProtoMessage() {}
 
 func (x *SetFlagRuleOverrideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[56]
+	mi := &file_arbiter_v1_service_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3744,7 +3920,7 @@ func (x *SetFlagRuleOverrideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetFlagRuleOverrideResponse.ProtoReflect.Descriptor instead.
 func (*SetFlagRuleOverrideResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{56}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{58}
 }
 
 type SetStrategyOverrideRequest struct {
@@ -3760,7 +3936,7 @@ type SetStrategyOverrideRequest struct {
 
 func (x *SetStrategyOverrideRequest) Reset() {
 	*x = SetStrategyOverrideRequest{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[57]
+	mi := &file_arbiter_v1_service_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3772,7 +3948,7 @@ func (x *SetStrategyOverrideRequest) String() string {
 func (*SetStrategyOverrideRequest) ProtoMessage() {}
 
 func (x *SetStrategyOverrideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[57]
+	mi := &file_arbiter_v1_service_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3785,7 +3961,7 @@ func (x *SetStrategyOverrideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetStrategyOverrideRequest.ProtoReflect.Descriptor instead.
 func (*SetStrategyOverrideRequest) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{57}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *SetStrategyOverrideRequest) GetBundleId() string {
@@ -3831,7 +4007,7 @@ type SetStrategyOverrideResponse struct {
 
 func (x *SetStrategyOverrideResponse) Reset() {
 	*x = SetStrategyOverrideResponse{}
-	mi := &file_arbiter_v1_service_proto_msgTypes[58]
+	mi := &file_arbiter_v1_service_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3843,7 +4019,7 @@ func (x *SetStrategyOverrideResponse) String() string {
 func (*SetStrategyOverrideResponse) ProtoMessage() {}
 
 func (x *SetStrategyOverrideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_arbiter_v1_service_proto_msgTypes[58]
+	mi := &file_arbiter_v1_service_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3856,7 +4032,7 @@ func (x *SetStrategyOverrideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetStrategyOverrideResponse.ProtoReflect.Descriptor instead.
 func (*SetStrategyOverrideResponse) Descriptor() ([]byte, []int) {
-	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{58}
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{60}
 }
 
 var File_arbiter_v1_service_proto protoreflect.FileDescriptor
@@ -3940,12 +4116,32 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\"A\n" +
 	"\x11RuntimePluginInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"\x94\x02\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\xe8\x01\n" +
+	"\x17RuntimeControlTransport\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x18\n" +
+	"\aaddress\x18\x02 \x01(\tR\aaddress\x12'\n" +
+	"\x0fpublic_listener\x18\x03 \x01(\bR\x0epublicListener\x12!\n" +
+	"\fauth_enabled\x18\x04 \x01(\bR\vauthEnabled\x12\x1f\n" +
+	"\vtls_enabled\x18\x05 \x01(\bR\n" +
+	"tlsEnabled\x12,\n" +
+	"\x12mutual_tls_enabled\x18\x06 \x01(\bR\x10mutualTlsEnabled\"\xb9\x01\n" +
+	"\x1aRuntimeCapabilityTransport\x12\x1e\n" +
+	"\n" +
+	"configured\x18\x01 \x01(\bR\n" +
+	"configured\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\x12!\n" +
+	"\fauth_enabled\x18\x03 \x01(\bR\vauthEnabled\x12\x1f\n" +
+	"\vtls_enabled\x18\x04 \x01(\bR\n" +
+	"tlsEnabled\x12\x1f\n" +
+	"\vserver_name\x18\x05 \x01(\tR\n" +
+	"serverName\"\xc1\x03\n" +
 	"\x1eGetRuntimeCapabilitiesResponse\x12=\n" +
 	"\asources\x18\x01 \x03(\v2#.arbiter.v1.RuntimeSourceCapabilityR\asources\x12:\n" +
 	"\x05sinks\x18\x02 \x03(\v2$.arbiter.v1.RuntimeHandlerCapabilityR\x05sinks\x12>\n" +
 	"\aworkers\x18\x03 \x03(\v2$.arbiter.v1.RuntimeHandlerCapabilityR\aworkers\x127\n" +
-	"\aplugins\x18\x04 \x03(\v2\x1d.arbiter.v1.RuntimePluginInfoR\aplugins\"\x9d\x02\n" +
+	"\aplugins\x18\x04 \x03(\v2\x1d.arbiter.v1.RuntimePluginInfoR\aplugins\x12P\n" +
+	"\x11control_transport\x18\x05 \x01(\v2#.arbiter.v1.RuntimeControlTransportR\x10controlTransport\x12Y\n" +
+	"\x14capability_transport\x18\x06 \x01(\v2&.arbiter.v1.RuntimeCapabilityTransportR\x13capabilityTransport\"\x9d\x02\n" +
 	"\x0fBundleOverrides\x12\x1b\n" +
 	"\tbundle_id\x18\x01 \x01(\tR\bbundleId\x123\n" +
 	"\x05rules\x18\x02 \x03(\v2\x1d.arbiter.v1.RuleOverrideEntryR\x05rules\x123\n" +
@@ -4213,7 +4409,7 @@ func file_arbiter_v1_service_proto_rawDescGZIP() []byte {
 }
 
 var file_arbiter_v1_service_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_arbiter_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
+var file_arbiter_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 61)
 var file_arbiter_v1_service_proto_goTypes = []any{
 	(BundleEventType)(0),                   // 0: arbiter.v1.BundleEventType
 	(OverrideEventType)(0),                 // 1: arbiter.v1.OverrideEventType
@@ -4239,158 +4435,162 @@ var file_arbiter_v1_service_proto_goTypes = []any{
 	(*RuntimeSourceCapability)(nil),        // 21: arbiter.v1.RuntimeSourceCapability
 	(*RuntimeHandlerCapability)(nil),       // 22: arbiter.v1.RuntimeHandlerCapability
 	(*RuntimePluginInfo)(nil),              // 23: arbiter.v1.RuntimePluginInfo
-	(*GetRuntimeCapabilitiesResponse)(nil), // 24: arbiter.v1.GetRuntimeCapabilitiesResponse
-	(*BundleOverrides)(nil),                // 25: arbiter.v1.BundleOverrides
-	(*RuleOverrideEntry)(nil),              // 26: arbiter.v1.RuleOverrideEntry
-	(*FlagOverrideEntry)(nil),              // 27: arbiter.v1.FlagOverrideEntry
-	(*FlagRuleOverrideEntry)(nil),          // 28: arbiter.v1.FlagRuleOverrideEntry
-	(*StrategyOverrideEntry)(nil),          // 29: arbiter.v1.StrategyOverrideEntry
-	(*OverrideEvent)(nil),                  // 30: arbiter.v1.OverrideEvent
-	(*TraceStep)(nil),                      // 31: arbiter.v1.TraceStep
-	(*RuleMatch)(nil),                      // 32: arbiter.v1.RuleMatch
-	(*EvaluateRulesRequest)(nil),           // 33: arbiter.v1.EvaluateRulesRequest
-	(*EvaluateRulesResponse)(nil),          // 34: arbiter.v1.EvaluateRulesResponse
-	(*ResolveFlagRequest)(nil),             // 35: arbiter.v1.ResolveFlagRequest
-	(*ResolveFlagResponse)(nil),            // 36: arbiter.v1.ResolveFlagResponse
-	(*EvaluateStrategyRequest)(nil),        // 37: arbiter.v1.EvaluateStrategyRequest
-	(*EvaluateStrategyResponse)(nil),       // 38: arbiter.v1.EvaluateStrategyResponse
-	(*ExpertFact)(nil),                     // 39: arbiter.v1.ExpertFact
-	(*ExpertOutcome)(nil),                  // 40: arbiter.v1.ExpertOutcome
-	(*ExpertActivation)(nil),               // 41: arbiter.v1.ExpertActivation
-	(*StartSessionRequest)(nil),            // 42: arbiter.v1.StartSessionRequest
-	(*StartSessionResponse)(nil),           // 43: arbiter.v1.StartSessionResponse
-	(*RunSessionRequest)(nil),              // 44: arbiter.v1.RunSessionRequest
-	(*RunSessionResponse)(nil),             // 45: arbiter.v1.RunSessionResponse
-	(*AssertFactsRequest)(nil),             // 46: arbiter.v1.AssertFactsRequest
-	(*AssertFactsResponse)(nil),            // 47: arbiter.v1.AssertFactsResponse
-	(*FactRef)(nil),                        // 48: arbiter.v1.FactRef
-	(*RetractFactsRequest)(nil),            // 49: arbiter.v1.RetractFactsRequest
-	(*RetractFactsResponse)(nil),           // 50: arbiter.v1.RetractFactsResponse
-	(*GetSessionTraceRequest)(nil),         // 51: arbiter.v1.GetSessionTraceRequest
-	(*GetSessionTraceResponse)(nil),        // 52: arbiter.v1.GetSessionTraceResponse
-	(*CloseSessionRequest)(nil),            // 53: arbiter.v1.CloseSessionRequest
-	(*CloseSessionResponse)(nil),           // 54: arbiter.v1.CloseSessionResponse
-	(*SetRuleOverrideRequest)(nil),         // 55: arbiter.v1.SetRuleOverrideRequest
-	(*SetRuleOverrideResponse)(nil),        // 56: arbiter.v1.SetRuleOverrideResponse
-	(*SetFlagOverrideRequest)(nil),         // 57: arbiter.v1.SetFlagOverrideRequest
-	(*SetFlagOverrideResponse)(nil),        // 58: arbiter.v1.SetFlagOverrideResponse
-	(*SetFlagRuleOverrideRequest)(nil),     // 59: arbiter.v1.SetFlagRuleOverrideRequest
-	(*SetFlagRuleOverrideResponse)(nil),    // 60: arbiter.v1.SetFlagRuleOverrideResponse
-	(*SetStrategyOverrideRequest)(nil),     // 61: arbiter.v1.SetStrategyOverrideRequest
-	(*SetStrategyOverrideResponse)(nil),    // 62: arbiter.v1.SetStrategyOverrideResponse
-	(*timestamppb.Timestamp)(nil),          // 63: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),                // 64: google.protobuf.Struct
-	(*wrapperspb.BoolValue)(nil),           // 65: google.protobuf.BoolValue
-	(*wrapperspb.UInt32Value)(nil),         // 66: google.protobuf.UInt32Value
+	(*RuntimeControlTransport)(nil),        // 24: arbiter.v1.RuntimeControlTransport
+	(*RuntimeCapabilityTransport)(nil),     // 25: arbiter.v1.RuntimeCapabilityTransport
+	(*GetRuntimeCapabilitiesResponse)(nil), // 26: arbiter.v1.GetRuntimeCapabilitiesResponse
+	(*BundleOverrides)(nil),                // 27: arbiter.v1.BundleOverrides
+	(*RuleOverrideEntry)(nil),              // 28: arbiter.v1.RuleOverrideEntry
+	(*FlagOverrideEntry)(nil),              // 29: arbiter.v1.FlagOverrideEntry
+	(*FlagRuleOverrideEntry)(nil),          // 30: arbiter.v1.FlagRuleOverrideEntry
+	(*StrategyOverrideEntry)(nil),          // 31: arbiter.v1.StrategyOverrideEntry
+	(*OverrideEvent)(nil),                  // 32: arbiter.v1.OverrideEvent
+	(*TraceStep)(nil),                      // 33: arbiter.v1.TraceStep
+	(*RuleMatch)(nil),                      // 34: arbiter.v1.RuleMatch
+	(*EvaluateRulesRequest)(nil),           // 35: arbiter.v1.EvaluateRulesRequest
+	(*EvaluateRulesResponse)(nil),          // 36: arbiter.v1.EvaluateRulesResponse
+	(*ResolveFlagRequest)(nil),             // 37: arbiter.v1.ResolveFlagRequest
+	(*ResolveFlagResponse)(nil),            // 38: arbiter.v1.ResolveFlagResponse
+	(*EvaluateStrategyRequest)(nil),        // 39: arbiter.v1.EvaluateStrategyRequest
+	(*EvaluateStrategyResponse)(nil),       // 40: arbiter.v1.EvaluateStrategyResponse
+	(*ExpertFact)(nil),                     // 41: arbiter.v1.ExpertFact
+	(*ExpertOutcome)(nil),                  // 42: arbiter.v1.ExpertOutcome
+	(*ExpertActivation)(nil),               // 43: arbiter.v1.ExpertActivation
+	(*StartSessionRequest)(nil),            // 44: arbiter.v1.StartSessionRequest
+	(*StartSessionResponse)(nil),           // 45: arbiter.v1.StartSessionResponse
+	(*RunSessionRequest)(nil),              // 46: arbiter.v1.RunSessionRequest
+	(*RunSessionResponse)(nil),             // 47: arbiter.v1.RunSessionResponse
+	(*AssertFactsRequest)(nil),             // 48: arbiter.v1.AssertFactsRequest
+	(*AssertFactsResponse)(nil),            // 49: arbiter.v1.AssertFactsResponse
+	(*FactRef)(nil),                        // 50: arbiter.v1.FactRef
+	(*RetractFactsRequest)(nil),            // 51: arbiter.v1.RetractFactsRequest
+	(*RetractFactsResponse)(nil),           // 52: arbiter.v1.RetractFactsResponse
+	(*GetSessionTraceRequest)(nil),         // 53: arbiter.v1.GetSessionTraceRequest
+	(*GetSessionTraceResponse)(nil),        // 54: arbiter.v1.GetSessionTraceResponse
+	(*CloseSessionRequest)(nil),            // 55: arbiter.v1.CloseSessionRequest
+	(*CloseSessionResponse)(nil),           // 56: arbiter.v1.CloseSessionResponse
+	(*SetRuleOverrideRequest)(nil),         // 57: arbiter.v1.SetRuleOverrideRequest
+	(*SetRuleOverrideResponse)(nil),        // 58: arbiter.v1.SetRuleOverrideResponse
+	(*SetFlagOverrideRequest)(nil),         // 59: arbiter.v1.SetFlagOverrideRequest
+	(*SetFlagOverrideResponse)(nil),        // 60: arbiter.v1.SetFlagOverrideResponse
+	(*SetFlagRuleOverrideRequest)(nil),     // 61: arbiter.v1.SetFlagRuleOverrideRequest
+	(*SetFlagRuleOverrideResponse)(nil),    // 62: arbiter.v1.SetFlagRuleOverrideResponse
+	(*SetStrategyOverrideRequest)(nil),     // 63: arbiter.v1.SetStrategyOverrideRequest
+	(*SetStrategyOverrideResponse)(nil),    // 64: arbiter.v1.SetStrategyOverrideResponse
+	(*timestamppb.Timestamp)(nil),          // 65: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),                // 66: google.protobuf.Struct
+	(*wrapperspb.BoolValue)(nil),           // 67: google.protobuf.BoolValue
+	(*wrapperspb.UInt32Value)(nil),         // 68: google.protobuf.UInt32Value
 }
 var file_arbiter_v1_service_proto_depIdxs = []int32{
-	63, // 0: arbiter.v1.PublishBundleResponse.published_at:type_name -> google.protobuf.Timestamp
-	63, // 1: arbiter.v1.BundleSummary.published_at:type_name -> google.protobuf.Timestamp
+	65, // 0: arbiter.v1.PublishBundleResponse.published_at:type_name -> google.protobuf.Timestamp
+	65, // 1: arbiter.v1.BundleSummary.published_at:type_name -> google.protobuf.Timestamp
 	6,  // 2: arbiter.v1.ListBundlesResponse.bundles:type_name -> arbiter.v1.BundleSummary
 	6,  // 3: arbiter.v1.ActivateBundleResponse.bundle:type_name -> arbiter.v1.BundleSummary
 	6,  // 4: arbiter.v1.RollbackBundleResponse.bundle:type_name -> arbiter.v1.BundleSummary
 	6,  // 5: arbiter.v1.GetBundleResponse.bundle:type_name -> arbiter.v1.BundleSummary
 	0,  // 6: arbiter.v1.BundleEvent.type:type_name -> arbiter.v1.BundleEventType
 	6,  // 7: arbiter.v1.BundleEvent.bundle:type_name -> arbiter.v1.BundleSummary
-	25, // 8: arbiter.v1.GetOverridesResponse.overrides:type_name -> arbiter.v1.BundleOverrides
+	27, // 8: arbiter.v1.GetOverridesResponse.overrides:type_name -> arbiter.v1.BundleOverrides
 	3,  // 9: arbiter.v1.RuntimeSourceCapability.owner:type_name -> arbiter.v1.CapabilityOwner
 	3,  // 10: arbiter.v1.RuntimeHandlerCapability.owner:type_name -> arbiter.v1.CapabilityOwner
 	21, // 11: arbiter.v1.GetRuntimeCapabilitiesResponse.sources:type_name -> arbiter.v1.RuntimeSourceCapability
 	22, // 12: arbiter.v1.GetRuntimeCapabilitiesResponse.sinks:type_name -> arbiter.v1.RuntimeHandlerCapability
 	22, // 13: arbiter.v1.GetRuntimeCapabilitiesResponse.workers:type_name -> arbiter.v1.RuntimeHandlerCapability
 	23, // 14: arbiter.v1.GetRuntimeCapabilitiesResponse.plugins:type_name -> arbiter.v1.RuntimePluginInfo
-	26, // 15: arbiter.v1.BundleOverrides.rules:type_name -> arbiter.v1.RuleOverrideEntry
-	27, // 16: arbiter.v1.BundleOverrides.flags:type_name -> arbiter.v1.FlagOverrideEntry
-	28, // 17: arbiter.v1.BundleOverrides.flag_rules:type_name -> arbiter.v1.FlagRuleOverrideEntry
-	29, // 18: arbiter.v1.BundleOverrides.strategies:type_name -> arbiter.v1.StrategyOverrideEntry
-	2,  // 19: arbiter.v1.RuleOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
-	2,  // 20: arbiter.v1.FlagOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
-	2,  // 21: arbiter.v1.StrategyOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
-	1,  // 22: arbiter.v1.OverrideEvent.type:type_name -> arbiter.v1.OverrideEventType
-	25, // 23: arbiter.v1.OverrideEvent.snapshot:type_name -> arbiter.v1.BundleOverrides
-	26, // 24: arbiter.v1.OverrideEvent.rule:type_name -> arbiter.v1.RuleOverrideEntry
-	27, // 25: arbiter.v1.OverrideEvent.flag:type_name -> arbiter.v1.FlagOverrideEntry
-	28, // 26: arbiter.v1.OverrideEvent.flag_rule:type_name -> arbiter.v1.FlagRuleOverrideEntry
-	29, // 27: arbiter.v1.OverrideEvent.strategy:type_name -> arbiter.v1.StrategyOverrideEntry
-	64, // 28: arbiter.v1.RuleMatch.params:type_name -> google.protobuf.Struct
-	64, // 29: arbiter.v1.EvaluateRulesRequest.context:type_name -> google.protobuf.Struct
-	32, // 30: arbiter.v1.EvaluateRulesResponse.matched:type_name -> arbiter.v1.RuleMatch
-	31, // 31: arbiter.v1.EvaluateRulesResponse.trace:type_name -> arbiter.v1.TraceStep
-	64, // 32: arbiter.v1.ResolveFlagRequest.context:type_name -> google.protobuf.Struct
-	64, // 33: arbiter.v1.ResolveFlagResponse.values:type_name -> google.protobuf.Struct
-	31, // 34: arbiter.v1.ResolveFlagResponse.trace:type_name -> arbiter.v1.TraceStep
-	64, // 35: arbiter.v1.EvaluateStrategyRequest.context:type_name -> google.protobuf.Struct
-	64, // 36: arbiter.v1.EvaluateStrategyResponse.params:type_name -> google.protobuf.Struct
-	31, // 37: arbiter.v1.EvaluateStrategyResponse.trace:type_name -> arbiter.v1.TraceStep
-	64, // 38: arbiter.v1.ExpertFact.fields:type_name -> google.protobuf.Struct
-	64, // 39: arbiter.v1.ExpertOutcome.params:type_name -> google.protobuf.Struct
-	64, // 40: arbiter.v1.ExpertActivation.params:type_name -> google.protobuf.Struct
-	31, // 41: arbiter.v1.ExpertActivation.trace:type_name -> arbiter.v1.TraceStep
-	64, // 42: arbiter.v1.StartSessionRequest.envelope:type_name -> google.protobuf.Struct
-	39, // 43: arbiter.v1.StartSessionRequest.facts:type_name -> arbiter.v1.ExpertFact
-	40, // 44: arbiter.v1.RunSessionResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
-	39, // 45: arbiter.v1.RunSessionResponse.facts:type_name -> arbiter.v1.ExpertFact
-	41, // 46: arbiter.v1.RunSessionResponse.activations:type_name -> arbiter.v1.ExpertActivation
-	39, // 47: arbiter.v1.AssertFactsRequest.facts:type_name -> arbiter.v1.ExpertFact
-	48, // 48: arbiter.v1.RetractFactsRequest.facts:type_name -> arbiter.v1.FactRef
-	40, // 49: arbiter.v1.GetSessionTraceResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
-	39, // 50: arbiter.v1.GetSessionTraceResponse.facts:type_name -> arbiter.v1.ExpertFact
-	41, // 51: arbiter.v1.GetSessionTraceResponse.activations:type_name -> arbiter.v1.ExpertActivation
-	65, // 52: arbiter.v1.SetRuleOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
-	66, // 53: arbiter.v1.SetRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
-	65, // 54: arbiter.v1.SetFlagOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
-	66, // 55: arbiter.v1.SetFlagRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
-	65, // 56: arbiter.v1.SetStrategyOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
-	66, // 57: arbiter.v1.SetStrategyOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
-	4,  // 58: arbiter.v1.ArbiterService.PublishBundle:input_type -> arbiter.v1.PublishBundleRequest
-	7,  // 59: arbiter.v1.ArbiterService.ListBundles:input_type -> arbiter.v1.ListBundlesRequest
-	9,  // 60: arbiter.v1.ArbiterService.ActivateBundle:input_type -> arbiter.v1.ActivateBundleRequest
-	11, // 61: arbiter.v1.ArbiterService.RollbackBundle:input_type -> arbiter.v1.RollbackBundleRequest
-	13, // 62: arbiter.v1.ArbiterService.GetBundle:input_type -> arbiter.v1.GetBundleRequest
-	15, // 63: arbiter.v1.ArbiterService.WatchBundles:input_type -> arbiter.v1.WatchBundlesRequest
-	17, // 64: arbiter.v1.ArbiterService.GetOverrides:input_type -> arbiter.v1.GetOverridesRequest
-	19, // 65: arbiter.v1.ArbiterService.WatchOverrides:input_type -> arbiter.v1.WatchOverridesRequest
-	33, // 66: arbiter.v1.ArbiterService.EvaluateRules:input_type -> arbiter.v1.EvaluateRulesRequest
-	35, // 67: arbiter.v1.ArbiterService.ResolveFlag:input_type -> arbiter.v1.ResolveFlagRequest
-	37, // 68: arbiter.v1.ArbiterService.EvaluateStrategy:input_type -> arbiter.v1.EvaluateStrategyRequest
-	42, // 69: arbiter.v1.ArbiterService.StartSession:input_type -> arbiter.v1.StartSessionRequest
-	44, // 70: arbiter.v1.ArbiterService.RunSession:input_type -> arbiter.v1.RunSessionRequest
-	46, // 71: arbiter.v1.ArbiterService.AssertFacts:input_type -> arbiter.v1.AssertFactsRequest
-	49, // 72: arbiter.v1.ArbiterService.RetractFacts:input_type -> arbiter.v1.RetractFactsRequest
-	51, // 73: arbiter.v1.ArbiterService.GetSessionTrace:input_type -> arbiter.v1.GetSessionTraceRequest
-	53, // 74: arbiter.v1.ArbiterService.CloseSession:input_type -> arbiter.v1.CloseSessionRequest
-	55, // 75: arbiter.v1.ArbiterService.SetRuleOverride:input_type -> arbiter.v1.SetRuleOverrideRequest
-	57, // 76: arbiter.v1.ArbiterService.SetFlagOverride:input_type -> arbiter.v1.SetFlagOverrideRequest
-	59, // 77: arbiter.v1.ArbiterService.SetFlagRuleOverride:input_type -> arbiter.v1.SetFlagRuleOverrideRequest
-	61, // 78: arbiter.v1.ArbiterService.SetStrategyOverride:input_type -> arbiter.v1.SetStrategyOverrideRequest
-	20, // 79: arbiter.v1.RuntimeService.GetRuntimeCapabilities:input_type -> arbiter.v1.GetRuntimeCapabilitiesRequest
-	5,  // 80: arbiter.v1.ArbiterService.PublishBundle:output_type -> arbiter.v1.PublishBundleResponse
-	8,  // 81: arbiter.v1.ArbiterService.ListBundles:output_type -> arbiter.v1.ListBundlesResponse
-	10, // 82: arbiter.v1.ArbiterService.ActivateBundle:output_type -> arbiter.v1.ActivateBundleResponse
-	12, // 83: arbiter.v1.ArbiterService.RollbackBundle:output_type -> arbiter.v1.RollbackBundleResponse
-	14, // 84: arbiter.v1.ArbiterService.GetBundle:output_type -> arbiter.v1.GetBundleResponse
-	16, // 85: arbiter.v1.ArbiterService.WatchBundles:output_type -> arbiter.v1.BundleEvent
-	18, // 86: arbiter.v1.ArbiterService.GetOverrides:output_type -> arbiter.v1.GetOverridesResponse
-	30, // 87: arbiter.v1.ArbiterService.WatchOverrides:output_type -> arbiter.v1.OverrideEvent
-	34, // 88: arbiter.v1.ArbiterService.EvaluateRules:output_type -> arbiter.v1.EvaluateRulesResponse
-	36, // 89: arbiter.v1.ArbiterService.ResolveFlag:output_type -> arbiter.v1.ResolveFlagResponse
-	38, // 90: arbiter.v1.ArbiterService.EvaluateStrategy:output_type -> arbiter.v1.EvaluateStrategyResponse
-	43, // 91: arbiter.v1.ArbiterService.StartSession:output_type -> arbiter.v1.StartSessionResponse
-	45, // 92: arbiter.v1.ArbiterService.RunSession:output_type -> arbiter.v1.RunSessionResponse
-	47, // 93: arbiter.v1.ArbiterService.AssertFacts:output_type -> arbiter.v1.AssertFactsResponse
-	50, // 94: arbiter.v1.ArbiterService.RetractFacts:output_type -> arbiter.v1.RetractFactsResponse
-	52, // 95: arbiter.v1.ArbiterService.GetSessionTrace:output_type -> arbiter.v1.GetSessionTraceResponse
-	54, // 96: arbiter.v1.ArbiterService.CloseSession:output_type -> arbiter.v1.CloseSessionResponse
-	56, // 97: arbiter.v1.ArbiterService.SetRuleOverride:output_type -> arbiter.v1.SetRuleOverrideResponse
-	58, // 98: arbiter.v1.ArbiterService.SetFlagOverride:output_type -> arbiter.v1.SetFlagOverrideResponse
-	60, // 99: arbiter.v1.ArbiterService.SetFlagRuleOverride:output_type -> arbiter.v1.SetFlagRuleOverrideResponse
-	62, // 100: arbiter.v1.ArbiterService.SetStrategyOverride:output_type -> arbiter.v1.SetStrategyOverrideResponse
-	24, // 101: arbiter.v1.RuntimeService.GetRuntimeCapabilities:output_type -> arbiter.v1.GetRuntimeCapabilitiesResponse
-	80, // [80:102] is the sub-list for method output_type
-	58, // [58:80] is the sub-list for method input_type
-	58, // [58:58] is the sub-list for extension type_name
-	58, // [58:58] is the sub-list for extension extendee
-	0,  // [0:58] is the sub-list for field type_name
+	24, // 15: arbiter.v1.GetRuntimeCapabilitiesResponse.control_transport:type_name -> arbiter.v1.RuntimeControlTransport
+	25, // 16: arbiter.v1.GetRuntimeCapabilitiesResponse.capability_transport:type_name -> arbiter.v1.RuntimeCapabilityTransport
+	28, // 17: arbiter.v1.BundleOverrides.rules:type_name -> arbiter.v1.RuleOverrideEntry
+	29, // 18: arbiter.v1.BundleOverrides.flags:type_name -> arbiter.v1.FlagOverrideEntry
+	30, // 19: arbiter.v1.BundleOverrides.flag_rules:type_name -> arbiter.v1.FlagRuleOverrideEntry
+	31, // 20: arbiter.v1.BundleOverrides.strategies:type_name -> arbiter.v1.StrategyOverrideEntry
+	2,  // 21: arbiter.v1.RuleOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
+	2,  // 22: arbiter.v1.FlagOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
+	2,  // 23: arbiter.v1.StrategyOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
+	1,  // 24: arbiter.v1.OverrideEvent.type:type_name -> arbiter.v1.OverrideEventType
+	27, // 25: arbiter.v1.OverrideEvent.snapshot:type_name -> arbiter.v1.BundleOverrides
+	28, // 26: arbiter.v1.OverrideEvent.rule:type_name -> arbiter.v1.RuleOverrideEntry
+	29, // 27: arbiter.v1.OverrideEvent.flag:type_name -> arbiter.v1.FlagOverrideEntry
+	30, // 28: arbiter.v1.OverrideEvent.flag_rule:type_name -> arbiter.v1.FlagRuleOverrideEntry
+	31, // 29: arbiter.v1.OverrideEvent.strategy:type_name -> arbiter.v1.StrategyOverrideEntry
+	66, // 30: arbiter.v1.RuleMatch.params:type_name -> google.protobuf.Struct
+	66, // 31: arbiter.v1.EvaluateRulesRequest.context:type_name -> google.protobuf.Struct
+	34, // 32: arbiter.v1.EvaluateRulesResponse.matched:type_name -> arbiter.v1.RuleMatch
+	33, // 33: arbiter.v1.EvaluateRulesResponse.trace:type_name -> arbiter.v1.TraceStep
+	66, // 34: arbiter.v1.ResolveFlagRequest.context:type_name -> google.protobuf.Struct
+	66, // 35: arbiter.v1.ResolveFlagResponse.values:type_name -> google.protobuf.Struct
+	33, // 36: arbiter.v1.ResolveFlagResponse.trace:type_name -> arbiter.v1.TraceStep
+	66, // 37: arbiter.v1.EvaluateStrategyRequest.context:type_name -> google.protobuf.Struct
+	66, // 38: arbiter.v1.EvaluateStrategyResponse.params:type_name -> google.protobuf.Struct
+	33, // 39: arbiter.v1.EvaluateStrategyResponse.trace:type_name -> arbiter.v1.TraceStep
+	66, // 40: arbiter.v1.ExpertFact.fields:type_name -> google.protobuf.Struct
+	66, // 41: arbiter.v1.ExpertOutcome.params:type_name -> google.protobuf.Struct
+	66, // 42: arbiter.v1.ExpertActivation.params:type_name -> google.protobuf.Struct
+	33, // 43: arbiter.v1.ExpertActivation.trace:type_name -> arbiter.v1.TraceStep
+	66, // 44: arbiter.v1.StartSessionRequest.envelope:type_name -> google.protobuf.Struct
+	41, // 45: arbiter.v1.StartSessionRequest.facts:type_name -> arbiter.v1.ExpertFact
+	42, // 46: arbiter.v1.RunSessionResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
+	41, // 47: arbiter.v1.RunSessionResponse.facts:type_name -> arbiter.v1.ExpertFact
+	43, // 48: arbiter.v1.RunSessionResponse.activations:type_name -> arbiter.v1.ExpertActivation
+	41, // 49: arbiter.v1.AssertFactsRequest.facts:type_name -> arbiter.v1.ExpertFact
+	50, // 50: arbiter.v1.RetractFactsRequest.facts:type_name -> arbiter.v1.FactRef
+	42, // 51: arbiter.v1.GetSessionTraceResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
+	41, // 52: arbiter.v1.GetSessionTraceResponse.facts:type_name -> arbiter.v1.ExpertFact
+	43, // 53: arbiter.v1.GetSessionTraceResponse.activations:type_name -> arbiter.v1.ExpertActivation
+	67, // 54: arbiter.v1.SetRuleOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
+	68, // 55: arbiter.v1.SetRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
+	67, // 56: arbiter.v1.SetFlagOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
+	68, // 57: arbiter.v1.SetFlagRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
+	67, // 58: arbiter.v1.SetStrategyOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
+	68, // 59: arbiter.v1.SetStrategyOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
+	4,  // 60: arbiter.v1.ArbiterService.PublishBundle:input_type -> arbiter.v1.PublishBundleRequest
+	7,  // 61: arbiter.v1.ArbiterService.ListBundles:input_type -> arbiter.v1.ListBundlesRequest
+	9,  // 62: arbiter.v1.ArbiterService.ActivateBundle:input_type -> arbiter.v1.ActivateBundleRequest
+	11, // 63: arbiter.v1.ArbiterService.RollbackBundle:input_type -> arbiter.v1.RollbackBundleRequest
+	13, // 64: arbiter.v1.ArbiterService.GetBundle:input_type -> arbiter.v1.GetBundleRequest
+	15, // 65: arbiter.v1.ArbiterService.WatchBundles:input_type -> arbiter.v1.WatchBundlesRequest
+	17, // 66: arbiter.v1.ArbiterService.GetOverrides:input_type -> arbiter.v1.GetOverridesRequest
+	19, // 67: arbiter.v1.ArbiterService.WatchOverrides:input_type -> arbiter.v1.WatchOverridesRequest
+	35, // 68: arbiter.v1.ArbiterService.EvaluateRules:input_type -> arbiter.v1.EvaluateRulesRequest
+	37, // 69: arbiter.v1.ArbiterService.ResolveFlag:input_type -> arbiter.v1.ResolveFlagRequest
+	39, // 70: arbiter.v1.ArbiterService.EvaluateStrategy:input_type -> arbiter.v1.EvaluateStrategyRequest
+	44, // 71: arbiter.v1.ArbiterService.StartSession:input_type -> arbiter.v1.StartSessionRequest
+	46, // 72: arbiter.v1.ArbiterService.RunSession:input_type -> arbiter.v1.RunSessionRequest
+	48, // 73: arbiter.v1.ArbiterService.AssertFacts:input_type -> arbiter.v1.AssertFactsRequest
+	51, // 74: arbiter.v1.ArbiterService.RetractFacts:input_type -> arbiter.v1.RetractFactsRequest
+	53, // 75: arbiter.v1.ArbiterService.GetSessionTrace:input_type -> arbiter.v1.GetSessionTraceRequest
+	55, // 76: arbiter.v1.ArbiterService.CloseSession:input_type -> arbiter.v1.CloseSessionRequest
+	57, // 77: arbiter.v1.ArbiterService.SetRuleOverride:input_type -> arbiter.v1.SetRuleOverrideRequest
+	59, // 78: arbiter.v1.ArbiterService.SetFlagOverride:input_type -> arbiter.v1.SetFlagOverrideRequest
+	61, // 79: arbiter.v1.ArbiterService.SetFlagRuleOverride:input_type -> arbiter.v1.SetFlagRuleOverrideRequest
+	63, // 80: arbiter.v1.ArbiterService.SetStrategyOverride:input_type -> arbiter.v1.SetStrategyOverrideRequest
+	20, // 81: arbiter.v1.RuntimeService.GetRuntimeCapabilities:input_type -> arbiter.v1.GetRuntimeCapabilitiesRequest
+	5,  // 82: arbiter.v1.ArbiterService.PublishBundle:output_type -> arbiter.v1.PublishBundleResponse
+	8,  // 83: arbiter.v1.ArbiterService.ListBundles:output_type -> arbiter.v1.ListBundlesResponse
+	10, // 84: arbiter.v1.ArbiterService.ActivateBundle:output_type -> arbiter.v1.ActivateBundleResponse
+	12, // 85: arbiter.v1.ArbiterService.RollbackBundle:output_type -> arbiter.v1.RollbackBundleResponse
+	14, // 86: arbiter.v1.ArbiterService.GetBundle:output_type -> arbiter.v1.GetBundleResponse
+	16, // 87: arbiter.v1.ArbiterService.WatchBundles:output_type -> arbiter.v1.BundleEvent
+	18, // 88: arbiter.v1.ArbiterService.GetOverrides:output_type -> arbiter.v1.GetOverridesResponse
+	32, // 89: arbiter.v1.ArbiterService.WatchOverrides:output_type -> arbiter.v1.OverrideEvent
+	36, // 90: arbiter.v1.ArbiterService.EvaluateRules:output_type -> arbiter.v1.EvaluateRulesResponse
+	38, // 91: arbiter.v1.ArbiterService.ResolveFlag:output_type -> arbiter.v1.ResolveFlagResponse
+	40, // 92: arbiter.v1.ArbiterService.EvaluateStrategy:output_type -> arbiter.v1.EvaluateStrategyResponse
+	45, // 93: arbiter.v1.ArbiterService.StartSession:output_type -> arbiter.v1.StartSessionResponse
+	47, // 94: arbiter.v1.ArbiterService.RunSession:output_type -> arbiter.v1.RunSessionResponse
+	49, // 95: arbiter.v1.ArbiterService.AssertFacts:output_type -> arbiter.v1.AssertFactsResponse
+	52, // 96: arbiter.v1.ArbiterService.RetractFacts:output_type -> arbiter.v1.RetractFactsResponse
+	54, // 97: arbiter.v1.ArbiterService.GetSessionTrace:output_type -> arbiter.v1.GetSessionTraceResponse
+	56, // 98: arbiter.v1.ArbiterService.CloseSession:output_type -> arbiter.v1.CloseSessionResponse
+	58, // 99: arbiter.v1.ArbiterService.SetRuleOverride:output_type -> arbiter.v1.SetRuleOverrideResponse
+	60, // 100: arbiter.v1.ArbiterService.SetFlagOverride:output_type -> arbiter.v1.SetFlagOverrideResponse
+	62, // 101: arbiter.v1.ArbiterService.SetFlagRuleOverride:output_type -> arbiter.v1.SetFlagRuleOverrideResponse
+	64, // 102: arbiter.v1.ArbiterService.SetStrategyOverride:output_type -> arbiter.v1.SetStrategyOverrideResponse
+	26, // 103: arbiter.v1.RuntimeService.GetRuntimeCapabilities:output_type -> arbiter.v1.GetRuntimeCapabilitiesResponse
+	82, // [82:104] is the sub-list for method output_type
+	60, // [60:82] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_arbiter_v1_service_proto_init() }
@@ -4404,7 +4604,7 @@ func file_arbiter_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_arbiter_v1_service_proto_rawDesc), len(file_arbiter_v1_service_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   59,
+			NumMessages:   61,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

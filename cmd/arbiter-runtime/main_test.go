@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"strings"
 	"testing"
 
@@ -44,6 +45,21 @@ func TestCapabilityStatus(t *testing.T) {
 	}
 }
 
+func TestRuntimeTransportStatus(t *testing.T) {
+	control := newRuntimeControlTransport("0.0.0.0:7081", []string{"top-secret"}, &tls.Config{ClientAuth: tls.RequireAndVerifyClientCert}, true)
+	if !control.Enabled || !control.PublicListener || !control.AuthEnabled || !control.TLSEnabled || !control.MutualTLSEnabled {
+		t.Fatalf("unexpected control transport: %+v", control)
+	}
+
+	capabilityTransport := newRuntimeCapabilityTransport("plugin.internal:7443", true, true, "plugin.internal")
+	if !capabilityTransport.Configured || !capabilityTransport.AuthEnabled || !capabilityTransport.TLSEnabled {
+		t.Fatalf("unexpected capability transport: %+v", capabilityTransport)
+	}
+	if capabilityTransport.ServerName != "plugin.internal" {
+		t.Fatalf("capability server name = %q, want plugin.internal", capabilityTransport.ServerName)
+	}
+}
+
 func TestCapabilityPluginsStatus(t *testing.T) {
 	status := capabilityPluginsStatus(&capability.Manifest{
 		Name:    "ops-plugin",
@@ -74,7 +90,20 @@ func TestProtoRuntimeCapabilities(t *testing.T) {
 			Owner:       workflow.CapabilityOwnerPlugin,
 			Description: "python worker",
 		}},
-	}, &capability.Manifest{Name: "ops-plugin", Version: "1.2.3"})
+	}, &capability.Manifest{Name: "ops-plugin", Version: "1.2.3"}, runtimeControlTransport{
+		Enabled:          true,
+		Address:          "127.0.0.1:7081",
+		PublicListener:   false,
+		AuthEnabled:      true,
+		TLSEnabled:       true,
+		MutualTLSEnabled: true,
+	}, runtimeCapabilityTransport{
+		Configured:  true,
+		Target:      "plugin.internal:7443",
+		AuthEnabled: true,
+		TLSEnabled:  true,
+		ServerName:  "plugin.internal",
+	})
 
 	if len(resp.GetSources()) != 1 || resp.GetSources()[0].GetScheme() != "kafka" {
 		t.Fatalf("unexpected proto sources: %+v", resp.GetSources())
@@ -96,6 +125,12 @@ func TestProtoRuntimeCapabilities(t *testing.T) {
 	}
 	if len(resp.GetPlugins()) != 1 || resp.GetPlugins()[0].GetName() != "ops-plugin" {
 		t.Fatalf("unexpected proto plugins: %+v", resp.GetPlugins())
+	}
+	if !resp.GetControlTransport().GetEnabled() || !resp.GetControlTransport().GetAuthEnabled() || !resp.GetControlTransport().GetTlsEnabled() || !resp.GetControlTransport().GetMutualTlsEnabled() {
+		t.Fatalf("unexpected control transport: %+v", resp.GetControlTransport())
+	}
+	if resp.GetCapabilityTransport().GetTarget() != "plugin.internal:7443" || !resp.GetCapabilityTransport().GetConfigured() || !resp.GetCapabilityTransport().GetTlsEnabled() {
+		t.Fatalf("unexpected capability transport: %+v", resp.GetCapabilityTransport())
 	}
 }
 

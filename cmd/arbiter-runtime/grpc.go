@@ -30,11 +30,11 @@ func protoRuntimeCapabilities(surface workflow.CapabilitySurface, manifest *capa
 		Sinks:   make([]*arbiterv1.RuntimeHandlerCapability, 0, len(surface.Sinks)),
 		Workers: make([]*arbiterv1.RuntimeHandlerCapability, 0, len(surface.Workers)),
 		ControlTransport: &arbiterv1.RuntimeControlTransport{
-			Enabled:         control.Enabled,
-			Address:         control.Address,
-			PublicListener:  control.PublicListener,
-			AuthEnabled:     control.AuthEnabled,
-			TlsEnabled:      control.TLSEnabled,
+			Enabled:          control.Enabled,
+			Address:          control.Address,
+			PublicListener:   control.PublicListener,
+			AuthEnabled:      control.AuthEnabled,
+			TlsEnabled:       control.TLSEnabled,
 			MutualTlsEnabled: control.MutualTLSEnabled,
 		},
 		CapabilityTransport: &arbiterv1.RuntimeCapabilityTransport{
