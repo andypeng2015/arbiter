@@ -164,7 +164,7 @@ func (s *server) handleInitialize(msg rpcMessage) rpcMessage {
 			},
 			"serverInfo": map[string]any{
 				"name":    "arbiter-lsp",
-				"version": "0.13.0",
+				"version": "1.4.0",
 			},
 		},
 	}

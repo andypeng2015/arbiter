@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.4.0
+
+### Language Shape
+
+- **Canonical governance prelude order** — rules, strategies, flags, and expert rules now read as governance prelude, then matching/binding, then effect. `rollout` now lives before `when` across governed declarations.
+- **Explicit kill-switch state** — `kill_switch on` and `kill_switch off` are preserved through compile, bundle, runtime, hover, explain, and explore surfaces. Kill-switch state is no longer collapsed to a single bool.
+- **Typed declaration family** — `input`, `feature`, `fact`, `outcome`, and `table` are now documented and surfaced as one typed-data family in inspection output.
+- **Authoring doctrine** — the README now recommends a canonical `.arb` file shape, modality choice doctrine, and module split strategy for readable bundles.
+
+### VM / Runtime
+
+- **Lower-allocation data lookup** — exact-key context lookups fast-path, dotted path resolution no longer allocates via `strings.Split`, and string-pool reads use a lock-free snapshot.
+- **Measured governed-eval wins** — the rule-heavy benchmark suite improved by roughly 15-47% wall time with substantial allocation reductions after the VM/data-context pass.
+
 ## v1.3.0
 
 ### Rule Tagging

@@ -11,16 +11,17 @@ import (
 
 // Summary is a bundle-level semantic summary for inspection surfaces.
 type Summary struct {
-	Source         string              `json:"source,omitempty"`
-	FactSchemas    []SchemaSummary     `json:"fact_schemas,omitempty"`
-	OutcomeSchemas []SchemaSummary     `json:"outcome_schemas,omitempty"`
-	Strategies     []StrategySummary   `json:"strategies,omitempty"`
-	Workers        []WorkerSummary     `json:"workers,omitempty"`
-	Arbiters       []ArbiterSummary    `json:"arbiters,omitempty"`
-	Constants      []ConstantSummary   `json:"constants,omitempty"`
-	Rules          []RuleSummary       `json:"rules,omitempty"`
-	ExpertRules    []ExpertRuleSummary `json:"expert_rules,omitempty"`
-	UsedUnits      []DimensionUnits    `json:"used_units,omitempty"`
+	Source           string                   `json:"source,omitempty"`
+	DataDeclarations []DataDeclarationSummary `json:"data_declarations,omitempty"`
+	FactSchemas      []SchemaSummary          `json:"fact_schemas,omitempty"`
+	OutcomeSchemas   []SchemaSummary          `json:"outcome_schemas,omitempty"`
+	Strategies       []StrategySummary        `json:"strategies,omitempty"`
+	Workers          []WorkerSummary          `json:"workers,omitempty"`
+	Arbiters         []ArbiterSummary         `json:"arbiters,omitempty"`
+	Constants        []ConstantSummary        `json:"constants,omitempty"`
+	Rules            []RuleSummary            `json:"rules,omitempty"`
+	ExpertRules      []ExpertRuleSummary      `json:"expert_rules,omitempty"`
+	UsedUnits        []DimensionUnits         `json:"used_units,omitempty"`
 }
 
 type SchemaSummary struct {
@@ -28,10 +29,24 @@ type SchemaSummary struct {
 	Fields []FieldSummary `json:"fields,omitempty"`
 }
 
+type DataDeclarationSummary struct {
+	Kind   string             `json:"kind"`
+	Name   string             `json:"name,omitempty"`
+	Source string             `json:"source,omitempty"`
+	Fields []DataFieldSummary `json:"fields,omitempty"`
+	Rows   int                `json:"rows,omitempty"`
+}
+
 type FieldSummary struct {
 	Name     string `json:"name"`
 	Type     string `json:"type"`
 	Required bool   `json:"required"`
+}
+
+type DataFieldSummary struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Required *bool  `json:"required,omitempty"`
 }
 
 type ConstantSummary struct {
@@ -137,11 +152,22 @@ func BuildSummary(program *ir.Program) *Summary {
 		return &Summary{}
 	}
 	summary := &Summary{}
+	if program.Input != nil {
+		summary.DataDeclarations = append(summary.DataDeclarations, summarizeInputSchema(*program.Input))
+	}
+	for _, feature := range program.Features {
+		summary.DataDeclarations = append(summary.DataDeclarations, summarizeFeature(feature))
+	}
 	for _, schema := range program.FactSchemas {
+		summary.DataDeclarations = append(summary.DataDeclarations, summarizeNamedSchema("fact", schema.Name, schema.Fields))
 		summary.FactSchemas = append(summary.FactSchemas, summarizeFactSchema(schema))
 	}
 	for _, schema := range program.OutcomeSchemas {
+		summary.DataDeclarations = append(summary.DataDeclarations, summarizeNamedSchema("outcome", schema.Name, schema.Fields))
 		summary.OutcomeSchemas = append(summary.OutcomeSchemas, summarizeOutcomeSchema(schema))
+	}
+	for _, table := range program.Tables {
+		summary.DataDeclarations = append(summary.DataDeclarations, summarizeTable(table))
 	}
 	for _, strategy := range program.Strategies {
 		summary.Strategies = append(summary.Strategies, summarizeStrategy(program, strategy))
@@ -218,11 +244,7 @@ func summarizeFactSchema(schema ir.FactSchema) SchemaSummary {
 		Name: schema.Name,
 	}
 	for _, field := range schema.Fields {
-		out.Fields = append(out.Fields, FieldSummary{
-			Name:     field.Name,
-			Type:     fieldTypeString(field.Type, field.Required),
-			Required: field.Required,
-		})
+		out.Fields = append(out.Fields, summarizeSchemaField(field.Name, field))
 	}
 	return out
 }
@@ -232,13 +254,85 @@ func summarizeOutcomeSchema(schema ir.OutcomeSchema) SchemaSummary {
 		Name: schema.Name,
 	}
 	for _, field := range schema.Fields {
-		out.Fields = append(out.Fields, FieldSummary{
-			Name:     field.Name,
-			Type:     fieldTypeString(field.Type, field.Required),
-			Required: field.Required,
+		out.Fields = append(out.Fields, summarizeSchemaField(field.Name, field))
+	}
+	return out
+}
+
+func summarizeInputSchema(schema ir.InputSchema) DataDeclarationSummary {
+	return DataDeclarationSummary{
+		Kind:   "input",
+		Fields: summarizeDataSchemaFields(schema.Fields),
+	}
+}
+
+func summarizeFeature(feature ir.Feature) DataDeclarationSummary {
+	out := DataDeclarationSummary{
+		Kind:   "feature",
+		Name:   feature.Name,
+		Source: feature.Source,
+	}
+	for _, field := range feature.Fields {
+		out.Fields = append(out.Fields, DataFieldSummary{
+			Name: field.Name,
+			Type: field.Type,
 		})
 	}
 	return out
+}
+
+func summarizeNamedSchema(kind, name string, fields []ir.SchemaField) DataDeclarationSummary {
+	return DataDeclarationSummary{
+		Kind:   kind,
+		Name:   name,
+		Fields: summarizeDataSchemaFields(fields),
+	}
+}
+
+func summarizeTable(table ir.Table) DataDeclarationSummary {
+	out := DataDeclarationSummary{
+		Kind: "table",
+		Name: table.Name,
+		Rows: len(table.Rows),
+	}
+	for _, column := range table.Columns {
+		out.Fields = append(out.Fields, DataFieldSummary{
+			Name: column.Name,
+			Type: fieldTypeString(column.Type, true),
+		})
+	}
+	return out
+}
+
+func summarizeSchemaField(name string, field ir.SchemaField) FieldSummary {
+	return FieldSummary{
+		Name:     name,
+		Type:     fieldTypeString(field.Type, field.Required),
+		Required: field.Required,
+	}
+}
+
+func summarizeDataSchemaFields(fields []ir.SchemaField) []DataFieldSummary {
+	return appendDataSchemaFields(nil, "", fields)
+}
+
+func appendDataSchemaFields(dst []DataFieldSummary, prefix string, fields []ir.SchemaField) []DataFieldSummary {
+	for _, field := range fields {
+		name := field.Name
+		if prefix != "" {
+			name = prefix + "." + name
+		}
+		required := field.Required
+		dst = append(dst, DataFieldSummary{
+			Name:     name,
+			Type:     fieldTypeString(field.Type, field.Required),
+			Required: &required,
+		})
+		if len(field.Children) > 0 {
+			dst = appendDataSchemaFields(dst, name, field.Children)
+		}
+	}
+	return dst
 }
 
 func summarizeStrategy(program *ir.Program, strategy ir.Strategy) StrategySummary {
@@ -304,12 +398,20 @@ func summarizeArbiter(program *ir.Program, arbiterDecl ir.Arbiter) ArbiterSummar
 }
 
 func fieldTypeString(fieldType ir.FieldType, required bool) string {
-	base := fieldType.Base
-	if fieldType.Dimension != "" {
-		base += "<" + fieldType.Dimension + ">"
-	}
+	base := renderFieldType(fieldType)
 	if !required {
 		return base + "?"
+	}
+	return base
+}
+
+func renderFieldType(fieldType ir.FieldType) string {
+	base := fieldType.Base
+	if fieldType.Base == "list" && fieldType.Element != nil {
+		base = "list<" + renderFieldType(*fieldType.Element) + ">"
+	}
+	if fieldType.Dimension != "" {
+		base += "<" + fieldType.Dimension + ">"
 	}
 	return base
 }

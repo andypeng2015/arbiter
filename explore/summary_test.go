@@ -143,3 +143,90 @@ func TestBuildSummaryIncludesDecimalUnits(t *testing.T) {
 		t.Fatalf("expected currency units in summary, got %+v", summary.UsedUnits)
 	}
 }
+
+func TestBuildSummaryIncludesTypedDataFamily(t *testing.T) {
+	summary := explore.BuildSummary(&ir.Program{
+		Input: &ir.InputSchema{
+			Fields: []ir.SchemaField{
+				{
+					Name:     "user",
+					Type:     ir.FieldType{Base: "object"},
+					Required: true,
+					Children: []ir.SchemaField{
+						{
+							Name:     "id",
+							Type:     ir.FieldType{Base: "string"},
+							Required: true,
+						},
+						{
+							Name:     "tags",
+							Type:     ir.FieldType{Base: "list", Element: &ir.FieldType{Base: "string"}},
+							Required: false,
+						},
+					},
+				},
+			},
+		},
+		Features: []ir.Feature{{
+			Name:   "risk",
+			Source: "risk-service",
+			Fields: []ir.FeatureField{{
+				Name: "score",
+				Type: "number",
+			}},
+		}},
+		FactSchemas: []ir.FactSchema{{
+			Name: "DecisionFact",
+			Fields: []ir.SchemaField{{
+				Name:     "kind",
+				Type:     ir.FieldType{Base: "string"},
+				Required: true,
+			}},
+		}},
+		OutcomeSchemas: []ir.OutcomeSchema{{
+			Name: "DecisionOutcome",
+			Fields: []ir.SchemaField{{
+				Name:     "allow",
+				Type:     ir.FieldType{Base: "boolean"},
+				Required: true,
+			}},
+		}},
+		Tables: []ir.Table{{
+			Name: "routing_table",
+			Columns: []ir.TableColumn{{
+				Name: "country",
+				Type: ir.FieldType{Base: "string"},
+			}},
+			Rows: []ir.TableRow{{}, {}},
+		}},
+	})
+
+	if len(summary.DataDeclarations) != 5 {
+		t.Fatalf("expected 5 data declarations, got %+v", summary.DataDeclarations)
+	}
+	kinds := []string{
+		summary.DataDeclarations[0].Kind,
+		summary.DataDeclarations[1].Kind,
+		summary.DataDeclarations[2].Kind,
+		summary.DataDeclarations[3].Kind,
+		summary.DataDeclarations[4].Kind,
+	}
+	wantKinds := []string{"input", "feature", "fact", "outcome", "table"}
+	for i := range wantKinds {
+		if kinds[i] != wantKinds[i] {
+			t.Fatalf("data declaration order = %v, want %v", kinds, wantKinds)
+		}
+	}
+	if summary.DataDeclarations[0].Fields[1].Name != "user.id" {
+		t.Fatalf("expected flattened nested input field, got %+v", summary.DataDeclarations[0].Fields)
+	}
+	if summary.DataDeclarations[0].Fields[2].Type != "list<string>?" {
+		t.Fatalf("expected list type rendering, got %+v", summary.DataDeclarations[0].Fields[2])
+	}
+	if summary.DataDeclarations[1].Source != "risk-service" {
+		t.Fatalf("expected feature source, got %+v", summary.DataDeclarations[1])
+	}
+	if summary.DataDeclarations[4].Rows != 2 {
+		t.Fatalf("expected table row count, got %+v", summary.DataDeclarations[4])
+	}
+}

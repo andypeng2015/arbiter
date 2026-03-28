@@ -131,6 +131,9 @@ expert rule HeatStress {
 	if !strings.Contains(out, `"fact_schemas"`) || !strings.Contains(out, `"expert_rules"`) {
 		t.Fatalf("expected explore output to include schemas and expert rules, got %s", out)
 	}
+	if !strings.Contains(out, `"data_declarations"`) {
+		t.Fatalf("expected explore output to include typed data declarations, got %s", out)
+	}
 	if !strings.Contains(out, `"strategies"`) {
 		t.Fatalf("expected explore output to include strategies, got %s", out)
 	}

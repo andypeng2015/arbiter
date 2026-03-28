@@ -12,6 +12,14 @@ Every decision your software makes — approve this transaction, show this varia
 
 Four modalities, one language. **Stateless evaluation** for request-path decisions. **Feature flags** for governed variant resolution. **Expert inference** for forward-chaining reasoning until quiescence. **Continuous arbiters** for always-on decision loops. Same compiler, same VM, same governance.
 
+Choose the lightest sufficient mode:
+
+- `rule` = many matching governed outcomes
+- `strategy` = exactly-one governed route
+- `flag` = governed variant resolution
+- `expert` = fact mutation until quiescence
+- `arbiter` = long-lived loop over sources and outcomes
+
 The parser is built on [gotreesitter](https://github.com/odvcencio/gotreesitter), a pure-Go reimplementation of the tree-sitter runtime — no CGo, no C toolchain, no generated files. Cross-compiles to any `GOOS`/`GOARCH` target Go supports, including WASM.
 
 Standalone reference material lives under [`docs/`](docs):
@@ -63,6 +71,29 @@ The gRPC benches publish the bundle once, warm it up, and benchmark `EvaluateRul
 Segments, rollouts, kill switches, prerequisites, explainability — governance primitives that apply to any outcome. Rules, strategies, flags, and expert inferences all share them.
 
 Within stateless governed evaluation, rules collect applicable outcomes, strategies select one ordered path, and flags resolve named variants.
+
+For maximum readability, keep `.arb` modules predictable:
+
+- Put typed declarations first: `input`, `feature`, `fact`, `outcome`, `table`
+- Follow with shared governance: `const`, `tag`, `segment`
+- Then put the decision surface for that module: `rule`, `strategy`, `flag`, `expert rule`, or `arbiter`
+- Split by business domain first, then by modality when a file stops fitting on one screen
+- Keep workers and arbiters in runtime-facing modules; keep typed declarations and reusable segments in shared modules
+
+One clean layout looks like:
+
+```text
+arbiter.toml
+schemas/input.arb
+schemas/outcomes.arb
+segments/risk.arb
+rules/payments.arb
+strategies/checkout.arb
+flags/experiments.arb
+expert/tax.arb
+workers/notify.arb
+arbiters/fraud_monitor.arb
+```
 
 ### Rules
 
@@ -699,9 +730,13 @@ matched, _ := arbiter.Eval(prog, dc)
 
 ## Language
 
+### Typed Data Declarations
+
+`input`, `feature`, `fact`, `outcome`, and `table` are one family: declared data shapes Arbiter can validate, inspect, and reason about. Use `input` for request shape, `feature` for sourced data, `fact` for working memory, `outcome` for governed effects, and `table` for immutable lookup data.
+
 ### Features
 
-Declare the data your rules evaluate against.
+Declare sourced data your rules evaluate against.
 
 ```arb
 feature user from "user-service" {
@@ -737,7 +772,7 @@ Imported declarations are accessed via namespace: `requires scoring.BaseRule`, `
 # arbiter.toml
 [project]
 name = "acme-fraud"
-version = "1.3.0"
+version = "1.4.0"
 ```
 
 ### Input Schemas
@@ -1242,12 +1277,13 @@ expert rule EmitDetermination priority 90 {
 
 ## Status
 
-**v1.3.0** — language contract frozen, compiler and VM stable, full IDE experience.
+**v1.4.0** — language contract frozen, compiler and VM stable, full IDE experience.
 
 What you can rely on:
 
 - Sub-microsecond rule evaluation (223ns/rule, 10K rules in 2ms)
 - Module system with namespaced imports and `arbiter.toml` manifests
+- Typed declaration family: `input`, `feature`, `fact`, `outcome`, `table`
 - Compile-time input schema validation, action param type checking, regex pre-compilation
 - Lookup tables for data-driven decisions without rule explosion
 - Rule tagging with selective evaluation (`WithTags`)
