@@ -159,7 +159,7 @@ func (s *server) handleInitialize(msg rpcMessage) rpcMessage {
 					},
 					"full": true,
 				},
-				"diagnosticProvider":         map[string]any{"interFileDependencies": true, "workspaceDiagnostics": false},
+				"diagnosticProvider": map[string]any{"interFileDependencies": true, "workspaceDiagnostics": false},
 			},
 			"serverInfo": map[string]any{
 				"name":    "arbiter-lsp",
@@ -381,7 +381,7 @@ func keywordCompletions() []map[string]any {
 		"fact", "outcome", "feature", "worker", "arbiter", "include",
 		"when", "then", "otherwise", "assert", "emit", "retract", "modify",
 		"requires", "excludes", "kill_switch", "rollout", "priority",
-		"any", "all", "none", "in", "and", "or", "not",
+		"any", "all", "none", "in", "and", "or", "not", "on", "off",
 		"true", "false", "null",
 	}
 	var items []map[string]any

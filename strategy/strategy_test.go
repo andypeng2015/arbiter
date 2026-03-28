@@ -132,7 +132,7 @@ outcome CheckoutPath {
 strategy CheckoutRouting returns CheckoutPath {
 	when {
 		user.country == "US"
-	} kill_switch then Disabled {
+	} kill_switch on then Disabled {
 		target: "disabled",
 	}
 
@@ -165,6 +165,41 @@ strategy CheckoutRouting returns CheckoutPath {
 	}
 	if !reflect.DeepEqual(result.Trace.Steps, want) {
 		t.Fatalf("trace steps = %#v, want %#v", result.Trace.Steps, want)
+	}
+}
+
+func TestEvalStrategyKillSwitchOffKeepsCandidateEligible(t *testing.T) {
+	full := compileStrategyBundle(t, `
+outcome CheckoutPath {
+	target: string
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	when {
+		user.country == "US"
+	} kill_switch off then Enabled {
+		target: "enabled",
+	}
+
+	else Stable {
+		target: "stable",
+	}
+}
+`)
+
+	result, err := arbiter.EvalStrategy(full, "CheckoutRouting", map[string]any{
+		"user": map[string]any{"country": "US"},
+	})
+	if err != nil {
+		t.Fatalf("EvalStrategy: %v", err)
+	}
+	if result.Selected != "Enabled" {
+		t.Fatalf("Selected = %q, want Enabled", result.Selected)
+	}
+	for _, step := range result.Trace.Steps {
+		if strings.Contains(step.Check, "kill_switch") {
+			t.Fatalf("unexpected kill_switch trace step: %#v", step)
+		}
 	}
 }
 

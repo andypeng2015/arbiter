@@ -151,7 +151,8 @@ rule_block         = "{"
 
 priority_clause    = "priority" integer_literal ;
 
-kill_switch_clause = "kill_switch" ;
+kill_switch_clause = "kill_switch" [ toggle_state ] ;
+toggle_state       = "on" | "off" ;
 requires_clause    = "requires" qualified_name ;
 excludes_clause    = "excludes" qualified_name ;
 

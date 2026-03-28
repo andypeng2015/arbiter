@@ -44,7 +44,7 @@ rule AllowProduction priority 0 {
 
 # Kill switch for emergencies — flip at runtime to halt all CI
 rule EmergencyHalt priority 0 {
-    kill_switch
+    kill_switch on
     when {
         true
     }

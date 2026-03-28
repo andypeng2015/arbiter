@@ -52,7 +52,7 @@ flag payments_enabled type boolean default false {
         then true
 }
 
-flag dark_mode type boolean default false kill_switch {
+flag dark_mode type boolean default false kill_switch on {
     owner: "design-team"
 }
 `
@@ -122,6 +122,24 @@ func TestFlagKillSwitch(t *testing.T) {
 	v := f.Variant("dark_mode", ctx)
 	if v.Name != "false" {
 		t.Errorf("expected false (default), got %q", v.Name)
+	}
+}
+
+func TestFlagKillSwitchOff(t *testing.T) {
+	f, err := Load([]byte(`
+flag dark_mode type boolean default false kill_switch off {
+	when { true } then true
+}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !f.Enabled("dark_mode", map[string]any{}) {
+		t.Error("expected dark_mode enabled when kill_switch is off")
+	}
+	if v := f.Variant("dark_mode", map[string]any{}); v.Name != "true" {
+		t.Errorf("expected true variant when kill_switch is off, got %q", v.Name)
 	}
 }
 

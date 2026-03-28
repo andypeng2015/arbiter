@@ -110,7 +110,7 @@ rule EnhancedRiskCheck priority 1 {
 func TestEvalGovernedKillSwitchSkipsFallback(t *testing.T) {
 	src := []byte(`
 rule Disabled {
-	kill_switch
+	kill_switch on
 	when { true }
 	then Allow {}
 	otherwise Deny { reason: "off" }

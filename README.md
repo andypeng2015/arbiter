@@ -83,7 +83,7 @@ Rules support governance keywords directly:
 
 ```arb
 rule EnhancedRiskCheck priority 1 {
-    kill_switch
+    kill_switch on
     requires BasicRiskCheck
     when segment high_risk {
         tx.amount > 5000
@@ -810,7 +810,7 @@ include "segments.arb"
 
 ```arb
 rule RuleName priority 1 {
-    kill_switch                    # optional: instant disable
+    kill_switch on                 # optional: instant disable ("off" is explicit no-op)
     requires OtherRule             # optional: prerequisite
     when segment high_value {      # optional: segment gate
         user.cart_total >= 100
@@ -830,7 +830,7 @@ rule RuleName priority 1 {
 
 ```arb
 expert rule RuleName priority 1 {
-    kill_switch
+    kill_switch on
     no_loop
     requires OtherRule
     activation_group Resolution
@@ -1180,7 +1180,7 @@ rule VIPDiscount priority 2 {
 
 ```arb
 rule InstantBlock priority 0 {
-    kill_switch
+    kill_switch on
     when {
         account.flagged == true
         or model.risk_score > 0.95

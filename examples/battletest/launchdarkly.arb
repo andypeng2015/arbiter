@@ -58,7 +58,7 @@ flag dark_mode type boolean default "false" {
 }
 
 # Kill switch demo - starts disabled, can be flipped at runtime
-flag maintenance_mode type boolean default "false" kill_switch {
+flag maintenance_mode type boolean default "false" kill_switch on {
     owner: "ops"
     ticket: "OPS-001"
 

@@ -276,7 +276,7 @@ rule HasRole {
 func TestCompileRuleGovernanceMetadata(t *testing.T) {
 	src := `
 rule EnhancedRiskCheck priority 1 {
-    kill_switch
+    kill_switch on
     requires BasicRiskCheck
     requires prior_hold
     excludes LegacyPath
@@ -342,6 +342,23 @@ rule EnhancedRiskCheck priority 1 {
 		if gotExcludes[i] != want {
 			t.Fatalf("exclude[%d] = %q, want %q", i, gotExcludes[i], want)
 		}
+	}
+}
+
+func TestCompileRuleKillSwitchOff(t *testing.T) {
+	src := `
+rule SoftLaunch {
+    kill_switch off
+    when { true }
+    then Allow {}
+}
+`
+	rs := compileSource(t, src)
+	if len(rs.Rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rs.Rules))
+	}
+	if rs.Rules[0].KillSwitch {
+		t.Fatal("expected KillSwitch to remain unset")
 	}
 }
 

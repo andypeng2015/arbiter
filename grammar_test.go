@@ -616,12 +616,28 @@ func TestParseFlag(t *testing.T) {
 }
 
 func TestParseFlagKillSwitch(t *testing.T) {
-	input := `flag dark_mode type boolean default false kill_switch {
+	input := `flag dark_mode type boolean default false kill_switch on {
 		owner: "design-team"
 	}`
 	result := parseArb(t, input)
 	if !strings.Contains(result, "kill_switch") {
 		t.Error("expected kill_switch in parse tree")
+	}
+	if !strings.Contains(result, "toggle_state") {
+		t.Error("expected toggle_state in parse tree")
+	}
+}
+
+func TestParseFlagKillSwitchOff(t *testing.T) {
+	input := `flag dark_mode type boolean default false kill_switch off {
+		when { true } then true
+	}`
+	result := parseArb(t, input)
+	if !strings.Contains(result, "kill_switch") {
+		t.Error("expected kill_switch in parse tree")
+	}
+	if !strings.Contains(result, "toggle_state") {
+		t.Error("expected toggle_state in parse tree")
 	}
 }
 
@@ -659,7 +675,7 @@ flag payments_enabled type boolean default false {
 	when enterprise_us then true
 }
 
-flag dark_mode type boolean default false kill_switch {
+flag dark_mode type boolean default false kill_switch on {
 	owner: "design-team"
 }
 `
@@ -675,7 +691,7 @@ flag dark_mode type boolean default false kill_switch {
 func TestParseGovernedRule(t *testing.T) {
 	input := `
 rule EnhancedRiskCheck priority 1 {
-	kill_switch
+	kill_switch on
 	requires BasicRiskCheck
 	when segment high_risk {
 		tx.amount > 5000

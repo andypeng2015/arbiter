@@ -673,7 +673,11 @@ func ArbiterGrammar() *Grammar {
 	))
 
 	// kill_switch as named node so it appears in the CST
-	g.Define("kill_switch", Str("kill_switch"))
+	g.Define("kill_switch", Seq(
+		Str("kill_switch"),
+		Optional(Field("state", Sym("toggle_state"))),
+	))
+	g.Define("toggle_state", Choice(Str("on"), Str("off")))
 
 	// --- Expression hierarchy ---
 	// Two levels: _expr includes logical operators, _value_expr does not.

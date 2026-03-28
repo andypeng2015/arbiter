@@ -370,7 +370,7 @@ expert rule RouteManualReview {
 func TestSessionRespectsKillSwitch(t *testing.T) {
 	src := []byte(`
 expert rule DisabledSeed {
-	kill_switch
+	kill_switch on
 	when { true }
 	then assert RiskFlag {
 		key: "blocked",
@@ -396,6 +396,35 @@ expert rule DisabledSeed {
 	}
 	if result.Rounds != 1 {
 		t.Fatalf("expected 1 round, got %d", result.Rounds)
+	}
+}
+
+func TestSessionKillSwitchOffAllowsRule(t *testing.T) {
+	src := []byte(`
+expert rule DisabledSeed {
+	kill_switch off
+	when { true }
+	then assert RiskFlag {
+		key: "allowed",
+		level: "high",
+	}
+}
+`)
+
+	program, err := expert.Compile(src)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	result, err := expert.NewSession(program, map[string]any{}, nil, expert.Options{}).Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(result.Facts) != 1 {
+		t.Fatalf("expected 1 fact, got %+v", result.Facts)
+	}
+	if result.Facts[0].Key != "allowed" {
+		t.Fatalf("unexpected fact: %+v", result.Facts[0])
 	}
 }
 

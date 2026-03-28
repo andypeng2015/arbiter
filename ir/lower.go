@@ -397,6 +397,16 @@ func (l *lowerer) lowerSegment(n *gotreesitter.Node) (Segment, error) {
 	}, nil
 }
 
+func (l *lowerer) lowerKillSwitch(n *gotreesitter.Node) bool {
+	if n == nil {
+		return false
+	}
+	if stateNode := n.ChildByFieldName("state", l.lang); stateNode != nil {
+		return l.text(stateNode) != "off"
+	}
+	return true
+}
+
 func (l *lowerer) lowerRule(n *gotreesitter.Node) (Rule, error) {
 	rule := Rule{
 		Span: spanForNode(n),
@@ -405,7 +415,7 @@ func (l *lowerer) lowerRule(n *gotreesitter.Node) (Rule, error) {
 	if nameNode := n.ChildByFieldName("name", l.lang); nameNode != nil {
 		rule.Name = l.text(nameNode)
 	}
-	rule.KillSwitch = n.ChildByFieldName("kill_switch", l.lang) != nil
+	rule.KillSwitch = l.lowerKillSwitch(n.ChildByFieldName("kill_switch", l.lang))
 
 	for i := 0; i < int(n.NamedChildCount()); i++ {
 		child := n.NamedChild(i)
@@ -525,7 +535,7 @@ func (l *lowerer) lowerStrategy(n *gotreesitter.Node) (Strategy, error) {
 func (l *lowerer) lowerStrategyWhenCandidate(n *gotreesitter.Node) (StrategyCandidate, error) {
 	candidate := StrategyCandidate{
 		Span:       spanForNode(n),
-		KillSwitch: n.ChildByFieldName("kill_switch", l.lang) != nil,
+		KillSwitch: l.lowerKillSwitch(n.ChildByFieldName("kill_switch", l.lang)),
 	}
 	if labelNode := n.ChildByFieldName("action_name", l.lang); labelNode != nil {
 		candidate.Label = l.text(labelNode)
@@ -608,7 +618,7 @@ func (l *lowerer) lowerFlag(n *gotreesitter.Node) (Flag, error) {
 	if defaultNode := n.ChildByFieldName("default_value", l.lang); defaultNode != nil {
 		flag.Default = normalizedPrimaryText(l.text(defaultNode))
 	}
-	flag.KillSwitch = n.ChildByFieldName("kill_switch", l.lang) != nil
+	flag.KillSwitch = l.lowerKillSwitch(n.ChildByFieldName("kill_switch", l.lang))
 
 	for i := 0; i < int(n.NamedChildCount()); i++ {
 		child := n.NamedChild(i)
@@ -727,7 +737,7 @@ func (l *lowerer) lowerExpertRule(n *gotreesitter.Node) (ExpertRule, error) {
 	if nameNode := n.ChildByFieldName("name", l.lang); nameNode != nil {
 		rule.Name = l.text(nameNode)
 	}
-	rule.KillSwitch = n.ChildByFieldName("kill_switch", l.lang) != nil
+	rule.KillSwitch = l.lowerKillSwitch(n.ChildByFieldName("kill_switch", l.lang))
 	rule.NoLoop = n.ChildByFieldName("no_loop", l.lang) != nil
 	rule.Stable = n.ChildByFieldName("stable", l.lang) != nil
 	if groupNode := n.ChildByFieldName("activation_group", l.lang); groupNode != nil {
