@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/odvcencio/arbiter"
+	"github.com/odvcencio/arbiter/internal/grpcutil"
 )
 
 func TestFormatCLIErrorPreservesDiagnostics(t *testing.T) {
@@ -61,16 +62,20 @@ func TestRunRejectsRemovedEmitCommand(t *testing.T) {
 }
 
 func TestNormalizeRuntimeTarget(t *testing.T) {
-	got, err := normalizeRuntimeTarget("grpc://127.0.0.1:7081")
+	got, secure, err := grpcutil.NormalizeTarget("grpc://127.0.0.1:7081", false, false)
 	if err != nil {
 		t.Fatalf("normalizeRuntimeTarget grpc://: %v", err)
 	}
-	if got != "127.0.0.1:7081" {
-		t.Fatalf("normalized target = %q, want 127.0.0.1:7081", got)
+	if got != "127.0.0.1:7081" || secure {
+		t.Fatalf("normalized target = (%q, %v), want (127.0.0.1:7081, false)", got, secure)
 	}
 
-	if _, err := normalizeRuntimeTarget("https://arbiter.internal:7443"); err == nil {
-		t.Fatal("expected https target to be rejected")
+	got, secure, err = grpcutil.NormalizeTarget("https://arbiter.internal:7443", false, false)
+	if err != nil {
+		t.Fatalf("normalizeRuntimeTarget https://: %v", err)
+	}
+	if got != "arbiter.internal:7443" || !secure {
+		t.Fatalf("normalized secure target = (%q, %v), want (arbiter.internal:7443, true)", got, secure)
 	}
 }
 

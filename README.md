@@ -77,8 +77,12 @@ For maximum readability, keep `.arb` modules predictable:
 - Put typed declarations first: `input`, `feature`, `fact`, `outcome`, `table`
 - Follow with shared governance: `const`, `tag`, `segment`
 - Then put the decision surface for that module: `rule`, `strategy`, `flag`, `expert rule`, or `arbiter`
+- Prefer one business surface per file. If a file starts answering two different questions, split it.
 - Split by business domain first, then by modality when a file stops fitting on one screen
 - Keep workers and arbiters in runtime-facing modules; keep typed declarations and reusable segments in shared modules
+- Keep imports flowing inward: shared schemas/segments feed rules, flags, strategies, and experts; runtime-facing arbiters and workers sit at the edge
+- Put the `.test.arb` file next to the module it explains so behavior and specification move together
+- A good split trigger is any file with more than one owner, more than one rollout surface, or more than one screen of governed declarations
 
 One clean layout looks like:
 
@@ -518,7 +522,7 @@ Bundles are published once and evaluated many times. Each bundle compiles rules,
 
 `GetOverrides` returns the current runtime override set for one bundle, and `WatchOverrides` streams a typed snapshot followed by `rule`, `flag`, and `flag_rule` mutations keyed to immutable `bundle_id`. Override entries preserve the compatibility bool fields and also expose canonical `kill_switch_state` so operator tooling can reason about override intent directly.
 
-`arbiter serve` now defaults to `127.0.0.1:8081` and can be hardened in-process with:
+`arbiter serve` and `arbiter-runtime --grpc` now share the same in-process hardening shape:
 
 - `--auth-token` / `--auth-token-file` for bearer-token auth
 - `--tls-cert`, `--tls-key`, and optional `--tls-client-ca` for TLS or mTLS
@@ -576,7 +580,7 @@ arbiter diff current.arb candidate.arb --data-file contexts.json --key request_i
 arbiter replay candidate.arb --audit decisions.jsonl --request-id req-42
 arbiter check rules.arb            # validate without emitting
 arbiter expert tax.arb --envelope '{...}' [--facts '[...]']
-arbiter runtime-capabilities 127.0.0.1:7081 --json
+arbiter runtime-capabilities grpcs://runtime.internal:7443 --token "$ARBITER_RUNTIME_TOKEN" --ca-file /etc/arbiter/runtime-ca.pem --json
 arbiter serve --grpc 127.0.0.1:8081 --auth-token "$ARBITER_TOKEN" --max-recv-bytes 4194304 --data-dir ./state
 arbiter-agent --upstream https://arbiter.internal:443 --upstream-token "$ARBITER_TOKEN" --bundle-name checkout --grpc 127.0.0.1:7081 --status 127.0.0.1:7082
 ```
@@ -592,6 +596,8 @@ Repeat `--bundle-name` to keep multiple bundles hot, or set `ARBITER_BUNDLE_NAME
 Set `--ready-max-staleness 30s` or `ARBITER_AGENT_READY_MAX_STALENESS=30s` if you want `/readyz` to fail once bundle or override sync freshness drifts beyond that age. `0s` keeps the old last-good behavior and disables freshness enforcement.
 
 Use `--upstream-token`, `--upstream-ca-file`, `--upstream-server-name`, or `--upstream-plaintext` when the upstream control plane is protected with auth and TLS.
+
+`arbiter runtime-capabilities` accepts `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure runtime control, or `--plaintext` to force insecure transport against a bare target.
 
 ### Self-Hosted Profile
 
@@ -1128,7 +1134,10 @@ scenario "velocity detection triggers on transactions" {
 arbiter-runtime \
   --bundle monitor.arb \
   --grpc 127.0.0.1:7081 \
-  --capability-grpc 127.0.0.1:7090 \
+  --auth-token "$ARBITER_RUNTIME_TOKEN" \
+  --capability-grpc grpcs://127.0.0.1:7090 \
+  --capability-token "$ARBITER_CAPABILITY_TOKEN" \
+  --capability-ca-file /etc/arbiter/capability-ca.pem \
   --poll 5s \
   --status :7082 \
   --source-parallelism 8 \
@@ -1145,6 +1154,12 @@ It handles the full lifecycle:
 - **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
 - **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats, unified capability surface, connected plugin metadata)
 - **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` exposes the same unified capability surface over gRPC for SDKs and CLI clients
+
+Runtime transport is now opinionated instead of ad hoc:
+
+- Runtime control RPC uses the same `--auth-token`, `--auth-token-file`, `--tls-cert`, `--tls-key`, and `--tls-client-ca` hardening model as `arbiter serve`
+- Capability plugins use the same target grammar as the rest of the product: `grpc://`, `grpcs://`, `http://`, `https://`, or bare `host:port`
+- Use `--capability-token`, `--capability-ca-file`, `--capability-server-name`, or `--capability-plaintext` to make plugin transport explicit instead of ambient
 
 Build:
 

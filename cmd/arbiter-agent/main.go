@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"flag"
 	"log"
@@ -19,10 +17,8 @@ import (
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/dataplane"
 	"github.com/odvcencio/arbiter/grpcserver"
+	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 )
 
 type bundleNamesFlag struct {
@@ -220,77 +216,11 @@ type upstreamDialConfig struct {
 }
 
 func dialUpstream(cfg upstreamDialConfig) (*grpc.ClientConn, string, error) {
-	target, secure := normalizeUpstreamTarget(cfg.target, cfg.forceInsecure, cfg.caFile != "" || cfg.serverName != "")
-	transportCreds, err := loadUpstreamCredentials(secure, cfg.caFile, cfg.serverName)
-	if err != nil {
-		return nil, "", err
-	}
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(transportCreds)}
-	if cfg.token != "" {
-		opts = append(opts,
-			grpc.WithUnaryInterceptor(upstreamAuthUnaryInterceptor(cfg.token)),
-			grpc.WithStreamInterceptor(upstreamAuthStreamInterceptor(cfg.token)),
-		)
-	}
-	conn, err := grpc.NewClient(target, opts...)
-	if err != nil {
-		return nil, "", err
-	}
-	return conn, target, nil
-}
-
-func normalizeUpstreamTarget(target string, forceInsecure bool, tlsHint bool) (string, bool) {
-	switch {
-	case strings.HasPrefix(target, "https://"):
-		return strings.TrimPrefix(target, "https://"), !forceInsecure
-	case strings.HasPrefix(target, "grpcs://"):
-		return strings.TrimPrefix(target, "grpcs://"), !forceInsecure
-	case strings.HasPrefix(target, "http://"):
-		return strings.TrimPrefix(target, "http://"), false
-	case strings.HasPrefix(target, "grpc://"):
-		return strings.TrimPrefix(target, "grpc://"), false
-	default:
-		return target, !forceInsecure && tlsHint
-	}
-}
-
-func loadUpstreamCredentials(secure bool, caFile, serverName string) (credentials.TransportCredentials, error) {
-	if !secure {
-		return insecure.NewCredentials(), nil
-	}
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ServerName: serverName,
-	}
-	if caFile != "" {
-		pem, err := os.ReadFile(caFile)
-		if err != nil {
-			return nil, err
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, errors.New("parse upstream CA bundle: no certificates found")
-		}
-		tlsConfig.RootCAs = pool
-	}
-	return credentials.NewTLS(tlsConfig), nil
-}
-
-func upstreamAuthUnaryInterceptor(token string) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		return invoker(withUpstreamAuth(ctx, token), method, req, reply, cc, opts...)
-	}
-}
-
-func upstreamAuthStreamInterceptor(token string) grpc.StreamClientInterceptor {
-	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-		return streamer(withUpstreamAuth(ctx, token), desc, cc, method, opts...)
-	}
-}
-
-func withUpstreamAuth(ctx context.Context, token string) context.Context {
-	if token == "" {
-		return ctx
-	}
-	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+	return grpcutil.Dial(grpcutil.DialConfig{
+		Target:        cfg.target,
+		Token:         cfg.token,
+		CAFile:        cfg.caFile,
+		ServerName:    cfg.serverName,
+		ForceInsecure: cfg.forceInsecure,
+	})
 }

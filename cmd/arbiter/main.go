@@ -19,11 +19,8 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"crypto/ed25519"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -46,12 +43,12 @@ import (
 	"github.com/odvcencio/arbiter/flags"
 	"github.com/odvcencio/arbiter/format"
 	"github.com/odvcencio/arbiter/grpcserver"
+	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/overrides"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -285,15 +282,33 @@ func runImport(args []string) error {
 
 func runRuntimeCapabilities(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter runtime-capabilities <target> [--json]")
+		return usageError("Usage: arbiter runtime-capabilities <target> [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
-	jsonOut := false
+	cfg := runtimeCapabilitiesConfig{target: args[0]}
 	for i := 1; i < len(args); i++ {
-		if args[i] == "--json" {
-			jsonOut = true
+		switch args[i] {
+		case "--json":
+			cfg.jsonOut = true
+		case "--token":
+			if i+1 < len(args) {
+				cfg.token = args[i+1]
+				i++
+			}
+		case "--ca-file":
+			if i+1 < len(args) {
+				cfg.caFile = args[i+1]
+				i++
+			}
+		case "--server-name":
+			if i+1 < len(args) {
+				cfg.serverName = args[i+1]
+				i++
+			}
+		case "--plaintext":
+			cfg.forceInsecure = true
 		}
 	}
-	return runtimeCapabilitiesCmd(args[0], jsonOut)
+	return runtimeCapabilitiesCmd(cfg)
 }
 
 func runExplore(args []string) error {
@@ -324,6 +339,15 @@ type serveConfig struct {
 	rateLimitRPM       int
 	rateLimitBurst     int
 	ephemeral          bool
+}
+
+type runtimeCapabilitiesConfig struct {
+	target        string
+	token         string
+	caFile        string
+	serverName    string
+	forceInsecure bool
+	jsonOut       bool
 }
 
 func runServe(args []string) error {
@@ -814,11 +838,11 @@ func serveCmd(cfg serveConfig) error {
 		return err
 	}
 
-	tokens, err := loadAuthTokens(cfg.authTokens, cfg.authTokenFile)
+	tokens, err := grpcutil.LoadAuthTokens(cfg.authTokens, cfg.authTokenFile)
 	if err != nil {
 		return err
 	}
-	tlsConfig, err := loadServerTLSConfig(cfg.tlsCertFile, cfg.tlsKeyFile, cfg.tlsClientCAFile)
+	tlsConfig, err := grpcutil.LoadServerTLSConfig(cfg.tlsCertFile, cfg.tlsKeyFile, cfg.tlsClientCAFile)
 	if err != nil {
 		return err
 	}
@@ -899,7 +923,7 @@ func serveCmd(cfg serveConfig) error {
 	grpcSrv := grpc.NewServer(serverOptions...)
 	arbiterv1.RegisterArbiterServiceServer(grpcSrv, grpcserver.NewServerWithLoggerAndSessions(registry, store, sink, logger, sessions))
 
-	if isPublicListenAddr(cfg.grpcAddr) && tlsConfig == nil && len(tokens) == 0 {
+	if grpcutil.IsPublicListenAddr(cfg.grpcAddr) && tlsConfig == nil && len(tokens) == 0 {
 		logger.Warn("arbiter gRPC listener is public without TLS or auth", "addr", cfg.grpcAddr)
 	}
 	logger.Info(
@@ -920,14 +944,16 @@ func serveCmd(cfg serveConfig) error {
 	return grpcSrv.Serve(lis)
 }
 
-func runtimeCapabilitiesCmd(target string, jsonOut bool) error {
-	normalized, err := normalizeRuntimeTarget(target)
+func runtimeCapabilitiesCmd(cfg runtimeCapabilitiesConfig) error {
+	conn, _, err := grpcutil.Dial(grpcutil.DialConfig{
+		Target:        cfg.target,
+		Token:         cfg.token,
+		CAFile:        cfg.caFile,
+		ServerName:    cfg.serverName,
+		ForceInsecure: cfg.forceInsecure,
+	})
 	if err != nil {
-		return err
-	}
-	conn, err := grpc.NewClient(normalized, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return fmt.Errorf("connect runtime %s: %w", normalized, err)
+		return fmt.Errorf("connect runtime %s: %w", strings.TrimSpace(cfg.target), err)
 	}
 	defer conn.Close()
 
@@ -938,7 +964,7 @@ func runtimeCapabilitiesCmd(target string, jsonOut bool) error {
 	if err != nil {
 		return fmt.Errorf("get runtime capabilities: %w", err)
 	}
-	if jsonOut {
+	if cfg.jsonOut {
 		data, err := protojson.MarshalOptions{Indent: "  "}.Marshal(resp)
 		if err != nil {
 			return fmt.Errorf("marshal runtime capabilities: %w", err)
@@ -980,22 +1006,6 @@ func runtimeCapabilitiesCmd(target string, jsonOut bool) error {
 		}
 	}
 	return nil
-}
-
-func normalizeRuntimeTarget(target string) (string, error) {
-	trimmed := strings.TrimSpace(target)
-	switch {
-	case strings.HasPrefix(trimmed, "grpc://"):
-		return strings.TrimPrefix(trimmed, "grpc://"), nil
-	case strings.HasPrefix(trimmed, "http://"):
-		return strings.TrimPrefix(trimmed, "http://"), nil
-	case strings.HasPrefix(trimmed, "grpcs://"), strings.HasPrefix(trimmed, "https://"):
-		return "", fmt.Errorf("runtime-capabilities currently supports plaintext gRPC targets only")
-	case trimmed == "":
-		return "", fmt.Errorf("runtime target is required")
-	default:
-		return trimmed, nil
-	}
 }
 
 func capabilityOwnerLabel(owner arbiterv1.CapabilityOwner) string {
@@ -1048,89 +1058,6 @@ func resolveServePersistence(bundleFile, overridesFile, dataDir string, ephemera
 		overridesFile = filepath.Join(dataDir, "overrides.json")
 	}
 	return bundleFile, overridesFile, dataDir, nil
-}
-
-func loadAuthTokens(cliTokens []string, tokenFile string) ([]string, error) {
-	seen := make(map[string]struct{})
-	out := make([]string, 0, len(cliTokens))
-	addToken := func(raw string) {
-		token := strings.TrimSpace(raw)
-		if token == "" {
-			return
-		}
-		if _, ok := seen[token]; ok {
-			return
-		}
-		seen[token] = struct{}{}
-		out = append(out, token)
-	}
-	for _, token := range cliTokens {
-		addToken(token)
-	}
-	if tokenFile == "" {
-		return out, nil
-	}
-	file, err := os.Open(tokenFile)
-	if err != nil {
-		return nil, fmt.Errorf("open auth token file: %w", err)
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		for _, token := range strings.Split(scanner.Text(), ",") {
-			addToken(token)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read auth token file: %w", err)
-	}
-	return out, nil
-}
-
-func loadServerTLSConfig(certFile, keyFile, clientCAFile string) (*tls.Config, error) {
-	if certFile == "" && keyFile == "" && clientCAFile == "" {
-		return nil, nil
-	}
-	if certFile == "" || keyFile == "" {
-		return nil, fmt.Errorf("--tls-cert and --tls-key must be provided together")
-	}
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, fmt.Errorf("load TLS key pair: %w", err)
-	}
-	cfg := &tls.Config{
-		MinVersion:   tls.VersionTLS12,
-		Certificates: []tls.Certificate{cert},
-	}
-	if clientCAFile != "" {
-		caBytes, err := os.ReadFile(clientCAFile)
-		if err != nil {
-			return nil, fmt.Errorf("read client CA file: %w", err)
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(caBytes) {
-			return nil, fmt.Errorf("parse client CA file: no certificates found")
-		}
-		cfg.ClientCAs = pool
-		cfg.ClientAuth = tls.RequireAndVerifyClientCert
-	}
-	return cfg, nil
-}
-
-func isPublicListenAddr(addr string) bool {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return true
-	}
-	host = strings.TrimSpace(host)
-	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
-		return true
-	}
-	if strings.EqualFold(host, "localhost") {
-		return false
-	}
-	ip := net.ParseIP(strings.Trim(host, "[]"))
-	return ip == nil || !ip.IsLoopback()
 }
 
 func importRules(rules []importRuleJSON, outPath string) error {

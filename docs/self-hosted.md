@@ -70,6 +70,10 @@ The reference deployment enables:
 - per-caller rate limits
 - per-owner expert-session caps
 
+Apply the same rule to `arbiter-runtime`: protect `--grpc` with `--auth-token` / `--auth-token-file`, and use `--tls-cert`, `--tls-key`, and optionally `--tls-client-ca` when the runtime control RPC leaves localhost.
+
+If `arbiter-runtime` talks to a remote capability plugin, make that transport explicit too: prefer `grpcs://...` plus `--capability-token`, `--capability-ca-file`, and `--capability-server-name` over ambient network trust.
+
 ## Container defaults
 
 [`deploy/Dockerfile`](../deploy/Dockerfile) now defaults to:

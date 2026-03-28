@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
@@ -95,5 +96,18 @@ func TestProtoRuntimeCapabilities(t *testing.T) {
 	}
 	if len(resp.GetPlugins()) != 1 || resp.GetPlugins()[0].GetName() != "ops-plugin" {
 		t.Fatalf("unexpected proto plugins: %+v", resp.GetPlugins())
+	}
+}
+
+func TestDialCapabilityRuntimeRejectsConflictingTransportHints(t *testing.T) {
+	_, _, _, _, err := dialCapabilityRuntime(capabilityDialConfig{
+		target:        "grpcs://plugin.internal:7443",
+		forceInsecure: true,
+	})
+	if err == nil {
+		t.Fatal("expected conflicting transport hints to fail")
+	}
+	if !strings.Contains(err.Error(), "plaintext transport") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

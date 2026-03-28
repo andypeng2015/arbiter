@@ -10,12 +10,18 @@
 - **Explicit worker-runtime boundary** — sink handlers no longer implicitly count as worker runtimes. Workers stay typed capabilities, so a worker kind must be explicitly registered on the worker-runtime surface before a bundle can run.
 - **Unified runtime capability status** — the workflow runner now exposes one inspectable capability surface across sources, sinks, and worker runtimes, tagged by owner (`core`, `host`, or `plugin`) instead of only dumping raw plugin manifests.
 - **Runtime gRPC introspection** — `arbiter-runtime` can now serve `RuntimeService.GetRuntimeCapabilities`, and the CLI plus Node/Python/Rust SDKs expose that same unified capability surface without scraping HTTP `/status`.
+- **Unified transport hardening** — `arbiter-runtime --grpc` now uses the same bearer-token and TLS/mTLS hardening model as `arbiter serve`, instead of exposing a separate plaintext-only control surface.
+- **Explicit plugin transport** — capability-plugin dialing now uses the same target grammar as the rest of Arbiter (`grpc://`, `grpcs://`, `http://`, `https://`, or bare `host:port`) plus explicit token, CA, server-name, and plaintext flags.
 
 ### SDKs
 
 - **SDK surface parity** — the shipped Node, Python, and Rust clients now track the current gRPC control-plane surface instead of lagging behind it. Strategy evaluation, strategy-candidate override mutation, structured `TraceStep` fields, and explicit `kill_switch_state` now flow through the vendored SDK contracts as well.
 - **Capability-service mirrors** — the Node, Python, and Rust SDK trees now mirror the runtime capability proto as well, so embedders can implement source/sink/worker plugins in those languages instead of being limited to Go interfaces.
 - **Capability server helpers** — Node and Python now ship `CapabilityServer` helpers, and Rust ships `CapabilityPlugin` plus handler traits, so SDK authors can register source/sink/worker behavior without hand-writing raw gRPC service plumbing.
+
+### Docs
+
+- **Stronger authoring split guidance** — the README now gives a firmer opinion on `.arb` file shape, split triggers, import direction, and colocating `.test.arb` files so bundles stay understandable as they grow.
 
 ## v1.4.0
 
