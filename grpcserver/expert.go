@@ -8,6 +8,7 @@ import (
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/expert"
+	"github.com/odvcencio/arbiter/govern"
 	"github.com/odvcencio/arbiter/observability"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -332,6 +333,7 @@ func auditExpertDecision(sessionID string, result expert.Result) *audit.ExpertDe
 			Params:  activation.Params,
 			Changed: activation.Changed,
 			Detail:  activation.Detail,
+			Trace:   append([]govern.TraceStep(nil), activation.Trace...),
 		})
 	}
 	return decision

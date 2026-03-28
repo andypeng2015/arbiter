@@ -414,6 +414,9 @@ func TestFlagExplainKillSwitch(t *testing.T) {
 			if !step.Result {
 				t.Error("kill_switch step should be true")
 			}
+			if step.Phase != govern.TracePhaseGovernance || step.Scope != govern.TraceScopeFlag || step.Subject != "dark_mode" || step.Kind != govern.TraceKindKillSwitch {
+				t.Fatalf("unexpected kill_switch trace semantics: %#v", step)
+			}
 		}
 	}
 	if !foundKS {

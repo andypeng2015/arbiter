@@ -432,7 +432,7 @@ func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *go
 	}()
 
 	if rc.HasCycle(def.Key) {
-		trace.Append("cycle detection", false,
+		trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeFlag, def.Key, govern.TraceKindCycle, def.Key, "cycle detection", false,
 			fmt.Sprintf("prerequisite cycle detected involving %s", def.Key))
 		return result
 	}
@@ -440,7 +440,7 @@ func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *go
 	rc.Enter(def.Key)
 	defer rc.Leave(def.Key)
 
-	if f.effectiveFlagKillSwitch(def, bundleID, view).Record(trace, "kill_switch") {
+	if f.effectiveFlagKillSwitch(def, bundleID, view).RecordScoped(trace, govern.TraceScopeFlag, def.Key, "kill_switch") {
 		return result
 	}
 
@@ -449,7 +449,7 @@ func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *go
 	}
 
 	for i, rule := range def.Rules {
-		if !f.ruleMatches(def.Key, i, rule, rc, trace, bundleID, view) {
+		if !f.ruleMatches(def.Key, i, rule, rc, trace) {
 			continue
 		}
 		if !f.rolloutAllows(def.Key, i, rule, rc, trace, bundleID, view) {
@@ -469,7 +469,7 @@ func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *go
 func (f *Flags) prerequisitesMet(def *FlagDef, rc *govern.RequestCache, trace *govern.Trace, bundleID string, view overrides.View) bool {
 	for _, prereq := range def.Prerequisites {
 		passed := f.prerequisitePassed(prereq, rc, bundleID, view)
-		trace.Append("requires "+prereq, passed, fmt.Sprintf("%s -> %v", prereq, passed))
+		trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeFlag, def.Key, govern.TraceKindRequires, prereq, "", passed, fmt.Sprintf("%s -> %v", prereq, passed))
 		if !passed {
 			return false
 		}
@@ -493,37 +493,25 @@ func (f *Flags) prerequisitePassed(name string, rc *govern.RequestCache, bundleI
 	return prereqVariant != prereqDef.Default
 }
 
-func (f *Flags) ruleMatches(flagKey string, ruleIndex int, rule FlagRule, rc *govern.RequestCache, trace *govern.Trace, bundleID string, view overrides.View) bool {
-	matched, detail := f.ruleMatchDetail(rule, rc)
-	checkName := "segment " + rule.SegmentName
-	if rule.SegmentName == "" {
-		checkName = "inline condition"
-	}
-	if spec := f.effectiveRuleRollout(flagKey, ruleIndex, rule, bundleID, view); spec != nil {
-		checkName += " " + spec.CheckLabel()
-	}
-	trace.Append(checkName, matched, detail)
-	return matched
-}
-
-func (f *Flags) ruleMatchDetail(rule FlagRule, rc *govern.RequestCache) (bool, string) {
-	if rule.SegmentName != "" && rule.CompiledInline != nil {
-		// Segment + inline combo: both must match
-		segOk, segDetail := rc.EvalSegment(rule.SegmentName)
-		if !segOk {
-			return false, segDetail
-		}
-		inlineOk := rule.CompiledInline.Eval(rc.NestedContext())
-		return inlineOk, fmt.Sprintf("segment %s (%s) and %s -> %v", rule.SegmentName, segDetail, rule.InlineExpr, inlineOk)
-	}
+func (f *Flags) ruleMatches(flagKey string, ruleIndex int, rule FlagRule, rc *govern.RequestCache, trace *govern.Trace) bool {
+	subject := flagRuleSubject(flagKey, ruleIndex)
 	if rule.SegmentName != "" {
-		return rc.EvalSegment(rule.SegmentName)
+		segOK, detail := rc.EvalSegment(rule.SegmentName)
+		trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeFlagRule, subject, govern.TraceKindSegment, rule.SegmentName, "", segOK, detail)
+		if !segOK {
+			return false
+		}
 	}
 	if rule.CompiledInline != nil {
 		matched := rule.CompiledInline.Eval(rc.NestedContext())
-		return matched, fmt.Sprintf("%s -> %v", rule.InlineExpr, matched)
+		trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeFlagRule, subject, govern.TraceKindCondition, "", "inline condition", matched, fmt.Sprintf("%s -> %v", rule.InlineExpr, matched))
+		return matched
 	}
-	return false, "no segment or inline condition"
+	if rule.SegmentName == "" {
+		trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeFlagRule, subject, govern.TraceKindCondition, "", "inline condition", false, "no segment or inline condition")
+		return false
+	}
+	return true
 }
 
 func (f *Flags) rolloutAllows(flagKey string, ruleIndex int, rule FlagRule, rc *govern.RequestCache, trace *govern.Trace, bundleID string, view overrides.View) bool {
@@ -532,7 +520,7 @@ func (f *Flags) rolloutAllows(flagKey string, ruleIndex int, rule FlagRule, rc *
 		return true
 	}
 	decision := govern.DecidePercentRollout(*spec, rc.Context())
-	trace.Append(spec.CheckLabel(), decision.Allowed, decision.Detail())
+	trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeFlagRule, flagRuleSubject(flagKey, ruleIndex), govern.TraceKindRollout, spec.Namespace, spec.CheckLabel(), decision.Allowed, decision.Detail())
 	return decision.Allowed
 }
 
@@ -548,9 +536,15 @@ func (f *Flags) assignVariant(flagKey string, ruleIndex int, rule FlagRule, rc *
 	if namespace == "" {
 		namespace = govern.AutoRolloutNamespace(bundleID, fmt.Sprintf("flag:%s:rule:%d:split", flagKey, ruleIndex))
 	}
+	subjectKey := flagRuleSubject(flagKey, ruleIndex)
 	subjectValue, ok := govern.RolloutSubject(rc.Context(), subject)
 	if !ok {
-		trace.Append(
+		trace.AppendScoped(
+			govern.TracePhaseEffect,
+			govern.TraceScopeFlagRule,
+			subjectKey,
+			govern.TraceKindSplit,
+			namespace,
 			fmt.Sprintf(`split by %s namespace %q`, subject, namespace),
 			false,
 			fmt.Sprintf("subject_key=%s missing, resolution=%d", subject, govern.RolloutResolution),
@@ -574,7 +568,12 @@ func (f *Flags) assignVariant(flagKey string, ruleIndex int, rule FlagRule, rc *
 		}
 		start += band.WeightBps
 	}
-	trace.Append(
+	trace.AppendScoped(
+		govern.TracePhaseEffect,
+		govern.TraceScopeFlagRule,
+		subjectKey,
+		govern.TraceKindSplit,
+		assigned,
 		fmt.Sprintf(`split by %s namespace %q`, subject, namespace),
 		true,
 		fmt.Sprintf(
@@ -665,17 +664,17 @@ func buildReason(def *FlagDef, variant string, trace []TraceStep) string {
 	if variant == def.Default {
 		killSwitchDisabled := ""
 		for _, step := range trace {
-			if step.Check == "kill_switch" && step.Result {
+			if step.Kind == govern.TraceKindKillSwitch && step.Result {
 				return "kill-switched"
 			}
-			if step.Check == "kill_switch" && !step.Result && killSwitchDisabled == "" {
+			if step.Kind == govern.TraceKindKillSwitch && !step.Result && killSwitchDisabled == "" {
 				killSwitchDisabled = step.Detail
 			}
-			if step.Check == "cycle detection" && !step.Result {
+			if step.Kind == govern.TraceKindCycle && !step.Result {
 				return "prerequisite cycle detected"
 			}
-			if strings.HasPrefix(step.Check, "requires ") && !step.Result {
-				return fmt.Sprintf("prerequisite %s not met", strings.TrimPrefix(step.Check, "requires "))
+			if step.Kind == govern.TraceKindRequires && !step.Result {
+				return fmt.Sprintf("prerequisite %s not met", step.Target)
 			}
 		}
 		if killSwitchDisabled != "" {
@@ -684,15 +683,19 @@ func buildReason(def *FlagDef, variant string, trace []TraceStep) string {
 		return "no rules matched"
 	}
 	for _, step := range trace {
-		if strings.HasPrefix(step.Check, "split by ") && step.Result {
+		if step.Kind == govern.TraceKindSplit && step.Result {
 			return "assigned by split"
 		}
-		if strings.HasPrefix(step.Check, "segment ") && step.Result {
-			return fmt.Sprintf("matched %s", step.Check)
+		if step.Kind == govern.TraceKindSegment && step.Result {
+			return fmt.Sprintf("matched segment %s", step.Target)
 		}
-		if step.Check == "inline condition" && step.Result {
+		if step.Kind == govern.TraceKindCondition && step.Result {
 			return "matched inline condition"
 		}
 	}
 	return fmt.Sprintf("variant: %s", variant)
+}
+
+func flagRuleSubject(flagKey string, ruleIndex int) string {
+	return fmt.Sprintf("%s[%d]", flagKey, ruleIndex)
 }

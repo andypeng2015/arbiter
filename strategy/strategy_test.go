@@ -155,14 +155,22 @@ strategy CheckoutRouting returns CheckoutPath {
 	}
 	want := []govern.TraceStep{
 		{
-			Check:  "strategy:CheckoutRouting/Disabled:kill_switch",
-			Result: true,
-			Detail: "kill_switch declared on",
+			Check:   "strategy:CheckoutRouting/Disabled:kill_switch",
+			Result:  true,
+			Detail:  "kill_switch declared on",
+			Phase:   govern.TracePhaseGovernance,
+			Scope:   govern.TraceScopeStrategyCandidate,
+			Subject: "CheckoutRouting/Disabled",
+			Kind:    govern.TraceKindKillSwitch,
 		},
 		{
-			Check:  "strategy:CheckoutRouting/Stable:fallback",
-			Result: true,
-			Detail: "else arm selected",
+			Check:   "strategy:CheckoutRouting/Stable:fallback",
+			Result:  true,
+			Detail:  "else arm selected",
+			Phase:   govern.TracePhaseMatch,
+			Scope:   govern.TraceScopeStrategyCandidate,
+			Subject: "CheckoutRouting/Stable",
+			Kind:    govern.TraceKindFallback,
 		},
 	}
 	if !reflect.DeepEqual(result.Trace.Steps, want) {
@@ -201,14 +209,22 @@ strategy CheckoutRouting returns CheckoutPath {
 	}
 	want := []govern.TraceStep{
 		{
-			Check:  "strategy:CheckoutRouting/Enabled:kill_switch",
-			Result: false,
-			Detail: "kill_switch declared off",
+			Check:   "strategy:CheckoutRouting/Enabled:kill_switch",
+			Result:  false,
+			Detail:  "kill_switch declared off",
+			Phase:   govern.TracePhaseGovernance,
+			Scope:   govern.TraceScopeStrategyCandidate,
+			Subject: "CheckoutRouting/Enabled",
+			Kind:    govern.TraceKindKillSwitch,
 		},
 		{
-			Check:  "strategy:CheckoutRouting/Enabled:condition",
-			Result: true,
-			Detail: "user.country == \"US\"",
+			Check:   "strategy:CheckoutRouting/Enabled:condition",
+			Result:  true,
+			Detail:  "user.country == \"US\"",
+			Phase:   govern.TracePhaseMatch,
+			Scope:   govern.TraceScopeStrategyCandidate,
+			Subject: "CheckoutRouting/Enabled",
+			Kind:    govern.TraceKindCondition,
 		},
 	}
 	if !reflect.DeepEqual(result.Trace.Steps, want) {
@@ -282,14 +298,22 @@ strategy CheckoutRouting returns CheckoutPath {
 	}
 	want := []govern.TraceStep{
 		{
-			Check:  "strategy:CheckoutRouting/Domestic:condition",
-			Result: false,
-			Detail: `user.country == "US"`,
+			Check:   "strategy:CheckoutRouting/Domestic:condition",
+			Result:  false,
+			Detail:  `user.country == "US"`,
+			Phase:   govern.TracePhaseMatch,
+			Scope:   govern.TraceScopeStrategyCandidate,
+			Subject: "CheckoutRouting/Domestic",
+			Kind:    govern.TraceKindCondition,
 		},
 		{
-			Check:  "strategy:CheckoutRouting/Global:fallback",
-			Result: true,
-			Detail: "else arm selected",
+			Check:   "strategy:CheckoutRouting/Global:fallback",
+			Result:  true,
+			Detail:  "else arm selected",
+			Phase:   govern.TracePhaseMatch,
+			Scope:   govern.TraceScopeStrategyCandidate,
+			Subject: "CheckoutRouting/Global",
+			Kind:    govern.TraceKindFallback,
 		},
 	}
 	if !reflect.DeepEqual(result.Trace.Steps, want) {

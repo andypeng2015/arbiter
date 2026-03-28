@@ -11,6 +11,7 @@ import (
 	arbiter "github.com/odvcencio/arbiter"
 	dec "github.com/odvcencio/arbiter/decimal"
 	"github.com/odvcencio/arbiter/expert"
+	"github.com/odvcencio/arbiter/govern"
 	"github.com/odvcencio/arbiter/ir"
 )
 
@@ -429,6 +430,12 @@ expert rule DisabledSeed {
 	}
 	if result.Facts[0].Key != "allowed" {
 		t.Fatalf("unexpected fact: %+v", result.Facts[0])
+	}
+	if len(result.Activations) != 1 || len(result.Activations[0].Trace) < 2 {
+		t.Fatalf("expected activation trace on expert result, got %+v", result.Activations)
+	}
+	if step := result.Activations[0].Trace[0]; step.Scope != govern.TraceScopeExpertRule || step.Subject != "DisabledSeed" || step.Kind != govern.TraceKindKillSwitch {
+		t.Fatalf("unexpected expert kill_switch trace semantics: %#v", step)
 	}
 }
 

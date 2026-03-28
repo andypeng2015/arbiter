@@ -33,13 +33,14 @@ type Outcome struct {
 
 // Activation records one expert-rule firing attempt.
 type Activation struct {
-	Round   int            `json:"round"`
-	Rule    string         `json:"rule"`
-	Kind    ActionKind     `json:"kind"`
-	Target  string         `json:"target"`
-	Params  map[string]any `json:"params,omitempty"`
-	Changed bool           `json:"changed"`
-	Detail  string         `json:"detail,omitempty"`
+	Round   int                `json:"round"`
+	Rule    string             `json:"rule"`
+	Kind    ActionKind         `json:"kind"`
+	Target  string             `json:"target"`
+	Params  map[string]any     `json:"params,omitempty"`
+	Changed bool               `json:"changed"`
+	Detail  string             `json:"detail,omitempty"`
+	Trace   []govern.TraceStep `json:"trace,omitempty"`
 }
 
 // StopReason describes why a session stopped.
@@ -377,6 +378,7 @@ func (s *Session) Trace() []Activation {
 			Params:  cloneMap(activation.Params),
 			Changed: activation.Changed,
 			Detail:  activation.Detail,
+			Trace:   append([]govern.TraceStep(nil), activation.Trace...),
 		}
 	}
 	return out
@@ -421,7 +423,7 @@ type roundExecution struct {
 	ruleChanges     map[string]struct{}
 }
 
-func (s *Session) applyAssert(round int, rule Rule, match vm.MatchedRule) (bool, string, string, error) {
+func (s *Session) applyAssert(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep) (bool, string, string, error) {
 	keyValue, ok := match.Params["key"]
 	if !ok {
 		return false, "", "", fmt.Errorf("expert rule %s assert %s: missing key param", rule.Name, rule.Target)
@@ -461,11 +463,12 @@ func (s *Session) applyAssert(round int, rule Rule, match vm.MatchedRule) (bool,
 		Params:  cloneMap(match.Params),
 		Changed: changed,
 		Detail:  detail,
+		Trace:   append([]govern.TraceStep(nil), trace...),
 	})
 	return changed, detail, instance, nil
 }
 
-func (s *Session) applyEmit(round int, rule Rule, match vm.MatchedRule) (bool, error) {
+func (s *Session) applyEmit(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep) (bool, error) {
 	params, err := s.program.validateOutcomeFields(rule.Target, match.Params)
 	if err != nil {
 		return false, fmt.Errorf("expert rule %s emit %s: %w", rule.Name, rule.Target, err)
@@ -489,11 +492,12 @@ func (s *Session) applyEmit(round int, rule Rule, match vm.MatchedRule) (bool, e
 		Params:  cloneMap(match.Params),
 		Changed: !existed,
 		Detail:  fmt.Sprintf("emit %s", rule.Target),
+		Trace:   append([]govern.TraceStep(nil), trace...),
 	})
 	return !existed, nil
 }
 
-func (s *Session) applyRetract(round int, rule Rule, match vm.MatchedRule) (bool, string, string, error) {
+func (s *Session) applyRetract(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep) (bool, string, string, error) {
 	key, _, err := splitMutationParams(match.Params)
 	if err != nil {
 		return false, "", "", fmt.Errorf("expert rule %s retract %s: %w", rule.Name, rule.Target, err)
@@ -515,11 +519,12 @@ func (s *Session) applyRetract(round int, rule Rule, match vm.MatchedRule) (bool
 		Params:  map[string]any{"key": key},
 		Changed: changed,
 		Detail:  detail,
+		Trace:   append([]govern.TraceStep(nil), trace...),
 	})
 	return changed, detail, instance, nil
 }
 
-func (s *Session) applyModify(round int, rule Rule, match vm.MatchedRule) (bool, string, string, error) {
+func (s *Session) applyModify(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep) (bool, string, string, error) {
 	key, setFields, err := splitMutationParams(match.Params)
 	if err != nil {
 		return false, "", "", fmt.Errorf("expert rule %s modify %s: %w", rule.Name, rule.Target, err)
@@ -549,6 +554,7 @@ func (s *Session) applyModify(round int, rule Rule, match vm.MatchedRule) (bool,
 		Params:  params,
 		Changed: changed,
 		Detail:  detail,
+		Trace:   append([]govern.TraceStep(nil), trace...),
 	})
 	return changed, detail, instance, nil
 }
@@ -1104,7 +1110,7 @@ func (s *Session) removeModification(record modifyRecord) {
 	}
 }
 
-func (s *Session) runRound(firstPass bool, dirtyFacts map[string]struct{}, dirtySources map[string]map[string]struct{}) ([]vm.MatchedRule, map[string]struct{}, map[string]struct{}, bool, bool, error) {
+func (s *Session) runRound(firstPass bool, dirtyFacts map[string]struct{}, dirtySources map[string]map[string]struct{}) ([]vm.MatchedRule, map[string][]govern.TraceStep, map[string]struct{}, map[string]struct{}, bool, bool, error) {
 	s.refreshContextView(firstPass, dirtyFacts)
 	state := s.newRoundState()
 
@@ -1122,11 +1128,11 @@ func (s *Session) runRound(firstPass bool, dirtyFacts map[string]struct{}, dirty
 
 		dc, ruleRC, err := s.ruleEvalInputs(rule, state.current, state.rc)
 		if err != nil {
-			return nil, nil, nil, false, false, err
+			return nil, nil, nil, nil, false, false, err
 		}
-		result, pending, matches, err := s.evaluateRuleMatches(rule, header, dc, ruleRC)
+		result, pending, matches, ruleTrace, err := s.evaluateRuleMatches(rule, header, dc, ruleRC)
 		if err != nil {
-			return nil, nil, nil, false, false, err
+			return nil, nil, nil, nil, false, false, err
 		}
 		state.temporalPending = state.temporalPending || pending
 		prev := state.current[rule.Name]
@@ -1135,11 +1141,16 @@ func (s *Session) runRound(firstPass bool, dirtyFacts map[string]struct{}, dirty
 			state.ruleChanges[rule.Name] = struct{}{}
 		}
 		state.rc.RecordRuleResult(rule.Name, result)
+		if len(ruleTrace) > 0 {
+			state.traces[rule.Name] = append([]govern.TraceStep(nil), ruleTrace...)
+		} else {
+			delete(state.traces, rule.Name)
+		}
 		state.matched = append(state.matched, matches...)
 	}
 
 	s.ruleResults = state.current
-	return state.matched, state.ruleChanges, state.evaluated, state.stableDeferred, state.temporalPending, nil
+	return state.matched, state.traces, state.ruleChanges, state.evaluated, state.stableDeferred, state.temporalPending, nil
 }
 
 type roundState struct {
@@ -1147,6 +1158,7 @@ type roundState struct {
 	current          map[string]bool
 	ruleChanges      map[string]struct{}
 	matched          []vm.MatchedRule
+	traces           map[string][]govern.TraceStep
 	evaluated        map[string]struct{}
 	stableDeferred   bool
 	forceStableRound bool
@@ -1165,6 +1177,7 @@ func (s *Session) newRoundState() roundState {
 		current:          current,
 		ruleChanges:      make(map[string]struct{}),
 		matched:          make([]vm.MatchedRule, 0),
+		traces:           make(map[string][]govern.TraceStep),
 		evaluated:        make(map[string]struct{}),
 		stableDeferred:   s.stablePending && s.lastRoundMutations > 0,
 		forceStableRound: s.stablePending && s.rounds > 1 && s.lastRoundMutations == 0,
@@ -1201,15 +1214,15 @@ func (s *Session) ruleEvalInputs(rule Rule, current map[string]bool, rc *govern.
 	return tempDC, ruleRC, nil
 }
 
-func (s *Session) evaluateRuleMatches(rule Rule, header compiler.RuleHeader, dc vm.DataContext, rc *govern.RequestCache) (bool, bool, []vm.MatchedRule, error) {
-	result, pending, mr, err := s.evalRule(rule, header, s.evaluator, dc, rc)
+func (s *Session) evaluateRuleMatches(rule Rule, header compiler.RuleHeader, dc vm.DataContext, rc *govern.RequestCache) (bool, bool, []vm.MatchedRule, []govern.TraceStep, error) {
+	result, pending, mr, ruleTrace, err := s.evalRule(rule, header, s.evaluator, dc, rc)
 	if err != nil || !result {
-		return result, pending, nil, err
+		return result, pending, nil, ruleTrace, err
 	}
 	if rule.PerFact {
-		return true, pending, s.evalPerFact(rule, header, s.evaluator, dc, rc), nil
+		return true, pending, s.evalPerFact(rule, header, s.evaluator, dc, rc), ruleTrace, nil
 	}
-	return true, pending, []vm.MatchedRule{mr}, nil
+	return true, pending, []vm.MatchedRule{mr}, ruleTrace, nil
 }
 
 // evalPerFact iterates all facts in the rule's first fact dependency and
@@ -1235,7 +1248,7 @@ func (s *Session) evalPerFact(rule Rule, header compiler.RuleHeader, evaluator *
 		// Build a temporary context with this single fact as the only fact of its type
 		tempCtx := s.buildSingleFactContext(factType, fact)
 		tempDC := vm.DataFromMap(tempCtx, s.pool)
-		ok, _, mr, err := s.evalRule(rule, header, evaluator, tempDC, rc)
+		ok, _, mr, _, err := s.evalRule(rule, header, evaluator, tempDC, rc)
 		if err != nil || !ok {
 			continue
 		}
@@ -1267,55 +1280,63 @@ func (s *Session) buildSingleFactContext(factType string, fact Fact) map[string]
 	return ctx
 }
 
-func (s *Session) evalRule(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, dc vm.DataContext, rc *govern.RequestCache) (bool, bool, vm.MatchedRule, error) {
-	if !s.ruleAllowedByGovernance(rule, header, rc) {
-		return false, false, vm.MatchedRule{}, nil
+func (s *Session) evalRule(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, dc vm.DataContext, rc *govern.RequestCache) (bool, bool, vm.MatchedRule, []govern.TraceStep, error) {
+	trace := &govern.Trace{}
+	if !s.ruleAllowedByGovernance(rule, header, rc, trace) {
+		return false, false, vm.MatchedRule{}, trace.Steps, nil
 	}
-	if !ruleMatchesSegment(header, evaluator, rc) {
-		return false, false, vm.MatchedRule{}, nil
+	if !ruleMatchesSegment(rule, header, evaluator, rc, trace) {
+		return false, false, vm.MatchedRule{}, trace.Steps, nil
 	}
-	condOK, pending, err := s.ruleConditionMatches(rule, header, evaluator, dc)
+	condOK, pending, err := s.ruleConditionMatches(rule, header, evaluator, dc, trace)
 	if err != nil {
-		return false, false, vm.MatchedRule{}, err
+		return false, false, vm.MatchedRule{}, trace.Steps, err
 	}
 	if !condOK {
-		return false, pending, vm.MatchedRule{}, nil
+		return false, pending, vm.MatchedRule{}, trace.Steps, nil
 	}
-	if !s.ruleAllowedByRollout(rule, header, rc) {
-		return false, false, vm.MatchedRule{}, nil
+	if !s.ruleAllowedByRollout(rule, header, rc, trace) {
+		return false, false, vm.MatchedRule{}, trace.Steps, nil
 	}
 	match, err := s.buildRuleMatch(rule, header, evaluator, dc)
 	if err != nil {
-		return false, false, vm.MatchedRule{}, err
+		return false, false, vm.MatchedRule{}, trace.Steps, err
 	}
-	return true, false, match, nil
+	return true, false, match, trace.Steps, nil
 }
 
-func (s *Session) ruleAllowedByGovernance(rule Rule, header compiler.RuleHeader, rc *govern.RequestCache) bool {
-	if effectiveRuleKillSwitch(header, rule, s.opts.BundleID, s.opts.Overrides).Enabled {
+func (s *Session) ruleAllowedByGovernance(rule Rule, header compiler.RuleHeader, rc *govern.RequestCache, trace *govern.Trace) bool {
+	if effectiveRuleKillSwitch(header, rule, s.opts.BundleID, s.opts.Overrides).RecordScoped(trace, govern.TraceScopeExpertRule, rule.Name, "kill_switch") {
 		return false
 	}
-	if !rc.CheckPrerequisites(rule.Prereqs, nil) {
+	if !rc.CheckPrerequisitesFor(govern.TraceScopeExpertRule, rule.Name, rule.Prereqs, trace) {
 		return false
 	}
-	return rc.CheckExclusions(rule.Excludes, nil)
+	return rc.CheckExclusionsFor(govern.TraceScopeExpertRule, rule.Name, rule.Excludes, trace)
 }
 
-func ruleMatchesSegment(header compiler.RuleHeader, evaluator *vm.Evaluator, rc *govern.RequestCache) bool {
+func ruleMatchesSegment(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, rc *govern.RequestCache, trace *govern.Trace) bool {
 	if !header.HasSegment {
 		return true
 	}
 	segName := evaluator.String(header.SegmentNameIdx)
 	segOK, _ := rc.EvalSegment(segName)
+	trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeExpertRule, rule.Name, govern.TraceKindSegment, segName, "", segOK, fmt.Sprintf("segment %s -> %v", segName, segOK))
 	return segOK
 }
 
-func (s *Session) ruleConditionMatches(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, dc vm.DataContext) (bool, bool, error) {
+func (s *Session) ruleConditionMatches(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, dc vm.DataContext, trace *govern.Trace) (bool, bool, error) {
 	condOK, err := evaluator.EvalRuleCondition(header, dc)
 	if err != nil {
 		return false, false, fmt.Errorf("expert rule %s: %w", rule.Name, err)
 	}
-	return s.applyTemporalCondition(rule, condOK), s.ruleHasTemporalPending(rule), nil
+	condOK = s.applyTemporalCondition(rule, condOK)
+	detail := rule.Condition
+	if detail == "" {
+		detail = "expert rule condition"
+	}
+	trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeExpertRule, rule.Name, govern.TraceKindCondition, "", "", condOK, detail)
+	return condOK, s.ruleHasTemporalPending(rule), nil
 }
 
 func (s *Session) applyTemporalCondition(rule Rule, raw bool) bool {
@@ -1427,12 +1448,14 @@ func (s *Session) hasTemporalPending() bool {
 	return false
 }
 
-func (s *Session) ruleAllowedByRollout(rule Rule, header compiler.RuleHeader, rc *govern.RequestCache) bool {
+func (s *Session) ruleAllowedByRollout(rule Rule, header compiler.RuleHeader, rc *govern.RequestCache, trace *govern.Trace) bool {
 	spec := effectiveRuleRollout(header, rule, s.program.ruleset, s.opts.BundleID, s.opts.Overrides)
 	if spec == nil {
 		return true
 	}
-	return govern.RolloutAllows(*spec, rc.Context())
+	decision := govern.DecidePercentRollout(*spec, rc.Context())
+	trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeExpertRule, rule.Name, govern.TraceKindRollout, spec.Namespace, spec.CheckLabel(), decision.Allowed, decision.Detail())
+	return decision.Allowed
 }
 
 func (s *Session) buildRuleMatch(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, dc vm.DataContext) (vm.MatchedRule, error) {
@@ -1813,6 +1836,7 @@ func cloneActivations(src []Activation, start int) []Activation {
 			Params:  cloneMap(activation.Params),
 			Changed: activation.Changed,
 			Detail:  activation.Detail,
+			Trace:   append([]govern.TraceStep(nil), activation.Trace...),
 		}
 	}
 	return out

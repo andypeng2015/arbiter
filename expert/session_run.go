@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/odvcencio/arbiter/govern"
 	"github.com/odvcencio/arbiter/vm"
 )
 
@@ -105,12 +106,12 @@ func (s *Session) executeRound(ctx context.Context, round int, firstPass bool, f
 	dirtySources := s.copyDirtySources()
 	s.clearDirtyFacts()
 
-	matched, ruleChanges, evaluated, stableDeferred, temporalPending, err := s.runRound(firstPass, dirtyFacts, dirtySources)
+	matched, traces, ruleChanges, evaluated, stableDeferred, temporalPending, err := s.runRound(firstPass, dirtyFacts, dirtySources)
 	if err != nil {
 		return roundExecution{}, err
 	}
 
-	mutated, active, stopped, err := s.applyRoundMatches(ctx, round, matched, firedGroups)
+	mutated, active, stopped, err := s.applyRoundMatches(ctx, round, matched, traces, firedGroups)
 	if err != nil {
 		return roundExecution{}, err
 	}
@@ -148,7 +149,7 @@ func (s *Session) shouldStopAfterRound(result roundExecution, forceStableRound b
 	return false
 }
 
-func (s *Session) applyRoundMatches(ctx context.Context, round int, matched []vm.MatchedRule, firedGroups map[string]struct{}) (bool, activeRoundMutations, bool, error) {
+func (s *Session) applyRoundMatches(ctx context.Context, round int, matched []vm.MatchedRule, traces map[string][]govern.TraceStep, firedGroups map[string]struct{}) (bool, activeRoundMutations, bool, error) {
 	active := activeRoundMutations{
 		asserts:  make(map[string]struct{}),
 		retracts: make(map[string]struct{}),
@@ -172,7 +173,7 @@ func (s *Session) applyRoundMatches(ctx context.Context, round int, matched []vm
 			continue
 		}
 
-		changed, err := s.applyMatchedRule(round, rule, item.match, active)
+		changed, err := s.applyMatchedRule(round, rule, item.match, traces[rule.Name], active)
 		if err != nil {
 			return false, active, false, err
 		}
@@ -225,10 +226,10 @@ func (s *Session) groupAlreadyFired(rule Rule, firedGroups map[string]struct{}) 
 	return blocked
 }
 
-func (s *Session) applyMatchedRule(round int, rule Rule, match vm.MatchedRule, active activeRoundMutations) (bool, error) {
+func (s *Session) applyMatchedRule(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep, active activeRoundMutations) (bool, error) {
 	switch rule.Kind {
 	case ActionAssert:
-		changed, _, instance, err := s.applyAssert(round, rule, match)
+		changed, _, instance, err := s.applyAssert(round, rule, match, trace)
 		if err != nil {
 			return false, err
 		}
@@ -236,13 +237,13 @@ func (s *Session) applyMatchedRule(round int, rule Rule, match vm.MatchedRule, a
 		active.asserts[instance] = struct{}{}
 		return changed, nil
 	case ActionEmit:
-		_, err := s.applyEmit(round, rule, match)
+		_, err := s.applyEmit(round, rule, match, trace)
 		if err == nil {
 			s.recordRuleFire(rule)
 		}
 		return false, err
 	case ActionRetract:
-		changed, _, instance, err := s.applyRetract(round, rule, match)
+		changed, _, instance, err := s.applyRetract(round, rule, match, trace)
 		if err != nil {
 			return false, err
 		}
@@ -250,7 +251,7 @@ func (s *Session) applyMatchedRule(round int, rule Rule, match vm.MatchedRule, a
 		active.retracts[instance] = struct{}{}
 		return changed, nil
 	case ActionModify:
-		changed, _, instance, err := s.applyModify(round, rule, match)
+		changed, _, instance, err := s.applyModify(round, rule, match, trace)
 		if err != nil {
 			return false, err
 		}

@@ -93,16 +93,17 @@ func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bund
 
 	for i, rule := range def.Ruleset.Rules {
 		candidate := def.Candidates[i]
+		subject := def.Name + "/" + candidate.Label
 		checkPrefix := "strategy:" + def.Name + "/" + candidate.Label + ":"
 		killSwitch, rollout := effectiveCandidateGovernance(bundleID, def.Name, candidate, view)
 
-		if killSwitch.Record(trace, checkPrefix+"kill_switch") {
+		if killSwitch.RecordScoped(trace, govern.TraceScopeStrategyCandidate, subject, checkPrefix+"kill_switch") {
 			continue
 		}
 
 		if candidate.Segment != "" {
 			ok, detail := rc.EvalSegment(candidate.Segment)
-			trace.Append(checkPrefix+"segment", ok, detail)
+			trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeStrategyCandidate, subject, govern.TraceKindSegment, candidate.Segment, checkPrefix+"segment", ok, detail)
 			if !ok {
 				continue
 			}
@@ -113,9 +114,9 @@ func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bund
 			return Result{}, fmt.Errorf("strategy %s candidate %s: %w", def.Name, candidate.Label, err)
 		}
 		if candidate.IsElse {
-			trace.Append(checkPrefix+"fallback", matched, "else arm selected")
+			trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeStrategyCandidate, subject, govern.TraceKindFallback, "", checkPrefix+"fallback", matched, "else arm selected")
 		} else {
-			trace.Append(checkPrefix+"condition", matched, candidate.Condition)
+			trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeStrategyCandidate, subject, govern.TraceKindCondition, "", checkPrefix+"condition", matched, candidate.Condition)
 		}
 		if !matched {
 			continue
@@ -123,7 +124,7 @@ func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bund
 
 		if rollout != nil {
 			decision := govern.DecidePercentRollout(*rollout, rc.Context())
-			trace.Append(checkPrefix+"rollout", decision.Allowed, decision.Detail())
+			trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeStrategyCandidate, subject, govern.TraceKindRollout, rollout.Namespace, checkPrefix+"rollout", decision.Allowed, decision.Detail())
 			if !decision.Allowed {
 				continue
 			}

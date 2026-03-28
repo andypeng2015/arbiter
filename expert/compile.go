@@ -30,6 +30,8 @@ type Rule struct {
 	Priority        int
 	Kind            ActionKind
 	Target          string
+	Segment         string
+	Condition       string
 	KillSwitch      ir.KillSwitchState
 	Prereqs         []string
 	Excludes        []string
@@ -196,6 +198,7 @@ func lowerExpertRule(program *ir.Program, expertRule *ir.ExpertRule, segmentDeps
 		Priority:   int(expertRule.Priority),
 		Kind:       ActionKind(expertRule.ActionKind),
 		Target:     expertRule.Target,
+		Segment:    expertRule.Segment,
 		KillSwitch: expertRule.KillSwitch,
 		Prereqs:    append([]string(nil), expertRule.Prereqs...),
 		Excludes:   append([]string(nil), expertRule.Excludes...),
@@ -203,6 +206,9 @@ func lowerExpertRule(program *ir.Program, expertRule *ir.ExpertRule, segmentDeps
 		Stable:     expertRule.Stable,
 		PerFact:    expertRule.PerFact,
 		Group:      expertRule.ActivationGroup,
+	}
+	if expertRule.HasCondition {
+		rule.Condition = ir.RenderExpr(program, expertRule.Condition)
 	}
 	if expertRule.PerFact && hasTemporalRule(expertRule) {
 		return Rule{}, ir.Rule{}, fmt.Errorf("expert rule %s: temporal operators are not supported on per_fact rules", rule.Name)

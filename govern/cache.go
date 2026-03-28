@@ -109,9 +109,15 @@ func (rc *RequestCache) PrerequisiteMet(name string) bool {
 
 // CheckPrerequisites verifies all prerequisites are met and records trace steps.
 func (rc *RequestCache) CheckPrerequisites(prereqs []string, trace *Trace) bool {
+	return rc.CheckPrerequisitesFor("", "", prereqs, trace)
+}
+
+// CheckPrerequisitesFor verifies all prerequisites are met and records trace
+// steps with a structured scope/subject.
+func (rc *RequestCache) CheckPrerequisitesFor(scope, subject string, prereqs []string, trace *Trace) bool {
 	for _, prereq := range prereqs {
 		ok := rc.PrerequisiteMet(prereq)
-		trace.Append("requires "+prereq, ok, fmt.Sprintf("%s -> %v", prereq, ok))
+		trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindRequires, prereq, "", ok, fmt.Sprintf("%s -> %v", prereq, ok))
 		if !ok {
 			return false
 		}
@@ -123,18 +129,24 @@ func (rc *RequestCache) CheckPrerequisites(prereqs []string, trace *Trace) bool 
 // exclusion matched. Also returns false if an excluded rule hasn't been
 // evaluated yet — we can't safely proceed without knowing.
 func (rc *RequestCache) CheckExclusions(excludes []string, trace *Trace) bool {
+	return rc.CheckExclusionsFor("", "", excludes, trace)
+}
+
+// CheckExclusionsFor verifies no excluded rules matched and records trace steps
+// with a structured scope/subject.
+func (rc *RequestCache) CheckExclusionsFor(scope, subject string, excludes []string, trace *Trace) bool {
 	if rc == nil {
 		return true
 	}
 	for _, excl := range excludes {
 		if _, evaluated := rc.ruleResults[excl]; !evaluated {
 			// Rule hasn't been evaluated yet — defer this rule until later
-			trace.Append("excludes "+excl, false, fmt.Sprintf("%s not yet evaluated", excl))
+			trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindExcludes, excl, "", false, fmt.Sprintf("%s not yet evaluated", excl))
 			return false
 		}
 		matched := rc.ruleResults[excl]
 		ok := !matched
-		trace.Append("excludes "+excl, ok, fmt.Sprintf("%s matched=%v", excl, matched))
+		trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindExcludes, excl, "", ok, fmt.Sprintf("%s matched=%v", excl, matched))
 		if !ok {
 			return false
 		}

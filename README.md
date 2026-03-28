@@ -401,7 +401,7 @@ Arbiters are always killable by default. There is no `kill_switch` keyword insid
 
 ### Explainability
 
-Every evaluation produces a full decision trace — stateless rules, flags, and expert sessions alike.
+Every evaluation produces an inspectable decision trace. Rules, flags, strategies, and expert sessions now share the same trace nouns: `phase`, `scope`, `subject`, `kind`, `check`, `result`, `detail`.
 
 ```go
 // Stateless rules
@@ -410,32 +410,51 @@ matched, trace, _ := arbiter.EvalGoverned(ruleset, dc, segments, ctx)
 // Flags
 eval := flags.Explain("checkout_v2", ctx)
 
+// Strategies
+result, _ := strategies.Evaluate("CheckoutRouting", ctx)
+
 // Expert inference
 result, _ := session.Run(ctx)
-result.Activations // every firing, every round, what changed
+result.Activations // every firing, every round, what changed, and why it was allowed
 ```
 
-Governed and flag traces use the same `check/result/detail` shape:
+Rules, flags, and strategies preserve the legacy `check/result/detail` shape for compatibility, but also carry structured semantics:
 
 ```json
 [
   {
     "check": "requires BasicRiskCheck",
+    "phase": "governance",
+    "scope": "rule",
+    "subject": "EnhancedRiskCheck",
+    "kind": "requires",
+    "target": "BasicRiskCheck",
     "result": true,
     "detail": "BasicRiskCheck -> true"
   },
   {
     "check": "segment high_risk",
+    "phase": "match",
+    "scope": "rule",
+    "subject": "EnhancedRiskCheck",
+    "kind": "segment",
+    "target": "high_risk",
     "result": true,
     "detail": "model.risk_score > 0.8 -> true"
   },
   {
-    "check": "rollout 20%",
+    "check": "rollout percent 20 by user.id namespace \"bundle:rule:EnhancedRiskCheck\"",
+    "phase": "governance",
+    "scope": "rule",
+    "subject": "EnhancedRiskCheck",
+    "kind": "rollout",
     "result": false,
-    "detail": "bucket(\"user_123\") = 57, threshold = 20"
+    "detail": "subject_key=user.id, subject=\"user_123\", namespace=\"bundle:rule:EnhancedRiskCheck\", bucket=5700, threshold=2000, resolution=10000"
   }
 ]
 ```
+
+Expert activations now carry the same trace structure per firing, so a session snapshot tells you both what mutated and which governance/match checks made that mutation eligible.
 
 ### Runtime Overrides
 

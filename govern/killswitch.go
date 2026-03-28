@@ -46,12 +46,19 @@ func ResolveKillSwitch(declared, declaredOn bool, override *bool) KillSwitchDeci
 // Record appends the effective kill-switch decision to the trace and reports
 // whether evaluation should be skipped.
 func (d KillSwitchDecision) Record(trace *Trace, check string) bool {
+	return d.RecordScoped(trace, "", "", check)
+}
+
+// RecordScoped appends the effective kill-switch decision to the trace with
+// structured scope/subject metadata and reports whether evaluation should be
+// skipped.
+func (d KillSwitchDecision) RecordScoped(trace *Trace, scope, subject, check string) bool {
 	if d.Enabled {
-		trace.Append(check, true, d.Detail)
+		trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindKillSwitch, "", check, true, d.Detail)
 		return true
 	}
 	if d.Explicit {
-		trace.Append(check, false, d.Detail)
+		trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindKillSwitch, "", check, false, d.Detail)
 	}
 	return false
 }

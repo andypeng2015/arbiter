@@ -159,10 +159,11 @@ func EvalGovernedWithOverrides(prog *Program, dc vm.DataContext, segments *gover
 		return nil, &govern.Trace{}, fmt.Errorf("nil ruleset")
 	}
 	evalOpts := applyEvalOptions(opts)
+	conditionSources := ruleConditionSources(prog)
 	if ec, ok := dc.(*evalContextWrapper); ok {
-		return evalGovernedWithPool(rs, ec.inner, ec.pool, segments, ctx, bundleID, view, evalOpts.tags)
+		return evalGovernedWithPool(rs, ec.inner, ec.pool, conditionSources, segments, ctx, bundleID, view, evalOpts.tags)
 	}
-	return evalGovernedWithPool(rs, dc, vm.NewStringPool(rs.Constants.Strings()), segments, ctx, bundleID, view, evalOpts.tags)
+	return evalGovernedWithPool(rs, dc, vm.NewStringPool(rs.Constants.Strings()), conditionSources, segments, ctx, bundleID, view, evalOpts.tags)
 }
 
 // evalContextWrapper wraps a DataContext with its StringPool.
@@ -236,7 +237,7 @@ func compileSegmentRuleset(program *ir.Program, segment *ir.Segment) (*compiler.
 	return compiler.CompileIR(synthetic)
 }
 
-func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *vm.StringPool, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View, tags []string) ([]vm.MatchedRule, *govern.Trace, error) {
+func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *vm.StringPool, conditionSources map[string]string, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View, tags []string) ([]vm.MatchedRule, *govern.Trace, error) {
 	if rs == nil {
 		return nil, &govern.Trace{}, fmt.Errorf("nil ruleset")
 	}
@@ -265,17 +266,17 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 		}
 
 		killSwitch := govern.ResolveKillSwitch(rule.KillSwitch.IsSet(), rule.KillSwitch.Enabled(), killSwitchOverride)
-		if killSwitch.Record(trace, "kill_switch") {
+		if killSwitch.RecordScoped(trace, govern.TraceScopeRule, ruleName, "kill_switch") {
 			rc.RecordRuleResult(ruleName, false)
 			continue
 		}
 
-		if !rc.CheckPrerequisites(resolvePrereqs(rs, rule, evaluator), trace) {
+		if !rc.CheckPrerequisitesFor(govern.TraceScopeRule, ruleName, resolvePrereqs(rs, rule, evaluator), trace) {
 			rc.RecordRuleResult(ruleName, false)
 			continue
 		}
 
-		if !rc.CheckExclusions(resolveExcludes(rs, rule, evaluator), trace) {
+		if !rc.CheckExclusionsFor(govern.TraceScopeRule, ruleName, resolveExcludes(rs, rule, evaluator), trace) {
 			rc.RecordRuleResult(ruleName, false)
 			continue
 		}
@@ -283,7 +284,7 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 		if rule.HasSegment {
 			segName := evaluator.String(rule.SegmentNameIdx)
 			segOK, detail := rc.EvalSegment(segName)
-			trace.Append("segment "+segName, segOK, detail)
+			trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeRule, ruleName, govern.TraceKindSegment, segName, "", segOK, detail)
 			if !segOK {
 				rc.RecordRuleResult(ruleName, false)
 				continue
@@ -294,6 +295,11 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 		if err != nil {
 			return nil, trace, fmt.Errorf("rule %s: %w", ruleName, err)
 		}
+		conditionDetail := conditionSources[ruleName]
+		if conditionDetail == "" {
+			conditionDetail = "compiled rule condition"
+		}
+		trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeRule, ruleName, govern.TraceKindCondition, "", "", condOK, conditionDetail)
 		if !condOK {
 			rc.RecordRuleResult(ruleName, false)
 			if evaluator.HasFallback(rule) {
@@ -301,6 +307,7 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 				if err != nil {
 					return nil, trace, fmt.Errorf("rule %s fallback %s: %w", ruleName, mr.Action, err)
 				}
+				trace.AppendScoped(govern.TracePhaseEffect, govern.TraceScopeRule, ruleName, govern.TraceKindFallback, "", "fallback", true, "otherwise arm selected")
 				matched = append(matched, mr)
 			}
 			continue
@@ -308,7 +315,7 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 
 		if spec := effectiveRuleRollout(rule, rs, ruleName, bundleID, rolloutOverride); spec != nil {
 			decision := govern.DecidePercentRollout(*spec, rc.Context())
-			trace.Append(spec.CheckLabel(), decision.Allowed, decision.Detail())
+			trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeRule, ruleName, govern.TraceKindRollout, spec.Namespace, spec.CheckLabel(), decision.Allowed, decision.Detail())
 			if !decision.Allowed {
 				rc.RecordRuleResult(ruleName, false)
 				continue
@@ -414,6 +421,20 @@ func uniqueEvalTags(values []string) []string {
 		}
 		seen[value] = struct{}{}
 		out = append(out, value)
+	}
+	return out
+}
+
+func ruleConditionSources(prog *Program) map[string]string {
+	if prog == nil || prog.IR == nil || len(prog.IR.Rules) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(prog.IR.Rules))
+	for _, rule := range prog.IR.Rules {
+		if !rule.HasCondition {
+			continue
+		}
+		out[rule.Name] = ir.RenderExpr(prog.IR, rule.Condition)
 	}
 	return out
 }

@@ -186,6 +186,9 @@ rule ExplicitlyEnabled {
 			if step.Detail != "kill_switch declared off" {
 				t.Fatalf("unexpected kill_switch detail: %#v", step)
 			}
+			if step.Phase != govern.TracePhaseGovernance || step.Scope != govern.TraceScopeRule || step.Subject != "ExplicitlyEnabled" || step.Kind != govern.TraceKindKillSwitch {
+				t.Fatalf("unexpected kill_switch semantics: %#v", step)
+			}
 		}
 	}
 	if !found {

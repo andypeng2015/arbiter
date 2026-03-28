@@ -65,13 +65,14 @@ type ExpertOutcome struct {
 
 // ExpertActivation captures one expert activation.
 type ExpertActivation struct {
-	Round   int            `json:"round"`
-	Rule    string         `json:"rule"`
-	Kind    string         `json:"kind"`
-	Target  string         `json:"target"`
-	Params  map[string]any `json:"params,omitempty"`
-	Changed bool           `json:"changed"`
-	Detail  string         `json:"detail,omitempty"`
+	Round   int                `json:"round"`
+	Rule    string             `json:"rule"`
+	Kind    string             `json:"kind"`
+	Target  string             `json:"target"`
+	Params  map[string]any     `json:"params,omitempty"`
+	Changed bool               `json:"changed"`
+	Detail  string             `json:"detail,omitempty"`
+	Trace   []govern.TraceStep `json:"trace,omitempty"`
 }
 
 // ExpertDecision captures the result of an expert session run.
