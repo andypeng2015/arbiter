@@ -22,6 +22,7 @@ type StringPool struct {
 	mu    sync.RWMutex
 	strs  []string
 	index map[string]uint16
+	err   error
 }
 
 func NewStringPool(strs []string) *StringPool {
@@ -29,14 +30,16 @@ func NewStringPool(strs []string) *StringPool {
 	// The caller may pass a shared slice (e.g. intern.Pool.Strings()).
 	owned := make([]string, len(strs))
 	copy(owned, strs)
+	var poolErr error
 	if len(owned) > maxStringPoolEntries {
-		panic(fmt.Sprintf("string pool overflow: maximum unique strings is %d", maxStringPoolEntries))
+		poolErr = fmt.Errorf("string pool overflow: maximum unique strings is %d", maxStringPoolEntries)
+		owned = owned[:maxStringPoolEntries]
 	}
 	idx := make(map[string]uint16, len(owned))
 	for i, s := range owned {
 		idx[s] = uint16(i)
 	}
-	return &StringPool{strs: owned, index: idx}
+	return &StringPool{strs: owned, index: idx, err: poolErr}
 }
 
 func (sp *StringPool) Get(idx uint16) string {
@@ -64,12 +67,25 @@ func (sp *StringPool) Intern(s string) uint16 {
 		return idx
 	}
 	if len(sp.strs) > maxStringPoolIndex {
-		panic(fmt.Sprintf("string pool overflow: maximum unique strings is %d", maxStringPoolEntries))
+		if sp.err == nil {
+			sp.err = fmt.Errorf("string pool overflow: maximum unique strings is %d", maxStringPoolEntries)
+		}
+		return 0
 	}
 	idx := uint16(len(sp.strs))
 	sp.strs = append(sp.strs, s)
 	sp.index[s] = idx
 	return idx
+}
+
+// Err reports any overflow detected while constructing or extending the pool.
+func (sp *StringPool) Err() error {
+	if sp == nil {
+		return nil
+	}
+	sp.mu.RLock()
+	defer sp.mu.RUnlock()
+	return sp.err
 }
 
 // DataContext provides variable lookup for the VM.

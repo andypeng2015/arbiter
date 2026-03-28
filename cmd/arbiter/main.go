@@ -18,8 +18,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -29,6 +32,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/odvcencio/arbiter"
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
@@ -45,6 +49,7 @@ import (
 	"github.com/odvcencio/arbiter/overrides"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -282,35 +287,146 @@ func runExplore(args []string) error {
 	return exploreCmd(path)
 }
 
+type serveConfig struct {
+	grpcAddr           string
+	auditFile          string
+	bundleFile         string
+	overridesFile      string
+	dataDir            string
+	logLevel           string
+	authTokens         []string
+	authTokenFile      string
+	tlsCertFile        string
+	tlsKeyFile         string
+	tlsClientCAFile    string
+	maxRecvBytes       int
+	maxSendBytes       int
+	sessionTTL         time.Duration
+	sessionMax         int
+	sessionMaxPerOwner int
+	rateLimitRPM       int
+	rateLimitBurst     int
+	ephemeral          bool
+}
+
 func runServe(args []string) error {
-	grpcAddr := ":8081"
-	auditFile := ""
-	bundleFile := ""
-	overridesFile := ""
-	logLevel := "info"
+	cfg := serveConfig{
+		grpcAddr:           "127.0.0.1:8081",
+		logLevel:           "info",
+		maxRecvBytes:       4 << 20,
+		maxSendBytes:       4 << 20,
+		sessionTTL:         30 * time.Minute,
+		sessionMax:         10_000,
+		sessionMaxPerOwner: 100,
+		rateLimitRPM:       600_000,
+		rateLimitBurst:     20_000,
+	}
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--grpc" && i+1 < len(args) {
-			grpcAddr = args[i+1]
+			cfg.grpcAddr = args[i+1]
 			i++
 		}
 		if args[i] == "--audit-file" && i+1 < len(args) {
-			auditFile = args[i+1]
+			cfg.auditFile = args[i+1]
 			i++
 		}
 		if args[i] == "--bundle-file" && i+1 < len(args) {
-			bundleFile = args[i+1]
+			cfg.bundleFile = args[i+1]
 			i++
 		}
 		if args[i] == "--overrides-file" && i+1 < len(args) {
-			overridesFile = args[i+1]
+			cfg.overridesFile = args[i+1]
 			i++
 		}
 		if args[i] == "--log-level" && i+1 < len(args) {
-			logLevel = args[i+1]
+			cfg.logLevel = args[i+1]
+			i++
+		}
+		if args[i] == "--data-dir" && i+1 < len(args) {
+			cfg.dataDir = args[i+1]
+			i++
+		}
+		if args[i] == "--ephemeral" {
+			cfg.ephemeral = true
+		}
+		if args[i] == "--auth-token" && i+1 < len(args) {
+			cfg.authTokens = append(cfg.authTokens, args[i+1])
+			i++
+		}
+		if args[i] == "--auth-token-file" && i+1 < len(args) {
+			cfg.authTokenFile = args[i+1]
+			i++
+		}
+		if args[i] == "--tls-cert" && i+1 < len(args) {
+			cfg.tlsCertFile = args[i+1]
+			i++
+		}
+		if args[i] == "--tls-key" && i+1 < len(args) {
+			cfg.tlsKeyFile = args[i+1]
+			i++
+		}
+		if args[i] == "--tls-client-ca" && i+1 < len(args) {
+			cfg.tlsClientCAFile = args[i+1]
+			i++
+		}
+		if args[i] == "--max-recv-bytes" && i+1 < len(args) {
+			value, err := parseIntFlag("--max-recv-bytes", args[i+1], 1)
+			if err != nil {
+				return err
+			}
+			cfg.maxRecvBytes = value
+			i++
+		}
+		if args[i] == "--max-send-bytes" && i+1 < len(args) {
+			value, err := parseIntFlag("--max-send-bytes", args[i+1], 1)
+			if err != nil {
+				return err
+			}
+			cfg.maxSendBytes = value
+			i++
+		}
+		if args[i] == "--session-ttl" && i+1 < len(args) {
+			value, err := time.ParseDuration(args[i+1])
+			if err != nil {
+				return fmt.Errorf("parse --session-ttl: %w", err)
+			}
+			cfg.sessionTTL = value
+			i++
+		}
+		if args[i] == "--session-max" && i+1 < len(args) {
+			value, err := parseIntFlag("--session-max", args[i+1], 0)
+			if err != nil {
+				return err
+			}
+			cfg.sessionMax = value
+			i++
+		}
+		if args[i] == "--session-max-per-owner" && i+1 < len(args) {
+			value, err := parseIntFlag("--session-max-per-owner", args[i+1], 0)
+			if err != nil {
+				return err
+			}
+			cfg.sessionMaxPerOwner = value
+			i++
+		}
+		if args[i] == "--rate-limit-rpm" && i+1 < len(args) {
+			value, err := parseIntFlag("--rate-limit-rpm", args[i+1], 0)
+			if err != nil {
+				return err
+			}
+			cfg.rateLimitRPM = value
+			i++
+		}
+		if args[i] == "--rate-limit-burst" && i+1 < len(args) {
+			value, err := parseIntFlag("--rate-limit-burst", args[i+1], 0)
+			if err != nil {
+				return err
+			}
+			cfg.rateLimitBurst = value
 			i++
 		}
 	}
-	return serveCmd(grpcAddr, auditFile, bundleFile, overridesFile, logLevel)
+	return serveCmd(cfg)
 }
 
 func formatCLIError(err error) string {
@@ -673,18 +789,32 @@ func importCmd(path, outPath string) error {
 	return fmt.Errorf("cannot parse %s: expected Arishem JSON with rules array, rule array, or single rule", path)
 }
 
-func serveCmd(grpcAddr, auditFile, bundleFile, overridesFile, logLevel string) error {
-	logger := observability.NewLogger(observability.ParseLevel(logLevel))
+func serveCmd(cfg serveConfig) error {
+	logger := observability.NewLogger(observability.ParseLevel(cfg.logLevel))
 
-	lis, err := net.Listen("tcp", grpcAddr)
+	bundleFile, overridesFile, persistenceDir, err := resolveServePersistence(cfg.bundleFile, cfg.overridesFile, cfg.dataDir, cfg.ephemeral)
 	if err != nil {
-		return fmt.Errorf("listen %s: %w", grpcAddr, err)
+		return err
+	}
+
+	tokens, err := loadAuthTokens(cfg.authTokens, cfg.authTokenFile)
+	if err != nil {
+		return err
+	}
+	tlsConfig, err := loadServerTLSConfig(cfg.tlsCertFile, cfg.tlsKeyFile, cfg.tlsClientCAFile)
+	if err != nil {
+		return err
+	}
+
+	lis, err := net.Listen("tcp", cfg.grpcAddr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", cfg.grpcAddr, err)
 	}
 
 	var sink audit.Sink = audit.NopSink{}
 	var closer interface{ Close() error }
-	if auditFile != "" {
-		fileSink, err := audit.NewJSONLSink(auditFile)
+	if cfg.auditFile != "" {
+		fileSink, err := audit.NewJSONLSink(cfg.auditFile)
 		if err != nil {
 			return fmt.Errorf("open audit sink: %w", err)
 		}
@@ -710,13 +840,189 @@ func serveCmd(grpcAddr, auditFile, bundleFile, overridesFile, logLevel string) e
 		}
 	}
 
-	grpcSrv := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-	)
-	arbiterv1.RegisterArbiterServiceServer(grpcSrv, grpcserver.NewServerWithLogger(registry, store, sink, logger))
+	sessions := grpcserver.NewSessionStore()
+	sessions.SetTTL(cfg.sessionTTL)
+	sessions.SetMaxCount(cfg.sessionMax)
+	sessions.SetMaxPerOwner(cfg.sessionMaxPerOwner)
 
-	logger.Info("arbiter gRPC listening", "addr", grpcAddr)
+	unaryInterceptors := []grpc.UnaryServerInterceptor{
+		grpcserver.UnaryRecoveryInterceptor(logger),
+	}
+	streamInterceptors := []grpc.StreamServerInterceptor{
+		grpcserver.StreamRecoveryInterceptor(logger),
+	}
+	if limiter := grpcserver.NewRateLimiter(cfg.rateLimitRPM, cfg.rateLimitBurst); limiter != nil {
+		unaryInterceptors = append(unaryInterceptors, limiter.UnaryServerInterceptor())
+		streamInterceptors = append(streamInterceptors, limiter.StreamServerInterceptor())
+	}
+	if len(tokens) > 0 {
+		auth, err := grpcserver.NewStaticTokenAuth(tokens)
+		if err != nil {
+			return err
+		}
+		unaryInterceptors = append(unaryInterceptors, auth.UnaryServerInterceptor())
+		streamInterceptors = append(streamInterceptors, auth.StreamServerInterceptor())
+	}
+
+	serverOptions := []grpc.ServerOption{
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.MaxRecvMsgSize(cfg.maxRecvBytes),
+		grpc.MaxSendMsgSize(cfg.maxSendBytes),
+	}
+	if len(unaryInterceptors) > 0 {
+		serverOptions = append(serverOptions, grpc.ChainUnaryInterceptor(unaryInterceptors...))
+	}
+	if len(streamInterceptors) > 0 {
+		serverOptions = append(serverOptions, grpc.ChainStreamInterceptor(streamInterceptors...))
+	}
+	if tlsConfig != nil {
+		serverOptions = append(serverOptions, grpc.Creds(credentials.NewTLS(tlsConfig)))
+	}
+
+	grpcSrv := grpc.NewServer(serverOptions...)
+	arbiterv1.RegisterArbiterServiceServer(grpcSrv, grpcserver.NewServerWithLoggerAndSessions(registry, store, sink, logger, sessions))
+
+	if isPublicListenAddr(cfg.grpcAddr) && tlsConfig == nil && len(tokens) == 0 {
+		logger.Warn("arbiter gRPC listener is public without TLS or auth", "addr", cfg.grpcAddr)
+	}
+	logger.Info(
+		"arbiter gRPC listening",
+		"addr", cfg.grpcAddr,
+		"persistent_state", persistenceDir != "",
+		"state_dir", persistenceDir,
+		"auth_enabled", len(tokens) > 0,
+		"tls_enabled", tlsConfig != nil,
+		"max_recv_bytes", cfg.maxRecvBytes,
+		"max_send_bytes", cfg.maxSendBytes,
+		"session_ttl", cfg.sessionTTL.String(),
+		"session_max", cfg.sessionMax,
+		"session_max_per_owner", cfg.sessionMaxPerOwner,
+		"rate_limit_rpm", cfg.rateLimitRPM,
+		"rate_limit_burst", cfg.rateLimitBurst,
+	)
 	return grpcSrv.Serve(lis)
+}
+
+func parseIntFlag(name, raw string, min int) (int, error) {
+	value, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", name, err)
+	}
+	if value < min {
+		return 0, fmt.Errorf("%s must be >= %d", name, min)
+	}
+	return value, nil
+}
+
+func resolveServePersistence(bundleFile, overridesFile, dataDir string, ephemeral bool) (string, string, string, error) {
+	if ephemeral {
+		return bundleFile, overridesFile, "", nil
+	}
+	if bundleFile != "" && overridesFile != "" {
+		return bundleFile, overridesFile, "", nil
+	}
+	if dataDir == "" {
+		dir, err := os.UserConfigDir()
+		if err != nil || dir == "" {
+			dir = ".arbiter"
+		} else {
+			dir = filepath.Join(dir, "arbiter")
+		}
+		dataDir = dir
+	}
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return "", "", "", fmt.Errorf("create state dir: %w", err)
+	}
+	if bundleFile == "" {
+		bundleFile = filepath.Join(dataDir, "bundles.json")
+	}
+	if overridesFile == "" {
+		overridesFile = filepath.Join(dataDir, "overrides.json")
+	}
+	return bundleFile, overridesFile, dataDir, nil
+}
+
+func loadAuthTokens(cliTokens []string, tokenFile string) ([]string, error) {
+	seen := make(map[string]struct{})
+	out := make([]string, 0, len(cliTokens))
+	addToken := func(raw string) {
+		token := strings.TrimSpace(raw)
+		if token == "" {
+			return
+		}
+		if _, ok := seen[token]; ok {
+			return
+		}
+		seen[token] = struct{}{}
+		out = append(out, token)
+	}
+	for _, token := range cliTokens {
+		addToken(token)
+	}
+	if tokenFile == "" {
+		return out, nil
+	}
+	file, err := os.Open(tokenFile)
+	if err != nil {
+		return nil, fmt.Errorf("open auth token file: %w", err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		for _, token := range strings.Split(scanner.Text(), ",") {
+			addToken(token)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read auth token file: %w", err)
+	}
+	return out, nil
+}
+
+func loadServerTLSConfig(certFile, keyFile, clientCAFile string) (*tls.Config, error) {
+	if certFile == "" && keyFile == "" && clientCAFile == "" {
+		return nil, nil
+	}
+	if certFile == "" || keyFile == "" {
+		return nil, fmt.Errorf("--tls-cert and --tls-key must be provided together")
+	}
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("load TLS key pair: %w", err)
+	}
+	cfg := &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{cert},
+	}
+	if clientCAFile != "" {
+		caBytes, err := os.ReadFile(clientCAFile)
+		if err != nil {
+			return nil, fmt.Errorf("read client CA file: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caBytes) {
+			return nil, fmt.Errorf("parse client CA file: no certificates found")
+		}
+		cfg.ClientCAs = pool
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
+	}
+	return cfg, nil
+}
+
+func isPublicListenAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return true
+	}
+	host = strings.TrimSpace(host)
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		return true
+	}
+	if strings.EqualFold(host, "localhost") {
+		return false
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip == nil || !ip.IsLoopback()
 }
 
 func importRules(rules []importRuleJSON, outPath string) error {

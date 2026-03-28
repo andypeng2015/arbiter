@@ -78,3 +78,23 @@ func TestRuntimeStringsDoNotGrowStringPool(t *testing.T) {
 		t.Fatalf("string pool index grew from %d to %d", beforeIndex, len(pool.index))
 	}
 }
+
+func TestNewStringPoolRecordsOverflowInsteadOfPanicking(t *testing.T) {
+	pool := NewStringPool(make([]string, maxStringPoolEntries+1))
+	if pool.Err() == nil {
+		t.Fatal("expected constructor overflow to be recorded")
+	}
+	if got := len(pool.strs); got != maxStringPoolEntries {
+		t.Fatalf("string pool length = %d, want %d", got, maxStringPoolEntries)
+	}
+}
+
+func TestStringPoolInternRecordsOverflowInsteadOfPanicking(t *testing.T) {
+	pool := NewStringPool(make([]string, maxStringPoolEntries))
+	if idx := pool.Intern("overflow"); idx != 0 {
+		t.Fatalf("overflow index = %d, want 0", idx)
+	}
+	if pool.Err() == nil {
+		t.Fatal("expected overflow to be recorded")
+	}
+}

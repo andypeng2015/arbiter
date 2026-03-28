@@ -33,11 +33,17 @@ type Server struct {
 
 // NewServer creates a gRPC service server.
 func NewServer(registry *Registry, store *overrides.Store, sink audit.Sink) *Server {
-	return NewServerWithLogger(registry, store, sink, nil)
+	return NewServerWithLoggerAndSessions(registry, store, sink, nil, nil)
 }
 
 // NewServerWithLogger creates a gRPC service server with a custom structured logger.
 func NewServerWithLogger(registry *Registry, store *overrides.Store, sink audit.Sink, logger *slog.Logger) *Server {
+	return NewServerWithLoggerAndSessions(registry, store, sink, logger, nil)
+}
+
+// NewServerWithLoggerAndSessions creates a gRPC service server with an optional
+// custom structured logger and session store.
+func NewServerWithLoggerAndSessions(registry *Registry, store *overrides.Store, sink audit.Sink, logger *slog.Logger, sessions *SessionStore) *Server {
 	if registry == nil {
 		registry = NewRegistry()
 	}
@@ -50,9 +56,12 @@ func NewServerWithLogger(registry *Registry, store *overrides.Store, sink audit.
 	if logger == nil {
 		logger = observability.NewLogger(slog.LevelInfo)
 	}
+	if sessions == nil {
+		sessions = NewSessionStore()
+	}
 	return &Server{
 		registry:  registry,
-		sessions:  NewSessionStore(),
+		sessions:  sessions,
 		overrides: store,
 		audit:     sink,
 		logger:    logger,

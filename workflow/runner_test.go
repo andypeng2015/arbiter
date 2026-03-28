@@ -216,6 +216,68 @@ expert rule QualifyLead priority 10 per_fact {
 	}
 }
 
+func TestRunnerTickLoadsIndependentSourcesConcurrently(t *testing.T) {
+	src := []byte(`
+arbiter sales {
+	poll 1s
+	source https://feed.internal/a
+	source https://feed.internal/b
+}
+
+expert rule QualifyLead priority 10 per_fact {
+	when {
+		any lead in facts.Lead { lead.score >= 90 }
+	}
+	then emit Qualified {
+		key: lead.key,
+	}
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	started := make(chan string, 2)
+	release := make(chan struct{})
+	runner, err := NewRunner(w, RunnerOptions{
+		MaxConcurrentSourceLoads: 2,
+		Loader: func(_ context.Context, target string) ([]expert.Fact, error) {
+			started <- target
+			<-release
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner: %v", err)
+	}
+
+	tickDone := make(chan error, 1)
+	go func() {
+		_, err := runner.Tick(context.Background())
+		tickDone <- err
+	}()
+
+	seen := make(map[string]struct{}, 2)
+	for len(seen) < 2 {
+		select {
+		case target := <-started:
+			seen[target] = struct{}{}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for concurrent source loads, saw %v", seen)
+		}
+	}
+
+	close(release)
+	if err := <-tickDone; err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if len(seen) != 2 {
+		t.Fatalf("loaded sources = %v, want both external sources", seen)
+	}
+}
+
 func TestRunnerRestoresPendingSinkDeliveriesFromJournal(t *testing.T) {
 	src := []byte(`
 arbiter sales {
@@ -881,6 +943,90 @@ expert rule QualifyLead priority 10 per_fact {
 	close(releaseDelivery)
 	if err := <-tickDone; err != nil {
 		t.Fatalf("Tick: %v", err)
+	}
+}
+
+func TestRunnerTickDeliversIndependentTargetsConcurrently(t *testing.T) {
+	src := []byte(`
+arbiter sales {
+	poll 1s
+	source https://feed.internal/facts
+	on Qualified webhook https://hooks.internal/a
+	on Qualified webhook https://hooks.internal/b
+}
+
+expert rule QualifyLead priority 10 per_fact {
+	when {
+		any lead in facts.Lead { lead.score >= 90 }
+	}
+	then emit Qualified {
+		key: lead.key,
+	}
+}
+`)
+
+	w, err := Compile(src, Options{})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	started := make(chan string, 2)
+	release := make(chan struct{})
+	tickDone := make(chan TickResult, 1)
+	tickErr := make(chan error, 1)
+	runner, err := NewRunner(w, RunnerOptions{
+		MaxConcurrentDeliveries: 2,
+		Loader: func(_ context.Context, _ string) ([]expert.Fact, error) {
+			return []expert.Fact{{
+				Type: "Lead",
+				Key:  "lead-1",
+				Fields: map[string]any{
+					"score": float64(95),
+				},
+			}}, nil
+		},
+		Handlers: map[arbiter.ArbiterHandlerKind]OutcomeHandler{
+			arbiter.ArbiterHandlerWebhook: OutcomeHandlerFunc(func(_ context.Context, delivery Delivery) error {
+				started <- delivery.Handler.Target
+				<-release
+				return nil
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner: %v", err)
+	}
+
+	go func() {
+		result, err := runner.Tick(context.Background())
+		if err != nil {
+			tickErr <- err
+			return
+		}
+		tickDone <- result
+	}()
+
+	seen := make(map[string]struct{}, 2)
+	for len(seen) < 2 {
+		select {
+		case target := <-started:
+			seen[target] = struct{}{}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for concurrent deliveries, saw %v", seen)
+		}
+	}
+
+	close(release)
+	select {
+	case err := <-tickErr:
+		t.Fatalf("Tick: %v", err)
+	case tick := <-tickDone:
+		if tick.Delivered != 2 || tick.Enqueued != 2 {
+			t.Fatalf("tick delivery counts = %+v, want enqueued=2 delivered=2", tick)
+		}
+	}
+	if len(seen) != 2 {
+		t.Fatalf("delivered targets = %v, want both webhook targets", seen)
 	}
 }
 

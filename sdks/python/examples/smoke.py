@@ -9,7 +9,7 @@ rule Approve {
 
 
 def main() -> None:
-    with ArbiterClient("127.0.0.1:18081") as client:
+    with ArbiterClient("http://127.0.0.1:18081") as client:
         publish = client.publish_bundle("python-smoke", SOURCE)
         result = client.evaluate_rules(
             bundle_name="python-smoke",

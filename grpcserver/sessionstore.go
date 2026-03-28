@@ -16,12 +16,14 @@ type SessionStore struct {
 	sessions map[string]*ExpertSession
 	ttl      time.Duration
 	maxCount int
+	maxOwner int
 }
 
 // ExpertSession is one live expert session.
 type ExpertSession struct {
 	mu         sync.Mutex
 	ID         string
+	Owner      string
 	BundleID   string
 	Envelope   map[string]any
 	Session    *expert.Session
@@ -36,21 +38,32 @@ func NewSessionStore() *SessionStore {
 		sessions: make(map[string]*ExpertSession),
 		ttl:      30 * time.Minute,
 		maxCount: 10_000,
+		maxOwner: 100,
 	}
 }
 
 // Create registers a new session and returns it.
 func (ss *SessionStore) Create(bundleID string, envelope map[string]any, session *expert.Session) *ExpertSession {
+	handle, _ := ss.CreateForOwner("", bundleID, envelope, session)
+	return handle
+}
+
+// CreateForOwner registers a new session for one owner identity.
+func (ss *SessionStore) CreateForOwner(owner, bundleID string, envelope map[string]any, session *expert.Session) (*ExpertSession, error) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	now := time.Now().UTC()
 	ss.pruneExpiredLocked(now)
+	if err := ss.ensureOwnerCapacityLocked(owner); err != nil {
+		return nil, err
+	}
 	ss.evictIfNeededLocked()
 
 	ss.nextID++
 	id := fmt.Sprintf("sess_%d", ss.nextID)
 	handle := &ExpertSession{
 		ID:         id,
+		Owner:      owner,
 		BundleID:   bundleID,
 		Envelope:   cloneMap(envelope),
 		Session:    session,
@@ -58,7 +71,7 @@ func (ss *SessionStore) Create(bundleID string, envelope map[string]any, session
 		LastAccess: now,
 	}
 	ss.sessions[id] = handle
-	return handle
+	return handle, nil
 }
 
 // Get returns a session by ID.
@@ -131,6 +144,44 @@ func (ss *SessionStore) evictIfNeededLocked() {
 		ss.sessions[oldestID].closed.Store(true)
 		delete(ss.sessions, oldestID)
 	}
+}
+
+// SetTTL configures the session expiry window. Zero disables TTL pruning.
+func (ss *SessionStore) SetTTL(ttl time.Duration) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.ttl = ttl
+}
+
+// SetMaxCount configures the global live-session cap. Zero disables eviction.
+func (ss *SessionStore) SetMaxCount(maxCount int) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.maxCount = maxCount
+}
+
+// SetMaxPerOwner configures the maximum number of live sessions one owner may hold.
+// Zero disables the per-owner cap.
+func (ss *SessionStore) SetMaxPerOwner(maxOwner int) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.maxOwner = maxOwner
+}
+
+func (ss *SessionStore) ensureOwnerCapacityLocked(owner string) error {
+	if ss.maxOwner <= 0 || owner == "" {
+		return nil
+	}
+	count := 0
+	for _, handle := range ss.sessions {
+		if handle.Owner == owner && !handle.closed.Load() {
+			count++
+		}
+	}
+	if count >= ss.maxOwner {
+		return fmt.Errorf("owner %q reached the maximum of %d live sessions", owner, ss.maxOwner)
+	}
+	return nil
 }
 
 func cloneMap(src map[string]any) map[string]any {

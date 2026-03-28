@@ -15,7 +15,7 @@ import (
 )
 
 // StartSession creates a new expert session for a published bundle.
-func (s *Server) StartSession(_ context.Context, req *arbiterv1.StartSessionRequest) (*arbiterv1.StartSessionResponse, error) {
+func (s *Server) StartSession(ctx context.Context, req *arbiterv1.StartSessionRequest) (*arbiterv1.StartSessionResponse, error) {
 	bundle, err := s.bundleRef(req.GetBundleId(), req.GetBundleName())
 	if err != nil {
 		return nil, err
@@ -33,7 +33,10 @@ func (s *Server) StartSession(_ context.Context, req *arbiterv1.StartSessionRequ
 		BundleID:  bundle.ID,
 		Overrides: s.overrides,
 	})
-	handle := s.sessions.Create(bundle.ID, envelope, session)
+	handle, err := s.sessions.CreateForOwner(ClientIdentity(ctx), bundle.ID, envelope, session)
+	if err != nil {
+		return nil, status.Errorf(codes.ResourceExhausted, "start session: %v", err)
+	}
 	activeSessions.WithLabelValues(bundle.Name).Inc()
 	s.logger.Info("expert session started",
 		observability.KeyBundleName, bundle.Name,

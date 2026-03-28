@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	arbiter-runtime --bundle rules.arb [--poll 5s] [--status :7082] [--checkpoint /var/lib/arbiter/state]
+//	arbiter-runtime --bundle rules.arb [--poll 5s] [--status :7082] [--checkpoint /var/lib/arbiter/state] [--source-parallelism 8] [--delivery-parallelism 8]
 package main
 
 import (
@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	goruntime "runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -34,6 +35,8 @@ func main() {
 	statusAddr := flag.String("status", ":7082", "health/status HTTP address")
 	checkpointDir := flag.String("checkpoint", "", "directory for checkpoint files")
 	deliveryLog := flag.String("delivery-log", "", "path for delivery journal (JSONL)")
+	sourceParallelism := flag.Int("source-parallelism", defaultRuntimeParallelism(), "max concurrent external source loads per tick")
+	deliveryParallelism := flag.Int("delivery-parallelism", defaultRuntimeParallelism(), "max concurrent handler delivery pipelines per tick")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	flag.Parse()
 
@@ -48,10 +51,12 @@ func main() {
 	defer cancel()
 
 	rt, err := newRuntime(*bundlePath, runtimeConfig{
-		pollInterval:  *pollInterval,
-		statusAddr:    *statusAddr,
-		checkpointDir: *checkpointDir,
-		deliveryLog:   *deliveryLog,
+		pollInterval:        *pollInterval,
+		statusAddr:          *statusAddr,
+		checkpointDir:       *checkpointDir,
+		deliveryLog:         *deliveryLog,
+		sourceParallelism:   *sourceParallelism,
+		deliveryParallelism: *deliveryParallelism,
 	}, logger)
 	if err != nil {
 		logger.Error("init failed", observability.KeyError, err.Error())
@@ -66,10 +71,23 @@ func main() {
 }
 
 type runtimeConfig struct {
-	pollInterval  time.Duration
-	statusAddr    string
-	checkpointDir string
-	deliveryLog   string
+	pollInterval        time.Duration
+	statusAddr          string
+	checkpointDir       string
+	deliveryLog         string
+	sourceParallelism   int
+	deliveryParallelism int
+}
+
+func defaultRuntimeParallelism() int {
+	parallelism := goruntime.GOMAXPROCS(0)
+	if parallelism <= 0 {
+		return 8
+	}
+	if parallelism > 8 {
+		return 8
+	}
+	return parallelism
 }
 
 const runtimeTracerName = "arbiter.runtime"
@@ -94,6 +112,12 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 	if logger == nil {
 		logger = observability.NewLogger(observability.ParseLevel("info"))
 	}
+	if config.sourceParallelism <= 0 {
+		config.sourceParallelism = 1
+	}
+	if config.deliveryParallelism <= 0 {
+		config.deliveryParallelism = 1
+	}
 	full, err := arbiter.CompileFullFile(bundlePath)
 	if err != nil {
 		return nil, fmt.Errorf("compile %s: %w", bundlePath, err)
@@ -108,10 +132,12 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 	}
 
 	runner, err := workflow.NewRunner(wf, workflow.RunnerOptions{
-		Handlers:       defaultOutcomeHandlers(logger),
-		WorkerHandlers: defaultWorkerHandlers(),
-		DeliveryLog:    config.deliveryLog,
-		Stdout:         os.Stdout,
+		Handlers:                 defaultOutcomeHandlers(logger),
+		WorkerHandlers:           defaultWorkerHandlers(),
+		DeliveryLog:              config.deliveryLog,
+		MaxConcurrentSourceLoads: config.sourceParallelism,
+		MaxConcurrentDeliveries:  config.deliveryParallelism,
+		Stdout:                   os.Stdout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create runner: %w", err)
@@ -121,7 +147,9 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 		observability.KeySource, bundlePath,
 		observability.KeyArbiter, len(full.Arbiters),
 		observability.KeyWorker, len(full.Workers),
-		"external_sources", len(wf.ExternalSources()))
+		"external_sources", len(wf.ExternalSources()),
+		"source_parallelism", config.sourceParallelism,
+		"delivery_parallelism", config.deliveryParallelism)
 
 	return &runtime{
 		config: config,

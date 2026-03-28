@@ -45,3 +45,28 @@ func TestSessionStoreEvictsOldestSessionAtCapacity(t *testing.T) {
 		t.Fatalf("expected newest session %q to remain", second.ID)
 	}
 }
+
+func TestSessionStoreRejectsOwnerOverCapacity(t *testing.T) {
+	store := NewSessionStore()
+	store.ttl = 0
+	store.maxCount = 0
+	store.maxOwner = 1
+
+	first, err := store.CreateForOwner("token:test", "bundle_a", nil, &expert.Session{})
+	if err != nil {
+		t.Fatalf("CreateForOwner first: %v", err)
+	}
+	if first == nil {
+		t.Fatal("expected first session")
+	}
+	second, err := store.CreateForOwner("token:test", "bundle_b", nil, &expert.Session{})
+	if err == nil {
+		t.Fatal("expected owner capacity error")
+	}
+	if second != nil {
+		t.Fatal("expected rejected session to be nil")
+	}
+	if _, ok := store.Get(first.ID); !ok {
+		t.Fatalf("expected first session %q to remain", first.ID)
+	}
+}

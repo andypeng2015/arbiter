@@ -1,6 +1,8 @@
 package bundle_test
 
 import (
+	"encoding/binary"
+	"strings"
 	"testing"
 
 	arbiter "github.com/odvcencio/arbiter"
@@ -237,4 +239,45 @@ rule FraudOnly tag "fraud" {
 	if restored.RuleMatchesTags(restored.Rules[1], []string{"realtime"}) {
 		t.Fatal("expected restored second rule to miss realtime tag")
 	}
+}
+
+func TestUnmarshalRejectsTruncatedBundle(t *testing.T) {
+	blob := mustMarshalSimpleBundle(t)
+	if _, err := bundle.Unmarshal(blob[:len(blob)-1]); err == nil {
+		t.Fatal("expected truncated bundle to fail")
+	}
+}
+
+func TestUnmarshalRejectsTrailingBytes(t *testing.T) {
+	blob := append(mustMarshalSimpleBundle(t), 0xFF)
+	if _, err := bundle.Unmarshal(blob); err == nil || !strings.Contains(err.Error(), "trailing bytes") {
+		t.Fatalf("expected trailing bytes error, got %v", err)
+	}
+}
+
+func TestUnmarshalRejectsOversizedDeclaredCount(t *testing.T) {
+	blob := make([]byte, 8)
+	copy(blob[:4], []byte("ARB1"))
+	binary.LittleEndian.PutUint32(blob[4:], 1_000_000)
+	if _, err := bundle.Unmarshal(blob); err == nil || !strings.Contains(err.Error(), "declared count") {
+		t.Fatalf("expected declared count error, got %v", err)
+	}
+}
+
+func mustMarshalSimpleBundle(t *testing.T) []byte {
+	t.Helper()
+	prog, err := arbiter.Compile([]byte(`
+rule Allow {
+	when { true }
+	then Approved {}
+}
+`))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	blob, err := bundle.Marshal(prog.Ruleset)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return blob
 }

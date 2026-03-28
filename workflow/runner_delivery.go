@@ -9,12 +9,24 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	arbiter "github.com/odvcencio/arbiter"
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/expert"
 )
+
+type deliveryAttemptGroup struct {
+	handlerKey string
+	ids        []string
+}
+
+type deliveryAttemptResult struct {
+	delivered int
+	retried   int
+	err       error
+}
 
 func (r *Runner) enqueueWorkflowDeliveries(result Result) (int, error) {
 	enqueued := 0
@@ -31,25 +43,87 @@ func (r *Runner) enqueueWorkflowDeliveries(result Result) (int, error) {
 
 func (r *Runner) deliverReady(ctx context.Context) (delivered int, retried int, err error) {
 	now := r.now().UTC()
-	for _, id := range r.pendingDeliveryIDs() {
+	groups := r.readyDeliveryGroups(now)
+	if len(groups) == 0 {
+		return 0, 0, nil
+	}
+	results := make([]deliveryAttemptResult, len(groups))
+	limit := parallelismLimit(r.maxConcurrentDeliveries, len(groups))
+	if limit == 1 {
+		for i, group := range groups {
+			results[i] = r.processDeliveryGroup(ctx, group, now)
+		}
+	} else {
+		sem := make(chan struct{}, limit)
+		var wg sync.WaitGroup
+		for i, group := range groups {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					results[i] = deliveryAttemptResult{err: ctx.Err()}
+					return
+				}
+				defer func() { <-sem }()
+				results[i] = r.processDeliveryGroup(ctx, group, now)
+			}()
+		}
+		wg.Wait()
+	}
+	for _, result := range results {
+		delivered += result.delivered
+		retried += result.retried
+		if err == nil && result.err != nil {
+			err = result.err
+		}
+	}
+	return delivered, retried, err
+}
+
+func (r *Runner) readyDeliveryGroups(now time.Time) []deliveryAttemptGroup {
+	ids := r.pendingDeliveryIDs()
+	if len(ids) == 0 {
+		return nil
+	}
+	groupIndex := make(map[string]int)
+	groups := make([]deliveryAttemptGroup, 0, len(ids))
+	for _, id := range ids {
 		delivery, ok := r.pendingDelivery(id)
-		if !ok {
+		if !ok || !deliveryReady(now, delivery) {
 			continue
 		}
-		if !deliveryReady(now, delivery) {
-			continue
+		index, ok := groupIndex[delivery.HandlerKey]
+		if !ok {
+			index = len(groups)
+			groupIndex[delivery.HandlerKey] = index
+			groups = append(groups, deliveryAttemptGroup{handlerKey: delivery.HandlerKey})
+		}
+		groups[index].ids = append(groups[index].ids, id)
+	}
+	return groups
+}
+
+func (r *Runner) processDeliveryGroup(ctx context.Context, group deliveryAttemptGroup, now time.Time) deliveryAttemptResult {
+	result := deliveryAttemptResult{}
+	for _, id := range group.ids {
+		if err := ctx.Err(); err != nil {
+			result.err = err
+			return result
 		}
 		stillPending, err := r.processDeliveryAttempt(ctx, id, now)
 		if err != nil {
-			return delivered, retried, err
+			result.err = err
+			return result
 		}
 		if stillPending {
-			retried++
+			result.retried++
 			continue
 		}
-		delivered++
+		result.delivered++
 	}
-	return delivered, retried, nil
+	return result
 }
 
 func (r *Runner) enqueueArbiterDeliveries(arbiterName string, outcomes []expert.Outcome, now time.Time) (int, error) {
@@ -308,6 +382,8 @@ func (r *Runner) deliverAudit(ctx context.Context, delivery Delivery) error {
 }
 
 func (r *Runner) deliverStdout(_ context.Context, delivery Delivery) error {
+	r.stdoutMu.Lock()
+	defer r.stdoutMu.Unlock()
 	enc := json.NewEncoder(r.stdout)
 	return enc.Encode(delivery)
 }
@@ -316,6 +392,8 @@ func (r *Runner) auditSink(target string) (*audit.JSONLSink, error) {
 	if target == "" {
 		return nil, fmt.Errorf("audit handler target is required")
 	}
+	r.auditMu.Lock()
+	defer r.auditMu.Unlock()
 	if sink := r.auditSinks[target]; sink != nil {
 		return sink, nil
 	}

@@ -18,6 +18,7 @@ Standalone reference material lives under [`docs/`](docs):
 
 - [`docs/language/grammar.ebnf`](docs/language/grammar.ebnf) is the tooling-facing language specification.
 - [`docs/architecture/compiler.md`](docs/architecture/compiler.md) explains the compiler pipeline, compiled ruleset layout, and the compile-time/runtime string-pool split.
+- [`docs/self-hosted.md`](docs/self-hosted.md) is the recommended self-hosted profile for a single team or trust boundary.
 
 ## Performance
 
@@ -304,11 +305,13 @@ result, _ := w.Run(context.Background())
 _ = result.Arbiters["account_actions"].Delta.Outcomes
 ```
 
-For reliable external I/O, `workflow.NewRunner` wraps the compiled graph with source polling and sink delivery behavior. It retries source loads with backoff, keeps last-known-good facts when a source is unavailable, exposes runtime health under `source.<alias>` and `sink.<alias>`, and can persist pending sink deliveries to a local JSONL journal for catch-up after a restart.
+For reliable external I/O, `workflow.NewRunner` wraps the compiled graph with source polling and sink delivery behavior. It retries source loads with backoff, keeps last-known-good facts when a source is unavailable, exposes runtime health under `source.<alias>` and `sink.<alias>`, can persist pending sink deliveries to a local JSONL journal for catch-up after a restart, and can fan out independent source polls and handler targets with bounded concurrency.
 
 ```go
 runner, _ := workflow.NewRunner(w, workflow.RunnerOptions{
-    DeliveryLog: "/var/lib/arbiter/deliveries.jsonl",
+    DeliveryLog:              "/var/lib/arbiter/deliveries.jsonl",
+    MaxConcurrentSourceLoads: 8,
+    MaxConcurrentDeliveries:  8,
     Handlers: map[arbiter.ArbiterHandlerKind]workflow.OutcomeHandler{
         arbiter.ArbiterHandlerWebhook: workflow.OutcomeHandlerFunc(func(ctx context.Context, d workflow.Delivery) error {
             return deliverWebhook(ctx, d.Handler.Target, d.Outcome)
@@ -336,6 +339,10 @@ tick, _ := runner.Tick(context.Background())
 _ = tick.Sources["https://transactions.internal/feed"]
 _ = tick.Sinks["webhook\x00https://hooks.internal/reviews"]
 ```
+
+`MaxConcurrentSourceLoads` parallelizes external fetches for different declared sources in the same tick. `MaxConcurrentDeliveries` drains independent handler targets concurrently while still preserving delivery order for the same target or worker, so one webhook/audit file/worker stays serialized and different targets can make forward progress at once.
+
+The current scaling model is straightforward: stateless eval, flags, and strategies scale horizontally by request fanout; expert sessions stay sticky to one instance per session; continuous arbiters scale up inside one runner through bounded source/delivery parallelism and scale out by sharding bundles or arbiter graphs across runner instances.
 
 Rule-visible source metadata is derived from the runtime alias, so an external source like `https://feed.internal/facts` becomes `source.feed_internal_facts`. That gives the arbiter block enough information to distinguish fresh data from stale-but-usable data:
 
@@ -449,6 +456,15 @@ Bundles are published once and evaluated many times. Each bundle compiles rules,
 
 `GetOverrides` returns the current runtime override set for one bundle, and `WatchOverrides` streams a typed snapshot followed by `rule`, `flag`, and `flag_rule` mutations keyed to immutable `bundle_id`.
 
+`arbiter serve` now defaults to `127.0.0.1:8081` and can be hardened in-process with:
+
+- `--auth-token` / `--auth-token-file` for bearer-token auth
+- `--tls-cert`, `--tls-key`, and optional `--tls-client-ca` for TLS or mTLS
+- `--max-recv-bytes` / `--max-send-bytes` to bound gRPC message sizes
+- `--rate-limit-rpm` / `--rate-limit-burst` for per-caller token-bucket limits
+- `--session-ttl`, `--session-max`, and `--session-max-per-owner` to constrain expert-session state
+- `--data-dir` or explicit `--bundle-file` / `--overrides-file` for file-backed persistence, or `--ephemeral` for memory-only mode
+
 ### Audit
 
 Every governance decision is written to a durable audit sink. The default `JSONLSink` appends one JSON object per line to a file. Implement the `audit.Sink` interface for your backend (database, event stream, object store).
@@ -498,8 +514,8 @@ arbiter diff current.arb candidate.arb --data-file contexts.json --key request_i
 arbiter replay candidate.arb --audit decisions.jsonl --request-id req-42
 arbiter check rules.arb            # validate without emitting
 arbiter expert tax.arb --envelope '{...}' [--facts '[...]']
-arbiter serve --grpc :8081 --audit-file decisions.jsonl --bundle-file bundles.json --overrides-file overrides.json
-arbiter-agent --upstream 127.0.0.1:8081 --grpc 127.0.0.1:7081 --status 127.0.0.1:7082 --bundle-name checkout --bundle-name pricing
+arbiter serve --grpc 127.0.0.1:8081 --auth-token "$ARBITER_TOKEN" --max-recv-bytes 4194304 --data-dir ./state
+arbiter-agent --upstream https://arbiter.internal:443 --upstream-token "$ARBITER_TOKEN" --bundle-name checkout --grpc 127.0.0.1:7081 --status 127.0.0.1:7082
 ```
 
 `arbiter diff` answers “what changes if I ship this ruleset?” by evaluating two governed rulesets against the same JSON context or batch and reporting added, removed, and changed matches keyed by request context.
@@ -511,6 +527,14 @@ arbiter-agent --upstream 127.0.0.1:8081 --grpc 127.0.0.1:7081 --status 127.0.0.1
 Repeat `--bundle-name` to keep multiple bundles hot, or set `ARBITER_BUNDLE_NAMES=checkout,pricing`. The legacy single-value `ARBITER_BUNDLE_NAME` env var still works.
 
 Set `--ready-max-staleness 30s` or `ARBITER_AGENT_READY_MAX_STALENESS=30s` if you want `/readyz` to fail once bundle or override sync freshness drifts beyond that age. `0s` keeps the old last-good behavior and disables freshness enforcement.
+
+Use `--upstream-token`, `--upstream-ca-file`, `--upstream-server-name`, or `--upstream-plaintext` when the upstream control plane is protected with auth and TLS.
+
+### Self-Hosted Profile
+
+The credible self-hosted shape today is one Arbiter deployment per trust boundary, backed by persistent disk and protected with bearer auth plus TLS at the edge or directly in-process. Stateless rules, flags, strategies, and continuous runtimes scale cleanly behind a load balancer. Expert sessions do not migrate between replicas, so run them on one instance or use sticky routing when that mode is active.
+
+See [`docs/self-hosted.md`](docs/self-hosted.md) for the recommended operating profile and [`deploy/k8s.yaml`](deploy/k8s.yaml) for the reference Kubernetes manifest.
 
 It also exposes local health and status on the HTTP listener:
 
@@ -1034,7 +1058,12 @@ scenario "velocity detection triggers on transactions" {
 `arbiter-runtime` is the canonical host process for continuous arbiters and workers:
 
 ```bash
-arbiter-runtime --bundle monitor.arb --poll 5s --status :7082
+arbiter-runtime \
+  --bundle monitor.arb \
+  --poll 5s \
+  --status :7082 \
+  --source-parallelism 8 \
+  --delivery-parallelism 8
 ```
 
 It handles the full lifecycle:
@@ -1042,6 +1071,7 @@ It handles the full lifecycle:
 - **Source polling** — loads external fact sources with retry and exponential backoff; keeps last-known-good facts on failure
 - **Worker dispatch** — executes `exec` and `webhook` workers, materializes results as `worker://` source facts
 - **Delivery retry** — outcomes route to handlers (webhook, slack, exec, grpc, audit, stdout) with durable retry journal
+- **Bounded parallelism** — independent sources and handler targets can run concurrently inside one tick without changing per-target ordering
 - **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
 - **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats)
 

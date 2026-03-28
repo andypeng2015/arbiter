@@ -1,8 +1,23 @@
+# Create the auth secret before applying this manifest:
+# kubectl create namespace arbiter-system --dry-run=client -o yaml | kubectl apply -f -
+# kubectl -n arbiter-system create secret generic arbiter-auth --from-literal=token='replace-me'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: arbiter-data
+  labels:
+    app: arbiter
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: arbiter
-  namespace: orchard
   labels:
     app: arbiter
 spec:
@@ -15,35 +30,76 @@ spec:
       labels:
         app: arbiter
     spec:
+      securityContext:
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: arbiter
-          image: harbor.draco.quest/orchard/arbiter:latest
+          image: replace-with-your-registry/arbiter:latest
+          args:
+            - serve
+            - --grpc
+            - 0.0.0.0:8081
+            - --data-dir
+            - /var/lib/arbiter
+            - --auth-token-file
+            - /var/run/secrets/arbiter/token
+            - --max-recv-bytes
+            - "4194304"
+            - --max-send-bytes
+            - "4194304"
+            - --rate-limit-rpm
+            - "60000"
+            - --rate-limit-burst
+            - "2000"
+            - --session-max
+            - "10000"
+            - --session-max-per-owner
+            - "100"
           ports:
             - containerPort: 8081
               protocol: TCP
+          volumeMounts:
+            - name: arbiter-data
+              mountPath: /var/lib/arbiter
+            - name: arbiter-auth
+              mountPath: /var/run/secrets/arbiter
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           resources:
             requests:
               cpu: 50m
-              memory: 32Mi
-            limits:
-              cpu: 200m
               memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           livenessProbe:
             tcpSocket:
               port: 8081
-            initialDelaySeconds: 3
+            initialDelaySeconds: 5
             periodSeconds: 30
           readinessProbe:
             tcpSocket:
               port: 8081
-            initialDelaySeconds: 2
+            initialDelaySeconds: 3
             periodSeconds: 10
+      volumes:
+        - name: arbiter-data
+          persistentVolumeClaim:
+            claimName: arbiter-data
+        - name: arbiter-auth
+          secret:
+            secretName: arbiter-auth
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: arbiter
-  namespace: orchard
   labels:
     app: arbiter
 spec:

@@ -58,16 +58,18 @@ func (f WorkerHandlerFunc) Execute(ctx context.Context, invocation WorkerInvocat
 
 // RunnerOptions configure one reliable workflow runtime.
 type RunnerOptions struct {
-	Loader               SourceLoader
-	Handlers             map[arbiter.ArbiterHandlerKind]OutcomeHandler
-	WorkerHandlers       map[arbiter.ArbiterHandlerKind]WorkerHandler
-	Now                  func() time.Time
-	InitialBackoff       time.Duration
-	MaxBackoff           time.Duration
-	SourceAttempts       int
-	DeliveryLog          string
-	MaxPendingDeliveries int
-	Stdout               io.Writer
+	Loader                   SourceLoader
+	Handlers                 map[arbiter.ArbiterHandlerKind]OutcomeHandler
+	WorkerHandlers           map[arbiter.ArbiterHandlerKind]WorkerHandler
+	Now                      func() time.Time
+	InitialBackoff           time.Duration
+	MaxBackoff               time.Duration
+	SourceAttempts           int
+	MaxConcurrentSourceLoads int
+	DeliveryLog              string
+	MaxConcurrentDeliveries  int
+	MaxPendingDeliveries     int
+	Stdout                   io.Writer
 }
 
 // SourceSnapshot describes one source's current runtime health.
@@ -125,27 +127,32 @@ type TickResult struct {
 }
 
 type Runner struct {
-	execMu               sync.Mutex
-	mu                   sync.RWMutex
-	workflow             *Workflow
-	now                  func() time.Time
-	loader               SourceLoader
-	handlers             map[arbiter.ArbiterHandlerKind]OutcomeHandler
-	workerHandlers       map[arbiter.ArbiterHandlerKind]WorkerHandler
-	dispatchers          map[string][]compiledDispatchHandler
-	sources              map[string]*sourceState
-	sinks                map[string]*sinkState
-	pending              map[string]Delivery
-	ambiguous            map[string]Delivery
-	initialBackoff       time.Duration
-	maxBackoff           time.Duration
-	sourceAttempts       int
-	maxPendingDeliveries int
-	nextID               uint64
-	stdout               io.Writer
-	deliveryLog          string
-	logMu                sync.Mutex
-	auditSinks           map[string]*audit.JSONLSink
+	execMu                   sync.Mutex
+	mu                       sync.RWMutex
+	workflowMu               sync.Mutex
+	stdoutMu                 sync.Mutex
+	auditMu                  sync.Mutex
+	workflow                 *Workflow
+	now                      func() time.Time
+	loader                   SourceLoader
+	handlers                 map[arbiter.ArbiterHandlerKind]OutcomeHandler
+	workerHandlers           map[arbiter.ArbiterHandlerKind]WorkerHandler
+	dispatchers              map[string][]compiledDispatchHandler
+	sources                  map[string]*sourceState
+	sinks                    map[string]*sinkState
+	pending                  map[string]Delivery
+	ambiguous                map[string]Delivery
+	initialBackoff           time.Duration
+	maxBackoff               time.Duration
+	sourceAttempts           int
+	maxConcurrentSourceLoads int
+	maxConcurrentDeliveries  int
+	maxPendingDeliveries     int
+	nextID                   uint64
+	stdout                   io.Writer
+	deliveryLog              string
+	logMu                    sync.Mutex
+	auditSinks               map[string]*audit.JSONLSink
 }
 
 type compiledDispatchHandler struct {
@@ -196,6 +203,12 @@ func NewRunner(w *Workflow, opts RunnerOptions) (*Runner, error) {
 	if opts.SourceAttempts <= 0 {
 		opts.SourceAttempts = 3
 	}
+	if opts.MaxConcurrentSourceLoads <= 0 {
+		opts.MaxConcurrentSourceLoads = 1
+	}
+	if opts.MaxConcurrentDeliveries <= 0 {
+		opts.MaxConcurrentDeliveries = 1
+	}
 	if opts.MaxPendingDeliveries <= 0 {
 		opts.MaxPendingDeliveries = 10_000
 	}
@@ -204,23 +217,25 @@ func NewRunner(w *Workflow, opts RunnerOptions) (*Runner, error) {
 	}
 
 	r := &Runner{
-		workflow:             w,
-		now:                  opts.Now,
-		loader:               opts.Loader,
-		handlers:             opts.Handlers,
-		workerHandlers:       opts.WorkerHandlers,
-		dispatchers:          make(map[string][]compiledDispatchHandler, len(w.order)),
-		sources:              make(map[string]*sourceState),
-		sinks:                make(map[string]*sinkState),
-		pending:              make(map[string]Delivery),
-		ambiguous:            make(map[string]Delivery),
-		initialBackoff:       opts.InitialBackoff,
-		maxBackoff:           opts.MaxBackoff,
-		sourceAttempts:       opts.SourceAttempts,
-		maxPendingDeliveries: opts.MaxPendingDeliveries,
-		stdout:               opts.Stdout,
-		deliveryLog:          opts.DeliveryLog,
-		auditSinks:           make(map[string]*audit.JSONLSink),
+		workflow:                 w,
+		now:                      opts.Now,
+		loader:                   opts.Loader,
+		handlers:                 opts.Handlers,
+		workerHandlers:           opts.WorkerHandlers,
+		dispatchers:              make(map[string][]compiledDispatchHandler, len(w.order)),
+		sources:                  make(map[string]*sourceState),
+		sinks:                    make(map[string]*sinkState),
+		pending:                  make(map[string]Delivery),
+		ambiguous:                make(map[string]Delivery),
+		initialBackoff:           opts.InitialBackoff,
+		maxBackoff:               opts.MaxBackoff,
+		sourceAttempts:           opts.SourceAttempts,
+		maxConcurrentSourceLoads: opts.MaxConcurrentSourceLoads,
+		maxConcurrentDeliveries:  opts.MaxConcurrentDeliveries,
+		maxPendingDeliveries:     opts.MaxPendingDeliveries,
+		stdout:                   opts.Stdout,
+		deliveryLog:              opts.DeliveryLog,
+		auditSinks:               make(map[string]*audit.JSONLSink),
 	}
 
 	for target := range w.sources {
@@ -240,6 +255,19 @@ func NewRunner(w *Workflow, opts RunnerOptions) (*Runner, error) {
 	r.refreshSinkPendingCounts()
 	r.syncArbiterEnvelopes()
 	return r, nil
+}
+
+func parallelismLimit(configured int, total int) int {
+	if total <= 0 {
+		return 0
+	}
+	if configured <= 1 {
+		return 1
+	}
+	if configured > total {
+		return total
+	}
+	return configured
 }
 
 // Close releases any cached audit sinks.

@@ -29,6 +29,8 @@ func (r *Runner) applyWorkerExecution(arbiterName string, worker arbiter.WorkerD
 	state.FactCount = len(facts)
 	state.lastFacts = cloneExpertFacts(facts)
 	r.mu.Unlock()
+	r.workflowMu.Lock()
+	defer r.workflowMu.Unlock()
 	return r.workflow.setRuntimeSourceFacts(workerSourceTarget(worker.Name), facts)
 }
 

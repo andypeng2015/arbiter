@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -13,11 +14,64 @@ import (
 	"github.com/odvcencio/arbiter/expert/factsource"
 )
 
+type sourceSyncResult struct {
+	target   string
+	facts    []expert.Fact
+	loaded   bool
+	loadedAt time.Time
+}
+
 func (r *Runner) syncSources(ctx context.Context) error {
 	targets := r.workflow.ExternalSources()
 	slices.Sort(targets)
-	for _, target := range targets {
-		if err := r.syncSourceTarget(ctx, target); err != nil {
+	limit := parallelismLimit(r.maxConcurrentSourceLoads, len(targets))
+	if limit == 1 {
+		for _, target := range targets {
+			if err := r.syncSourceTarget(ctx, target); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	results := make([]sourceSyncResult, len(targets))
+	sem := make(chan struct{}, limit)
+	var wg sync.WaitGroup
+	var errMu sync.Mutex
+	var firstErr error
+	for index, target := range targets {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				errMu.Lock()
+				if firstErr == nil {
+					firstErr = ctx.Err()
+				}
+				errMu.Unlock()
+				return
+			}
+			defer func() { <-sem }()
+			result, err := r.loadSourceSnapshot(ctx, target)
+			if err != nil {
+				errMu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				errMu.Unlock()
+				return
+			}
+			results[index] = result
+		}()
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return firstErr
+	}
+	for _, result := range results {
+		if err := r.applySourceSyncResult(result); err != nil {
 			return err
 		}
 	}
@@ -25,9 +79,17 @@ func (r *Runner) syncSources(ctx context.Context) error {
 }
 
 func (r *Runner) syncSourceTarget(ctx context.Context, target string) error {
+	result, err := r.loadSourceSnapshot(ctx, target)
+	if err != nil {
+		return err
+	}
+	return r.applySourceSyncResult(result)
+}
+
+func (r *Runner) loadSourceSnapshot(ctx context.Context, target string) (sourceSyncResult, error) {
 	state := r.sourceState(target)
 	if state == nil {
-		return nil
+		return sourceSyncResult{}, nil
 	}
 
 	now := r.now().UTC()
@@ -36,21 +98,40 @@ func (r *Runner) syncSourceTarget(ctx context.Context, target string) error {
 	lastFacts := cloneExpertFacts(state.lastFacts)
 	r.mu.RUnlock()
 	if retryPending {
-		return r.restoreSourceFacts(target, lastFacts)
+		return sourceSyncResult{target: target, facts: lastFacts}, nil
 	}
 
 	facts, err := r.loadSourceWithRetry(ctx, target)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return sourceSyncResult{}, ctxErr
+		}
 		r.mu.RLock()
 		lastFacts = cloneExpertFacts(state.lastFacts)
 		r.mu.RUnlock()
-		return r.restoreSourceFacts(target, lastFacts)
+		return sourceSyncResult{target: target, facts: lastFacts}, nil
 	}
+	return sourceSyncResult{
+		target:   target,
+		facts:    facts,
+		loaded:   true,
+		loadedAt: r.now().UTC(),
+	}, nil
+}
 
-	r.mu.Lock()
-	r.markSourceLoadSuccess(state, facts, now)
-	r.mu.Unlock()
-	return r.workflow.SetSourceFacts(target, facts)
+func (r *Runner) applySourceSyncResult(result sourceSyncResult) error {
+	if result.target == "" {
+		return nil
+	}
+	if result.loaded {
+		state := r.sourceState(result.target)
+		if state != nil {
+			r.mu.Lock()
+			r.markSourceLoadSuccess(state, result.facts, result.loadedAt)
+			r.mu.Unlock()
+		}
+	}
+	return r.restoreSourceFacts(result.target, result.facts)
 }
 
 func sourceRetryPending(state *sourceState, now time.Time) bool {
@@ -58,6 +139,8 @@ func sourceRetryPending(state *sourceState, now time.Time) bool {
 }
 
 func (r *Runner) restoreSourceFacts(target string, facts []expert.Fact) error {
+	r.workflowMu.Lock()
+	defer r.workflowMu.Unlock()
 	if len(facts) == 0 {
 		return r.workflow.SetSourceFacts(target, nil)
 	}

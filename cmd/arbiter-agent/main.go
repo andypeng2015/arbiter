@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"log"
@@ -18,7 +20,9 @@ import (
 	"github.com/odvcencio/arbiter/dataplane"
 	"github.com/odvcencio/arbiter/grpcserver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 type bundleNamesFlag struct {
@@ -58,11 +62,15 @@ func main() {
 		log.Fatalf("parse ARBITER_AGENT_READY_MAX_STALENESS: %v", err)
 	}
 	var (
-		upstreamAddr      = flag.String("upstream", envOr("ARBITER_UPSTREAM_ADDR", "127.0.0.1:8081"), "upstream Arbiter control-plane gRPC address")
-		listenAddr        = flag.String("grpc", envOr("ARBITER_AGENT_ADDR", "127.0.0.1:7081"), "local agent gRPC listen address")
-		statusAddr        = flag.String("status", envOr("ARBITER_AGENT_STATUS_ADDR", "127.0.0.1:7082"), "local agent health/status HTTP listen address")
-		overridesFile     = flag.String("overrides-file", envOr("ARBITER_OVERRIDES_FILE", ""), "optional override snapshot file to sync")
-		readyMaxStaleness = flag.Duration("ready-max-staleness", readyMaxStalenessDefault, "max acceptable age for bundle/override sync before /readyz returns 503; 0 disables freshness enforcement")
+		upstreamAddr       = flag.String("upstream", envOr("ARBITER_UPSTREAM_ADDR", "127.0.0.1:8081"), "upstream Arbiter control-plane gRPC address")
+		upstreamToken      = flag.String("upstream-token", envOr("ARBITER_UPSTREAM_TOKEN", ""), "optional bearer token for upstream Arbiter control plane")
+		upstreamCAFile     = flag.String("upstream-ca-file", envOr("ARBITER_UPSTREAM_CA_FILE", ""), "optional PEM CA bundle for upstream TLS verification")
+		upstreamServerName = flag.String("upstream-server-name", envOr("ARBITER_UPSTREAM_SERVER_NAME", ""), "optional upstream TLS server name override")
+		upstreamPlaintext  = flag.Bool("upstream-plaintext", envOrBool("ARBITER_UPSTREAM_PLAINTEXT", false), "force plaintext transport to the upstream even when TLS options are set")
+		listenAddr         = flag.String("grpc", envOr("ARBITER_AGENT_ADDR", "127.0.0.1:7081"), "local agent gRPC listen address")
+		statusAddr         = flag.String("status", envOr("ARBITER_AGENT_STATUS_ADDR", "127.0.0.1:7082"), "local agent health/status HTTP listen address")
+		overridesFile      = flag.String("overrides-file", envOr("ARBITER_OVERRIDES_FILE", ""), "optional override snapshot file to sync")
+		readyMaxStaleness  = flag.Duration("ready-max-staleness", readyMaxStalenessDefault, "max acceptable age for bundle/override sync before /readyz returns 503; 0 disables freshness enforcement")
 	)
 	flag.Var(&bundleNames, "bundle-name", "active bundle name to sync from the control plane; repeat or comma-separate to sync multiple bundles")
 	flag.Parse()
@@ -75,7 +83,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	upstreamConn, err := grpc.NewClient(*upstreamAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	upstreamConn, normalizedUpstream, err := dialUpstream(upstreamDialConfig{
+		target:        *upstreamAddr,
+		token:         *upstreamToken,
+		caFile:        *upstreamCAFile,
+		serverName:    *upstreamServerName,
+		forceInsecure: *upstreamPlaintext,
+	})
 	if err != nil {
 		log.Fatalf("connect upstream: %v", err)
 	}
@@ -142,7 +156,7 @@ func main() {
 				snap.Bundle.Checksum,
 				len(status.Bundles),
 				*listenAddr,
-				*upstreamAddr,
+				normalizedUpstream,
 				*statusAddr,
 				readyMaxStaleness.String(),
 			)
@@ -159,6 +173,21 @@ func envOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envOrBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	switch strings.ToLower(value) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }
 
 func splitBundleNames(value string) []string {
@@ -180,4 +209,88 @@ func parseDurationEnv(key, fallback string) (time.Duration, error) {
 		return 0, nil
 	}
 	return time.ParseDuration(value)
+}
+
+type upstreamDialConfig struct {
+	target        string
+	token         string
+	caFile        string
+	serverName    string
+	forceInsecure bool
+}
+
+func dialUpstream(cfg upstreamDialConfig) (*grpc.ClientConn, string, error) {
+	target, secure := normalizeUpstreamTarget(cfg.target, cfg.forceInsecure, cfg.caFile != "" || cfg.serverName != "")
+	transportCreds, err := loadUpstreamCredentials(secure, cfg.caFile, cfg.serverName)
+	if err != nil {
+		return nil, "", err
+	}
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(transportCreds)}
+	if cfg.token != "" {
+		opts = append(opts,
+			grpc.WithUnaryInterceptor(upstreamAuthUnaryInterceptor(cfg.token)),
+			grpc.WithStreamInterceptor(upstreamAuthStreamInterceptor(cfg.token)),
+		)
+	}
+	conn, err := grpc.NewClient(target, opts...)
+	if err != nil {
+		return nil, "", err
+	}
+	return conn, target, nil
+}
+
+func normalizeUpstreamTarget(target string, forceInsecure bool, tlsHint bool) (string, bool) {
+	switch {
+	case strings.HasPrefix(target, "https://"):
+		return strings.TrimPrefix(target, "https://"), !forceInsecure
+	case strings.HasPrefix(target, "grpcs://"):
+		return strings.TrimPrefix(target, "grpcs://"), !forceInsecure
+	case strings.HasPrefix(target, "http://"):
+		return strings.TrimPrefix(target, "http://"), false
+	case strings.HasPrefix(target, "grpc://"):
+		return strings.TrimPrefix(target, "grpc://"), false
+	default:
+		return target, !forceInsecure && tlsHint
+	}
+}
+
+func loadUpstreamCredentials(secure bool, caFile, serverName string) (credentials.TransportCredentials, error) {
+	if !secure {
+		return insecure.NewCredentials(), nil
+	}
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ServerName: serverName,
+	}
+	if caFile != "" {
+		pem, err := os.ReadFile(caFile)
+		if err != nil {
+			return nil, err
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, errors.New("parse upstream CA bundle: no certificates found")
+		}
+		tlsConfig.RootCAs = pool
+	}
+	return credentials.NewTLS(tlsConfig), nil
+}
+
+func upstreamAuthUnaryInterceptor(token string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		return invoker(withUpstreamAuth(ctx, token), method, req, reply, cc, opts...)
+	}
+}
+
+func upstreamAuthStreamInterceptor(token string) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		return streamer(withUpstreamAuth(ctx, token), desc, cc, method, opts...)
+	}
+}
+
+func withUpstreamAuth(ctx context.Context, token string) context.Context {
+	if token == "" {
+		return ctx
+	}
+	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
 }

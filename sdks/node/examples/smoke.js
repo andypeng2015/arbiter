@@ -8,7 +8,7 @@ rule Approve {
 `;
 
 async function main() {
-  const client = new ArbiterClient("127.0.0.1:18081");
+  const client = new ArbiterClient("http://127.0.0.1:18081");
   try {
     const publish = await client.publishBundle({ name: "node-smoke", source });
     const result = await client.evaluateRules({

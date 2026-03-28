@@ -195,10 +195,10 @@ func MarshalObfuscated(rs *compiler.CompiledRuleset, opts ObfuscateOptions) ([]b
 
 // Unmarshal deserializes a binary blob back into a CompiledRuleset.
 func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
-	r := bytes.NewReader(data)
+	d := newBundleDecoder(data)
 
 	var m [4]byte
-	if _, err := io.ReadFull(r, m[:]); err != nil {
+	if _, err := io.ReadFull(d.r, m[:]); err != nil {
 		return nil, fmt.Errorf("read magic: %w", err)
 	}
 	if m != magic {
@@ -206,10 +206,16 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 	}
 
 	// Strings
-	strCount := readU32(r)
+	strCount, err := d.readCount(4)
+	if err != nil {
+		return nil, fmt.Errorf("read string count: %w", err)
+	}
 	pool := intern.NewPool()
 	for range strCount {
-		s := readString(r)
+		s, err := d.readString()
+		if err != nil {
+			return nil, fmt.Errorf("read string: %w", err)
+		}
 		pool.String(s)
 	}
 	if err := pool.Err(); err != nil {
@@ -217,19 +223,35 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 	}
 
 	// Numbers
-	numCount := readU32(r)
+	numCount, err := d.readCount(8)
+	if err != nil {
+		return nil, fmt.Errorf("read number count: %w", err)
+	}
 	for range numCount {
-		pool.Number(readF64(r))
+		n, err := d.readF64()
+		if err != nil {
+			return nil, fmt.Errorf("read number: %w", err)
+		}
+		pool.Number(n)
 	}
 	if err := pool.Err(); err != nil {
 		return nil, fmt.Errorf("unmarshal numbers: %w", err)
 	}
 
 	// Decimals
-	decCount := readU32(r)
+	decCount, err := d.readCount(8)
+	if err != nil {
+		return nil, fmt.Errorf("read decimal count: %w", err)
+	}
 	for range decCount {
-		text := readString(r)
-		unit := readString(r)
+		text, err := d.readString()
+		if err != nil {
+			return nil, fmt.Errorf("read decimal text: %w", err)
+		}
+		unit, err := d.readString()
+		if err != nil {
+			return nil, fmt.Errorf("read decimal unit: %w", err)
+		}
 		v, err := dec.Parse(text, unit)
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal decimal: %w", err)
@@ -241,17 +263,15 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 	}
 
 	// Lists
-	listCount := readU32(r)
+	listCount, err := d.readCount(poolValueSerializedSize)
+	if err != nil {
+		return nil, fmt.Errorf("read list count: %w", err)
+	}
 	listItems := make([]intern.PoolValue, listCount)
 	for i := range listCount {
-		listItems[i] = intern.PoolValue{
-			Typ:     readU8(r),
-			Num:     readF64(r),
-			Str:     readU16(r),
-			Bool:    readBool(r),
-			ListIdx: readU16(r),
-			ListLen: readU16(r),
-			Dec:     readU16(r),
+		listItems[i], err = d.readPoolValue()
+		if err != nil {
+			return nil, fmt.Errorf("read list item: %w", err)
 		}
 	}
 	if len(listItems) > 0 {
@@ -259,76 +279,139 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 	}
 
 	// Instructions
-	instrLen := readU32(r)
+	instrLen, err := d.readCount(1)
+	if err != nil {
+		return nil, fmt.Errorf("read instruction length: %w", err)
+	}
 	instructions := make([]byte, instrLen)
-	io.ReadFull(r, instructions)
+	if _, err := io.ReadFull(d.r, instructions); err != nil {
+		return nil, fmt.Errorf("read instructions: %w", err)
+	}
 
 	// Rules
-	ruleCount := readU32(r)
+	ruleCount, err := d.readCount(ruleHeaderSerializedSize)
+	if err != nil {
+		return nil, fmt.Errorf("read rule count: %w", err)
+	}
 	rules := make([]compiler.RuleHeader, ruleCount)
 	for i := range ruleCount {
-		rules[i] = readRuleHeader(r)
+		rules[i], err = d.readRuleHeader()
+		if err != nil {
+			return nil, fmt.Errorf("read rule header: %w", err)
+		}
 	}
 
 	// Actions
-	actionCount := readU32(r)
+	actionCount, err := d.readCount(6)
+	if err != nil {
+		return nil, fmt.Errorf("read action count: %w", err)
+	}
 	actions := make([]compiler.ActionEntry, actionCount)
 	for i := range actionCount {
-		actions[i].NameIdx = readU16(r)
-		paramCount := readU32(r)
+		actions[i].NameIdx, err = d.readU16()
+		if err != nil {
+			return nil, fmt.Errorf("read action name index: %w", err)
+		}
+		paramCount, err := d.readCount(actionParamSerializedSize)
+		if err != nil {
+			return nil, fmt.Errorf("read action param count: %w", err)
+		}
 		actions[i].Params = make([]compiler.ActionParam, paramCount)
 		for j := range paramCount {
+			keyIdx, err := d.readU16()
+			if err != nil {
+				return nil, fmt.Errorf("read action param key: %w", err)
+			}
+			valueOff, err := d.readU32()
+			if err != nil {
+				return nil, fmt.Errorf("read action param offset: %w", err)
+			}
+			valueLen, err := d.readU32()
+			if err != nil {
+				return nil, fmt.Errorf("read action param length: %w", err)
+			}
 			actions[i].Params[j] = compiler.ActionParam{
-				KeyIdx:   readU16(r),
-				ValueOff: readU32(r),
-				ValueLen: readU32(r),
+				KeyIdx:   keyIdx,
+				ValueOff: valueOff,
+				ValueLen: valueLen,
 			}
 		}
 	}
 
 	// Tags
-	tagCount := readU32(r)
+	tagCount, err := d.readCount(2)
+	if err != nil {
+		return nil, fmt.Errorf("read tag count: %w", err)
+	}
 	tags := make([]uint16, tagCount)
 	for i := range tagCount {
-		tags[i] = readU16(r)
+		tags[i], err = d.readU16()
+		if err != nil {
+			return nil, fmt.Errorf("read tag value: %w", err)
+		}
 	}
 
 	// Prereqs / Excludes
-	prereqCount := readU32(r)
+	prereqCount, err := d.readCount(2)
+	if err != nil {
+		return nil, fmt.Errorf("read prereq count: %w", err)
+	}
 	prereqs := make([]uint16, prereqCount)
 	for i := range prereqCount {
-		prereqs[i] = readU16(r)
+		prereqs[i], err = d.readU16()
+		if err != nil {
+			return nil, fmt.Errorf("read prereq value: %w", err)
+		}
 	}
-	excludeCount := readU32(r)
+	excludeCount, err := d.readCount(2)
+	if err != nil {
+		return nil, fmt.Errorf("read exclude count: %w", err)
+	}
 	excludes := make([]uint16, excludeCount)
 	for i := range excludeCount {
-		excludes[i] = readU16(r)
+		excludes[i], err = d.readU16()
+		if err != nil {
+			return nil, fmt.Errorf("read exclude value: %w", err)
+		}
 	}
 
 	// Tables
-	tableCount := readU32(r)
+	tableCount, err := d.readCount(10)
+	if err != nil {
+		return nil, fmt.Errorf("read table count: %w", err)
+	}
 	tables := make([]compiler.CompiledTable, tableCount)
 	for i := range tableCount {
 		tbl := compiler.CompiledTable{}
-		tbl.Name = readString(r)
-		colCount := readU16(r)
+		tbl.Name, err = d.readString()
+		if err != nil {
+			return nil, fmt.Errorf("read table name: %w", err)
+		}
+		colCount, err := d.readU16()
+		if err != nil {
+			return nil, fmt.Errorf("read table column count: %w", err)
+		}
+		if err := d.ensureAllocCount(uint32(colCount), 4); err != nil {
+			return nil, fmt.Errorf("read table columns: %w", err)
+		}
 		tbl.Columns = make([]string, colCount)
 		for j := range colCount {
-			tbl.Columns[j] = readString(r)
+			tbl.Columns[j], err = d.readString()
+			if err != nil {
+				return nil, fmt.Errorf("read table column: %w", err)
+			}
 		}
-		rowCount := readU32(r)
+		rowCount, err := d.readCount(max(1, int(colCount)*poolValueSerializedSize))
+		if err != nil {
+			return nil, fmt.Errorf("read table row count: %w", err)
+		}
 		tbl.Rows = make([][]intern.PoolValue, rowCount)
 		for j := range rowCount {
 			tbl.Rows[j] = make([]intern.PoolValue, colCount)
 			for k := range colCount {
-				tbl.Rows[j][k] = intern.PoolValue{
-					Typ:     readU8(r),
-					Num:     readF64(r),
-					Str:     readU16(r),
-					Bool:    readBool(r),
-					ListIdx: readU16(r),
-					ListLen: readU16(r),
-					Dec:     readU16(r),
+				tbl.Rows[j][k], err = d.readPoolValue()
+				if err != nil {
+					return nil, fmt.Errorf("read table row value: %w", err)
 				}
 			}
 		}
@@ -336,23 +419,59 @@ func Unmarshal(data []byte) (*compiler.CompiledRuleset, error) {
 	}
 
 	// LookupMetas
-	metaCount := readU32(r)
+	metaCount, err := d.readCount(25)
+	if err != nil {
+		return nil, fmt.Errorf("read lookup meta count: %w", err)
+	}
 	lookupMetas := make([]compiler.LookupMeta, metaCount)
 	for i := range metaCount {
 		lm := compiler.LookupMeta{}
-		lm.TableIdx = readU16(r)
-		lm.WhereOff = readU32(r)
-		lm.WhereLen = readU32(r)
-		lm.SortCol = readString(r)
-		lm.SortDesc = readBool(r)
-		lm.ElseOff = readU32(r)
-		lm.ElseLen = readU32(r)
-		keyCount := readU16(r)
+		lm.TableIdx, err = d.readU16()
+		if err != nil {
+			return nil, fmt.Errorf("read lookup meta table index: %w", err)
+		}
+		lm.WhereOff, err = d.readU32()
+		if err != nil {
+			return nil, fmt.Errorf("read lookup meta where offset: %w", err)
+		}
+		lm.WhereLen, err = d.readU32()
+		if err != nil {
+			return nil, fmt.Errorf("read lookup meta where length: %w", err)
+		}
+		lm.SortCol, err = d.readString()
+		if err != nil {
+			return nil, fmt.Errorf("read lookup meta sort column: %w", err)
+		}
+		lm.SortDesc, err = d.readBool()
+		if err != nil {
+			return nil, fmt.Errorf("read lookup meta sort direction: %w", err)
+		}
+		lm.ElseOff, err = d.readU32()
+		if err != nil {
+			return nil, fmt.Errorf("read lookup meta else offset: %w", err)
+		}
+		lm.ElseLen, err = d.readU32()
+		if err != nil {
+			return nil, fmt.Errorf("read lookup meta else length: %w", err)
+		}
+		keyCount, err := d.readU16()
+		if err != nil {
+			return nil, fmt.Errorf("read lookup meta key count: %w", err)
+		}
+		if err := d.ensureAllocCount(uint32(keyCount), 4); err != nil {
+			return nil, fmt.Errorf("read lookup meta keys: %w", err)
+		}
 		lm.ElseKeys = make([]string, keyCount)
 		for j := range keyCount {
-			lm.ElseKeys[j] = readString(r)
+			lm.ElseKeys[j], err = d.readString()
+			if err != nil {
+				return nil, fmt.Errorf("read lookup meta key: %w", err)
+			}
 		}
 		lookupMetas[i] = lm
+	}
+	if d.r.Len() != 0 {
+		return nil, fmt.Errorf("bundle has %d trailing bytes", d.r.Len())
 	}
 
 	return &compiler.CompiledRuleset{
@@ -447,44 +566,265 @@ func writeRuleHeader(w *bytes.Buffer, r compiler.RuleHeader) {
 	writeBool(w, r.HasSegment)
 }
 
-func readU8(r *bytes.Reader) uint8   { var v uint8; binary.Read(r, binary.LittleEndian, &v); return v }
-func readI32(r *bytes.Reader) int32  { var v int32; binary.Read(r, binary.LittleEndian, &v); return v }
-func readU16(r *bytes.Reader) uint16 { var v uint16; binary.Read(r, binary.LittleEndian, &v); return v }
-func readU32(r *bytes.Reader) uint32 { var v uint32; binary.Read(r, binary.LittleEndian, &v); return v }
-func readF64(r *bytes.Reader) float64 {
-	var v float64
-	binary.Read(r, binary.LittleEndian, &v)
-	return v
+const (
+	poolValueSerializedSize   = 18
+	ruleHeaderSerializedSize  = 41
+	actionParamSerializedSize = 10
+)
+
+type bundleDecoder struct {
+	r *bytes.Reader
 }
-func readBool(r *bytes.Reader) bool { return readU8(r) != 0 }
-func readString(r *bytes.Reader) string {
-	n := readU32(r)
-	buf := make([]byte, n)
-	io.ReadFull(r, buf)
-	return string(buf)
+
+func newBundleDecoder(data []byte) *bundleDecoder {
+	return &bundleDecoder{r: bytes.NewReader(data)}
 }
-func readRuleHeader(r *bytes.Reader) compiler.RuleHeader {
-	return compiler.RuleHeader{
-		NameIdx:             readU16(r),
-		Priority:            readI32(r),
-		ConditionOff:        readU32(r),
-		ConditionLen:        readU32(r),
-		ActionIdx:           readU16(r),
-		FallbackIdx:         readU16(r),
-		KillSwitch:          readBool(r),
-		HasRollout:          readBool(r),
-		RolloutBps:          readU16(r),
-		RolloutSubjectIdx:   readU16(r),
-		RolloutNamespaceIdx: readU16(r),
-		HasRolloutSubject:   readBool(r),
-		HasRolloutNamespace: readBool(r),
-		PrereqOff:           readU16(r),
-		PrereqLen:           readU16(r),
-		TagOff:              readU16(r),
-		TagLen:              readU16(r),
-		ExcludeOff:          readU16(r),
-		ExcludeLen:          readU16(r),
-		SegmentNameIdx:      readU16(r),
-		HasSegment:          readBool(r),
+
+func (d *bundleDecoder) ensureBytes(n uint32) error {
+	if n > uint32(d.r.Len()) {
+		return io.ErrUnexpectedEOF
 	}
+	return nil
 }
+
+func (d *bundleDecoder) ensureAllocCount(count uint32, minItemSize int) error {
+	if count == 0 {
+		return nil
+	}
+	if minItemSize <= 0 {
+		minItemSize = 1
+	}
+	maxCount := uint64(d.r.Len()) / uint64(minItemSize)
+	if maxCount == 0 && d.r.Len() > 0 {
+		maxCount = 1
+	}
+	if uint64(count) > maxCount {
+		return fmt.Errorf("declared count %d exceeds remaining bundle capacity", count)
+	}
+	return nil
+}
+
+func (d *bundleDecoder) readU8() (uint8, error) {
+	var v uint8
+	if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (d *bundleDecoder) readI32() (int32, error) {
+	var v int32
+	if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (d *bundleDecoder) readU16() (uint16, error) {
+	var v uint16
+	if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (d *bundleDecoder) readU32() (uint32, error) {
+	var v uint32
+	if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (d *bundleDecoder) readCount(minItemSize int) (uint32, error) {
+	count, err := d.readU32()
+	if err != nil {
+		return 0, err
+	}
+	if err := d.ensureAllocCount(count, minItemSize); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (d *bundleDecoder) readF64() (float64, error) {
+	var v float64
+	if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (d *bundleDecoder) readBool() (bool, error) {
+	v, err := d.readU8()
+	if err != nil {
+		return false, err
+	}
+	return v != 0, nil
+}
+
+func (d *bundleDecoder) readString() (string, error) {
+	n, err := d.readU32()
+	if err != nil {
+		return "", err
+	}
+	if err := d.ensureBytes(n); err != nil {
+		return "", err
+	}
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(d.r, buf); err != nil {
+		return "", err
+	}
+	return string(buf), nil
+}
+
+func (d *bundleDecoder) readPoolValue() (intern.PoolValue, error) {
+	typ, err := d.readU8()
+	if err != nil {
+		return intern.PoolValue{}, err
+	}
+	num, err := d.readF64()
+	if err != nil {
+		return intern.PoolValue{}, err
+	}
+	str, err := d.readU16()
+	if err != nil {
+		return intern.PoolValue{}, err
+	}
+	boolean, err := d.readBool()
+	if err != nil {
+		return intern.PoolValue{}, err
+	}
+	listIdx, err := d.readU16()
+	if err != nil {
+		return intern.PoolValue{}, err
+	}
+	listLen, err := d.readU16()
+	if err != nil {
+		return intern.PoolValue{}, err
+	}
+	decimal, err := d.readU16()
+	if err != nil {
+		return intern.PoolValue{}, err
+	}
+	return intern.PoolValue{
+		Typ:     typ,
+		Num:     num,
+		Str:     str,
+		Bool:    boolean,
+		ListIdx: listIdx,
+		ListLen: listLen,
+		Dec:     decimal,
+	}, nil
+}
+
+func (d *bundleDecoder) readRuleHeader() (compiler.RuleHeader, error) {
+	nameIdx, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	priority, err := d.readI32()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	conditionOff, err := d.readU32()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	conditionLen, err := d.readU32()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	actionIdx, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	fallbackIdx, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	killSwitch, err := d.readBool()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	hasRollout, err := d.readBool()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	rolloutBps, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	rolloutSubjectIdx, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	rolloutNamespaceIdx, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	hasRolloutSubject, err := d.readBool()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	hasRolloutNamespace, err := d.readBool()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	prereqOff, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	prereqLen, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	tagOff, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	tagLen, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	excludeOff, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	excludeLen, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	segmentNameIdx, err := d.readU16()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	hasSegment, err := d.readBool()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	return compiler.RuleHeader{
+		NameIdx:             nameIdx,
+		Priority:            priority,
+		ConditionOff:        conditionOff,
+		ConditionLen:        conditionLen,
+		ActionIdx:           actionIdx,
+		FallbackIdx:         fallbackIdx,
+		KillSwitch:          killSwitch,
+		HasRollout:          hasRollout,
+		RolloutBps:          rolloutBps,
+		RolloutSubjectIdx:   rolloutSubjectIdx,
+		RolloutNamespaceIdx: rolloutNamespaceIdx,
+		HasRolloutSubject:   hasRolloutSubject,
+		HasRolloutNamespace: hasRolloutNamespace,
+		PrereqOff:           prereqOff,
+		PrereqLen:           prereqLen,
+		TagOff:              tagOff,
+		TagLen:              tagLen,
+		ExcludeOff:          excludeOff,
+		ExcludeLen:          excludeLen,
+		SegmentNameIdx:      segmentNameIdx,
+		HasSegment:          hasSegment,
+	}, nil
+}
+

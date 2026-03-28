@@ -3,7 +3,7 @@ use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = ArbiterClient::connect("http://127.0.0.1:18081").await?;
+    let client = ArbiterClient::connect("127.0.0.1:18081").await?;
     let publish = client
         .publish_bundle(
             "rust-smoke",
