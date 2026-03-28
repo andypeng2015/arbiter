@@ -29,6 +29,17 @@ with ArbiterClient("https://arbiter.internal:443", token="...", secure=True) as 
     ...
 ```
 
+The runtime control surface is separate from the bundle/eval API. Use
+`RuntimeClient` to inspect one `arbiter-runtime` instance:
+
+```python
+from arbiter_sdk import RuntimeClient
+
+with RuntimeClient("http://127.0.0.1:7081") as runtime:
+    caps = runtime.get_runtime_capabilities()
+    print([(item.scheme, item.owner) for item in caps.sources])
+```
+
 ## Capability Plugins
 
 ```python

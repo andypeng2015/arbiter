@@ -576,6 +576,7 @@ arbiter diff current.arb candidate.arb --data-file contexts.json --key request_i
 arbiter replay candidate.arb --audit decisions.jsonl --request-id req-42
 arbiter check rules.arb            # validate without emitting
 arbiter expert tax.arb --envelope '{...}' [--facts '[...]']
+arbiter runtime-capabilities 127.0.0.1:7081 --json
 arbiter serve --grpc 127.0.0.1:8081 --auth-token "$ARBITER_TOKEN" --max-recv-bytes 4194304 --data-dir ./state
 arbiter-agent --upstream https://arbiter.internal:443 --upstream-token "$ARBITER_TOKEN" --bundle-name checkout --grpc 127.0.0.1:7081 --status 127.0.0.1:7082
 ```
@@ -1126,6 +1127,7 @@ scenario "velocity detection triggers on transactions" {
 ```bash
 arbiter-runtime \
   --bundle monitor.arb \
+  --grpc 127.0.0.1:7081 \
   --capability-grpc 127.0.0.1:7090 \
   --poll 5s \
   --status :7082 \
@@ -1142,6 +1144,7 @@ It handles the full lifecycle:
 - **Bounded parallelism** — independent sources and handler targets can run concurrently inside one tick without changing per-target ordering
 - **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
 - **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats, unified capability surface, connected plugin metadata)
+- **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` exposes the same unified capability surface over gRPC for SDKs and CLI clients
 
 Build:
 

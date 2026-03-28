@@ -36,6 +36,20 @@ const client = new ArbiterClient("https://arbiter.internal:443", {
 });
 ```
 
+The runtime control surface is separate from the bundle/eval API. Use `RuntimeClient`
+to inspect one `arbiter-runtime` instance:
+
+```js
+const { RuntimeClient } = require("./src");
+
+async function main() {
+  const runtime = new RuntimeClient("http://127.0.0.1:7081");
+  const caps = await runtime.getRuntimeCapabilities();
+  console.log(caps.sources.map(item => `${item.scheme}:${item.owner}`));
+  runtime.close();
+}
+```
+
 ## Capability Plugins
 
 ```js

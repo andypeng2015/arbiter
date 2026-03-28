@@ -60,6 +60,20 @@ func TestRunRejectsRemovedEmitCommand(t *testing.T) {
 	}
 }
 
+func TestNormalizeRuntimeTarget(t *testing.T) {
+	got, err := normalizeRuntimeTarget("grpc://127.0.0.1:7081")
+	if err != nil {
+		t.Fatalf("normalizeRuntimeTarget grpc://: %v", err)
+	}
+	if got != "127.0.0.1:7081" {
+		t.Fatalf("normalized target = %q, want 127.0.0.1:7081", got)
+	}
+
+	if _, err := normalizeRuntimeTarget("https://arbiter.internal:7443"); err == nil {
+		t.Fatal("expected https target to be rejected")
+	}
+}
+
 func TestCheckRejectsCompileErrorsInIncludedFiles(t *testing.T) {
 	dir := t.TempDir()
 	mainPath := writeCLIFile(t, dir, "main.arb", `include "bad.arb"`)

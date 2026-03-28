@@ -14,6 +14,7 @@
 //	arbiter bundle <file.arb> [-o output.arbb] [--risk-policy policy.arb] [--force] [--sign key.pem] — export obfuscated binary bundle for edge/browser (policy-gated)
 //	arbiter bundle --verify <file.arbb> --pub <public-key.pem> — verify a signed bundle
 //	arbiter import <file.json> [-o output.arb] — decompile Arishem JSON to .arb
+//	arbiter runtime-capabilities <target> [--json] — inspect one runtime's gRPC capability surface
 //	arbiter serve [--grpc :8081] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
 
@@ -50,10 +51,12 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const (
-	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, serve"
+	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, serve"
 	rootUsage   = "Usage: arbiter <command> <file>\nCommands: " + commandList
 )
 
@@ -62,19 +65,20 @@ type usageError string
 func (e usageError) Error() string { return string(e) }
 
 var commandHandlers = map[string]func([]string) error{
-	"check":    runCheck,
-	"compile":  runCompile,
-	"fmt":      runFmt,
-	"bundle":   runBundle,
-	"eval":     runEval,
-	"strategy": runStrategy,
-	"diff":     runDiff,
-	"replay":   runReplay,
-	"expert":   runExpert,
-	"test":     runTest,
-	"explore":  runExplore,
-	"import":   runImport,
-	"serve":    runServe,
+	"check":                runCheck,
+	"compile":              runCompile,
+	"fmt":                  runFmt,
+	"bundle":               runBundle,
+	"eval":                 runEval,
+	"strategy":             runStrategy,
+	"diff":                 runDiff,
+	"replay":               runReplay,
+	"expert":               runExpert,
+	"test":                 runTest,
+	"explore":              runExplore,
+	"import":               runImport,
+	"runtime-capabilities": runRuntimeCapabilities,
+	"serve":                runServe,
 }
 
 func main() {
@@ -277,6 +281,19 @@ func runImport(args []string) error {
 		}
 	}
 	return importCmd(args[0], outPath)
+}
+
+func runRuntimeCapabilities(args []string) error {
+	if len(args) < 1 {
+		return usageError("Usage: arbiter runtime-capabilities <target> [--json]")
+	}
+	jsonOut := false
+	for i := 1; i < len(args); i++ {
+		if args[i] == "--json" {
+			jsonOut = true
+		}
+	}
+	return runtimeCapabilitiesCmd(args[0], jsonOut)
 }
 
 func runExplore(args []string) error {
@@ -901,6 +918,97 @@ func serveCmd(cfg serveConfig) error {
 		"rate_limit_burst", cfg.rateLimitBurst,
 	)
 	return grpcSrv.Serve(lis)
+}
+
+func runtimeCapabilitiesCmd(target string, jsonOut bool) error {
+	normalized, err := normalizeRuntimeTarget(target)
+	if err != nil {
+		return err
+	}
+	conn, err := grpc.NewClient(normalized, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("connect runtime %s: %w", normalized, err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := arbiterv1.NewRuntimeServiceClient(conn).GetRuntimeCapabilities(ctx, &arbiterv1.GetRuntimeCapabilitiesRequest{})
+	if err != nil {
+		return fmt.Errorf("get runtime capabilities: %w", err)
+	}
+	if jsonOut {
+		data, err := protojson.MarshalOptions{Indent: "  "}.Marshal(resp)
+		if err != nil {
+			return fmt.Errorf("marshal runtime capabilities: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	fmt.Println("runtime capabilities")
+	if len(resp.GetPlugins()) > 0 {
+		fmt.Println("plugins:")
+		for _, plugin := range resp.GetPlugins() {
+			name := plugin.GetName()
+			if version := strings.TrimSpace(plugin.GetVersion()); version != "" {
+				name += " (" + version + ")"
+			}
+			fmt.Printf("  - %s\n", name)
+		}
+	}
+	fmt.Println("sources:")
+	for _, item := range resp.GetSources() {
+		fmt.Printf("  - %s [%s]\n", item.GetScheme(), capabilityOwnerLabel(item.GetOwner()))
+		if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
+			fmt.Printf("    %s\n", desc)
+		}
+	}
+	fmt.Println("sinks:")
+	for _, item := range resp.GetSinks() {
+		fmt.Printf("  - %s [%s]\n", item.GetKind(), capabilityOwnerLabel(item.GetOwner()))
+		if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
+			fmt.Printf("    %s\n", desc)
+		}
+	}
+	fmt.Println("workers:")
+	for _, item := range resp.GetWorkers() {
+		fmt.Printf("  - %s [%s]\n", item.GetKind(), capabilityOwnerLabel(item.GetOwner()))
+		if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
+			fmt.Printf("    %s\n", desc)
+		}
+	}
+	return nil
+}
+
+func normalizeRuntimeTarget(target string) (string, error) {
+	trimmed := strings.TrimSpace(target)
+	switch {
+	case strings.HasPrefix(trimmed, "grpc://"):
+		return strings.TrimPrefix(trimmed, "grpc://"), nil
+	case strings.HasPrefix(trimmed, "http://"):
+		return strings.TrimPrefix(trimmed, "http://"), nil
+	case strings.HasPrefix(trimmed, "grpcs://"), strings.HasPrefix(trimmed, "https://"):
+		return "", fmt.Errorf("runtime-capabilities currently supports plaintext gRPC targets only")
+	case trimmed == "":
+		return "", fmt.Errorf("runtime target is required")
+	default:
+		return trimmed, nil
+	}
+}
+
+func capabilityOwnerLabel(owner arbiterv1.CapabilityOwner) string {
+	switch owner {
+	case arbiterv1.CapabilityOwner_CAPABILITY_OWNER_CORE:
+		return "core"
+	case arbiterv1.CapabilityOwner_CAPABILITY_OWNER_HOST:
+		return "host"
+	case arbiterv1.CapabilityOwner_CAPABILITY_OWNER_PLUGIN:
+		return "plugin"
+	default:
+		return "unspecified"
+	}
 }
 
 func parseIntFlag(name, raw string, min int) (int, error) {

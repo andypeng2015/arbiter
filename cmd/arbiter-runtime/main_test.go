@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/capability"
 	"github.com/odvcencio/arbiter/workflow"
 )
@@ -52,5 +53,47 @@ func TestCapabilityPluginsStatus(t *testing.T) {
 	}
 	if status[0]["name"] != "ops-plugin" || status[0]["version"] != "1.2.3" {
 		t.Fatalf("unexpected plugin status: %+v", status[0])
+	}
+}
+
+func TestProtoRuntimeCapabilities(t *testing.T) {
+	resp := protoRuntimeCapabilities(workflow.CapabilitySurface{
+		Sources: []workflow.SourceCapability{{
+			Scheme:      "kafka",
+			Owner:       workflow.CapabilityOwnerPlugin,
+			Description: "stream facts",
+		}},
+		Sinks: []workflow.HandlerCapability{{
+			Kind:        "discord",
+			Owner:       workflow.CapabilityOwnerHost,
+			Description: "discord sink",
+		}},
+		Workers: []workflow.HandlerCapability{{
+			Kind:        "python",
+			Owner:       workflow.CapabilityOwnerPlugin,
+			Description: "python worker",
+		}},
+	}, &capability.Manifest{Name: "ops-plugin", Version: "1.2.3"})
+
+	if len(resp.GetSources()) != 1 || resp.GetSources()[0].GetScheme() != "kafka" {
+		t.Fatalf("unexpected proto sources: %+v", resp.GetSources())
+	}
+	if got := resp.GetSources()[0].GetOwner(); got != arbiterv1.CapabilityOwner_CAPABILITY_OWNER_PLUGIN {
+		t.Fatalf("source owner = %v, want plugin", got)
+	}
+	if len(resp.GetSinks()) != 1 || resp.GetSinks()[0].GetKind() != "discord" {
+		t.Fatalf("unexpected proto sinks: %+v", resp.GetSinks())
+	}
+	if got := resp.GetSinks()[0].GetOwner(); got != arbiterv1.CapabilityOwner_CAPABILITY_OWNER_HOST {
+		t.Fatalf("sink owner = %v, want host", got)
+	}
+	if len(resp.GetWorkers()) != 1 || resp.GetWorkers()[0].GetKind() != "python" {
+		t.Fatalf("unexpected proto workers: %+v", resp.GetWorkers())
+	}
+	if got := resp.GetWorkers()[0].GetOwner(); got != arbiterv1.CapabilityOwner_CAPABILITY_OWNER_PLUGIN {
+		t.Fatalf("worker owner = %v, want plugin", got)
+	}
+	if len(resp.GetPlugins()) != 1 || resp.GetPlugins()[0].GetName() != "ops-plugin" {
+		t.Fatalf("unexpected proto plugins: %+v", resp.GetPlugins())
 	}
 }

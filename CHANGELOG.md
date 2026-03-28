@@ -9,6 +9,7 @@
 - **Reference runtime hook-up** — `arbiter-runtime --capability-grpc ...` now dials one remote capability service, binds its declared source schemes, sink kinds, and worker kinds into the workflow runner, and exposes that manifest on `/status`.
 - **Explicit worker-runtime boundary** — sink handlers no longer implicitly count as worker runtimes. Workers stay typed capabilities, so a worker kind must be explicitly registered on the worker-runtime surface before a bundle can run.
 - **Unified runtime capability status** — the workflow runner now exposes one inspectable capability surface across sources, sinks, and worker runtimes, tagged by owner (`core`, `host`, or `plugin`) instead of only dumping raw plugin manifests.
+- **Runtime gRPC introspection** — `arbiter-runtime` can now serve `RuntimeService.GetRuntimeCapabilities`, and the CLI plus Node/Python/Rust SDKs expose that same unified capability surface without scraping HTTP `/status`.
 
 ### SDKs
 

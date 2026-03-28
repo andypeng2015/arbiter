@@ -16,6 +16,20 @@ cargo run --example smoke
 
 The client accepts bare `host:port` targets for local plaintext use and `https://...` targets for TLS endpoints. Add a token with `.with_token("...")` when the server requires auth.
 
+The runtime control surface is separate from the bundle/eval API. Use
+`RuntimeClient` to inspect one `arbiter-runtime` instance:
+
+```rust
+use arbiter_sdk::RuntimeClient;
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let runtime = RuntimeClient::connect("127.0.0.1:7081").await?;
+let caps = runtime.get_runtime_capabilities().await?;
+println!("{}", caps.sources.len());
+# Ok(())
+# }
+```
+
 ## Capability Plugins
 
 The crate also ships a capability-service helper for non-Go runtime plugins. Implement the handler traits, register them on a `CapabilityPlugin`, and hand the resulting service to tonic:

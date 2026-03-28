@@ -886,3 +886,105 @@ var ArbiterService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "arbiter/v1/service.proto",
 }
+
+const (
+	RuntimeService_GetRuntimeCapabilities_FullMethodName = "/arbiter.v1.RuntimeService/GetRuntimeCapabilities"
+)
+
+// RuntimeServiceClient is the client API for RuntimeService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type RuntimeServiceClient interface {
+	GetRuntimeCapabilities(ctx context.Context, in *GetRuntimeCapabilitiesRequest, opts ...grpc.CallOption) (*GetRuntimeCapabilitiesResponse, error)
+}
+
+type runtimeServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewRuntimeServiceClient(cc grpc.ClientConnInterface) RuntimeServiceClient {
+	return &runtimeServiceClient{cc}
+}
+
+func (c *runtimeServiceClient) GetRuntimeCapabilities(ctx context.Context, in *GetRuntimeCapabilitiesRequest, opts ...grpc.CallOption) (*GetRuntimeCapabilitiesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRuntimeCapabilitiesResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_GetRuntimeCapabilities_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// RuntimeServiceServer is the server API for RuntimeService service.
+// All implementations must embed UnimplementedRuntimeServiceServer
+// for forward compatibility.
+type RuntimeServiceServer interface {
+	GetRuntimeCapabilities(context.Context, *GetRuntimeCapabilitiesRequest) (*GetRuntimeCapabilitiesResponse, error)
+	mustEmbedUnimplementedRuntimeServiceServer()
+}
+
+// UnimplementedRuntimeServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedRuntimeServiceServer struct{}
+
+func (UnimplementedRuntimeServiceServer) GetRuntimeCapabilities(context.Context, *GetRuntimeCapabilitiesRequest) (*GetRuntimeCapabilitiesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRuntimeCapabilities not implemented")
+}
+func (UnimplementedRuntimeServiceServer) mustEmbedUnimplementedRuntimeServiceServer() {}
+func (UnimplementedRuntimeServiceServer) testEmbeddedByValue()                        {}
+
+// UnsafeRuntimeServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to RuntimeServiceServer will
+// result in compilation errors.
+type UnsafeRuntimeServiceServer interface {
+	mustEmbedUnimplementedRuntimeServiceServer()
+}
+
+func RegisterRuntimeServiceServer(s grpc.ServiceRegistrar, srv RuntimeServiceServer) {
+	// If the following call pancis, it indicates UnimplementedRuntimeServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&RuntimeService_ServiceDesc, srv)
+}
+
+func _RuntimeService_GetRuntimeCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRuntimeCapabilitiesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).GetRuntimeCapabilities(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_GetRuntimeCapabilities_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).GetRuntimeCapabilities(ctx, req.(*GetRuntimeCapabilitiesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// RuntimeService_ServiceDesc is the grpc.ServiceDesc for RuntimeService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var RuntimeService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "arbiter.v1.RuntimeService",
+	HandlerType: (*RuntimeServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetRuntimeCapabilities",
+			Handler:    _RuntimeService_GetRuntimeCapabilities_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "arbiter/v1/service.proto",
+}

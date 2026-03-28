@@ -4,16 +4,18 @@
 //
 // Usage:
 //
-//	arbiter-runtime --bundle rules.arb [--capability-grpc 127.0.0.1:7090] [--poll 5s] [--status :7082] [--checkpoint /var/lib/arbiter/state] [--source-parallelism 8] [--delivery-parallelism 8]
+//	arbiter-runtime --bundle rules.arb [--grpc 127.0.0.1:7081] [--capability-grpc 127.0.0.1:7090] [--poll 5s] [--status :7082] [--checkpoint /var/lib/arbiter/state] [--source-parallelism 8] [--delivery-parallelism 8]
 package main
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -36,6 +38,7 @@ import (
 func main() {
 	bundlePath := flag.String("bundle", "", "path to .arb file")
 	pollInterval := flag.Duration("poll", 5*time.Second, "tick interval")
+	grpcAddr := flag.String("grpc", "", "optional runtime gRPC address for runtime control/introspection")
 	statusAddr := flag.String("status", ":7082", "health/status HTTP address")
 	checkpointDir := flag.String("checkpoint", "", "directory for checkpoint files")
 	deliveryLog := flag.String("delivery-log", "", "path for delivery journal (JSONL)")
@@ -57,6 +60,7 @@ func main() {
 
 	rt, err := newRuntime(*bundlePath, runtimeConfig{
 		pollInterval:        *pollInterval,
+		grpcAddr:            *grpcAddr,
 		statusAddr:          *statusAddr,
 		checkpointDir:       *checkpointDir,
 		deliveryLog:         *deliveryLog,
@@ -78,6 +82,7 @@ func main() {
 
 type runtimeConfig struct {
 	pollInterval        time.Duration
+	grpcAddr            string
 	statusAddr          string
 	checkpointDir       string
 	deliveryLog         string
@@ -203,6 +208,22 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 }
 
 func (rt *runtime) run(ctx context.Context) error {
+	var grpcSrv *grpc.Server
+	if rt.config.grpcAddr != "" {
+		lis, err := net.Listen("tcp", rt.config.grpcAddr)
+		if err != nil {
+			return fmt.Errorf("listen %s: %w", rt.config.grpcAddr, err)
+		}
+		grpcSrv = grpc.NewServer()
+		arbiterv1.RegisterRuntimeServiceServer(grpcSrv, newRuntimeRPCServer(rt))
+		go func() {
+			rt.logger.Info("runtime gRPC listening", "addr", rt.config.grpcAddr)
+			if err := grpcSrv.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+				rt.logger.Error("runtime gRPC server error", observability.KeyError, err.Error())
+			}
+		}()
+	}
+
 	// Start health server.
 	srv := &http.Server{Addr: rt.config.statusAddr, Handler: rt.statusMux()}
 	go func() {
@@ -223,6 +244,9 @@ func (rt *runtime) run(ctx context.Context) error {
 		case <-ctx.Done():
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
+			if grpcSrv != nil {
+				grpcSrv.GracefulStop()
+			}
 			_ = srv.Shutdown(shutdownCtx)
 			drained, retried, err := rt.runner.Drain(shutdownCtx)
 			switch {

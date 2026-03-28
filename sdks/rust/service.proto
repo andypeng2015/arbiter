@@ -32,6 +32,10 @@ service ArbiterService {
   rpc SetStrategyOverride(SetStrategyOverrideRequest) returns (SetStrategyOverrideResponse);
 }
 
+service RuntimeService {
+  rpc GetRuntimeCapabilities(GetRuntimeCapabilitiesRequest) returns (GetRuntimeCapabilitiesResponse);
+}
+
 message PublishBundleRequest {
   string name = 1;
   bytes source = 2;
@@ -143,6 +147,39 @@ enum KillSwitchState {
   KILL_SWITCH_STATE_UNSPECIFIED = 0;
   KILL_SWITCH_STATE_ON = 1;
   KILL_SWITCH_STATE_OFF = 2;
+}
+
+enum CapabilityOwner {
+  CAPABILITY_OWNER_UNSPECIFIED = 0;
+  CAPABILITY_OWNER_CORE = 1;
+  CAPABILITY_OWNER_HOST = 2;
+  CAPABILITY_OWNER_PLUGIN = 3;
+}
+
+message GetRuntimeCapabilitiesRequest {}
+
+message RuntimeSourceCapability {
+  string scheme = 1;
+  CapabilityOwner owner = 2;
+  string description = 3;
+}
+
+message RuntimeHandlerCapability {
+  string kind = 1;
+  CapabilityOwner owner = 2;
+  string description = 3;
+}
+
+message RuntimePluginInfo {
+  string name = 1;
+  string version = 2;
+}
+
+message GetRuntimeCapabilitiesResponse {
+  repeated RuntimeSourceCapability sources = 1;
+  repeated RuntimeHandlerCapability sinks = 2;
+  repeated RuntimeHandlerCapability workers = 3;
+  repeated RuntimePluginInfo plugins = 4;
 }
 
 message BundleOverrides {
