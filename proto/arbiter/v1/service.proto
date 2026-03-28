@@ -138,6 +138,13 @@ enum OverrideEventType {
   OVERRIDE_EVENT_TYPE_STRATEGY = 5;
 }
 
+// Unspecified means no explicit kill-switch state is set.
+enum KillSwitchState {
+  KILL_SWITCH_STATE_UNSPECIFIED = 0;
+  KILL_SWITCH_STATE_ON = 1;
+  KILL_SWITCH_STATE_OFF = 2;
+}
+
 message BundleOverrides {
   string bundle_id = 1;
   repeated RuleOverrideEntry rules = 2;
@@ -152,12 +159,14 @@ message RuleOverrideEntry {
   bool kill_switch = 3;
   bool rollout_set = 4;
   uint32 rollout = 5;
+  KillSwitchState kill_switch_state = 6;
 }
 
 message FlagOverrideEntry {
   string flag_key = 1;
   bool kill_switch_set = 2;
   bool kill_switch = 3;
+  KillSwitchState kill_switch_state = 4;
 }
 
 message FlagRuleOverrideEntry {
@@ -174,6 +183,7 @@ message StrategyOverrideEntry {
   bool kill_switch = 4;
   bool rollout_set = 5;
   uint32 rollout = 6;
+  KillSwitchState kill_switch_state = 7;
 }
 
 message OverrideEvent {
@@ -195,6 +205,11 @@ message TraceStep {
   string check = 1;
   bool result = 2;
   string detail = 3;
+  string phase = 4;
+  string scope = 5;
+  string subject = 6;
+  string kind = 7;
+  string target = 8;
 }
 
 message RuleMatch {
@@ -268,6 +283,7 @@ message ExpertActivation {
   google.protobuf.Struct params = 5;
   bool changed = 6;
   string detail = 7;
+  repeated TraceStep trace = 8;
 }
 
 message StartSessionRequest {

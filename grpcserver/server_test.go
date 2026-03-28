@@ -3,6 +3,7 @@ package grpcserver
 import (
 	"context"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +18,27 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+type captureSink struct {
+	mu     sync.Mutex
+	events []audit.DecisionEvent
+}
+
+func (s *captureSink) WriteDecision(_ context.Context, event audit.DecisionEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.events = append(s.events, event)
+	return nil
+}
+
+func (s *captureSink) Last() audit.DecisionEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.events) == 0 {
+		return audit.DecisionEvent{}
+	}
+	return s.events[len(s.events)-1]
+}
 
 const testSource = `
 segment enterprise {
@@ -183,6 +205,12 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 	if len(eval.Matched) != 1 || eval.Matched[0].Action != "Approve" {
 		t.Fatalf("unexpected evaluate response: %+v", eval)
 	}
+	if len(eval.Trace) == 0 {
+		t.Fatalf("expected evaluate trace, got %+v", eval)
+	}
+	if step := eval.Trace[0]; step.GetPhase() != "match" || step.GetScope() != "rule" || step.GetSubject() != "HighValue" || step.GetKind() != "segment" || step.GetTarget() != "enterprise" {
+		t.Fatalf("unexpected evaluate trace step: %+v", step)
+	}
 
 	flagResp, err := client.ResolveFlag(context.Background(), &arbiterv1.ResolveFlagRequest{
 		BundleId: pub.BundleId,
@@ -195,6 +223,12 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 	if flagResp.Variant != "true" {
 		t.Fatalf("expected checkout_v2=true, got %+v", flagResp)
 	}
+	if len(flagResp.Trace) == 0 {
+		t.Fatalf("expected flag trace, got %+v", flagResp)
+	}
+	if step := flagResp.Trace[0]; step.GetPhase() != "match" || step.GetScope() != "flag_rule" || step.GetSubject() != "checkout_v2[0]" || step.GetKind() != "segment" || step.GetTarget() != "enterprise" {
+		t.Fatalf("unexpected flag trace step: %+v", step)
+	}
 
 	strategyResp, err := client.EvaluateStrategy(context.Background(), &arbiterv1.EvaluateStrategyRequest{
 		BundleId:     pub.BundleId,
@@ -206,6 +240,12 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 	}
 	if strategyResp.Selected != "Priority" || strategyResp.GetOutcome() != "CheckoutPath" {
 		t.Fatalf("unexpected strategy response: %+v", strategyResp)
+	}
+	if len(strategyResp.Trace) == 0 {
+		t.Fatalf("expected strategy trace, got %+v", strategyResp)
+	}
+	if step := strategyResp.Trace[0]; step.GetPhase() != "match" || step.GetScope() != "strategy_candidate" || step.GetSubject() != "CheckoutRouting/Priority" || step.GetKind() != "condition" {
+		t.Fatalf("unexpected strategy trace step: %+v", step)
 	}
 
 	if _, err := client.SetRuleOverride(context.Background(), &arbiterv1.SetRuleOverrideRequest{
@@ -413,12 +453,14 @@ func TestServerGetOverridesByIDAndName(t *testing.T) {
 		t.Fatalf("GetOverrides by id: %v", err)
 	}
 	assertOverrideSnapshot(t, byID.GetOverrides(), pub.BundleId)
+	assertOverrideKillSwitchState(t, byID.GetOverrides(), arbiterv1.KillSwitchState_KILL_SWITCH_STATE_ON)
 
 	byName, err := client.GetOverrides(context.Background(), &arbiterv1.GetOverridesRequest{BundleName: "checkout"})
 	if err != nil {
 		t.Fatalf("GetOverrides by name: %v", err)
 	}
 	assertOverrideSnapshot(t, byName.GetOverrides(), pub.BundleId)
+	assertOverrideKillSwitchState(t, byName.GetOverrides(), arbiterv1.KillSwitchState_KILL_SWITCH_STATE_ON)
 }
 
 func TestServerWatchOverridesStreamsSnapshotAndMutations(t *testing.T) {
@@ -493,6 +535,9 @@ func TestServerWatchOverridesStreamsSnapshotAndMutations(t *testing.T) {
 	if flagEvent.GetFlag().GetKillSwitch() != false {
 		t.Fatalf("unexpected flag payload: %+v", flagEvent.GetFlag())
 	}
+	if flagEvent.GetFlag().GetKillSwitchState() != arbiterv1.KillSwitchState_KILL_SWITCH_STATE_OFF {
+		t.Fatalf("unexpected flag kill-switch state: %+v", flagEvent.GetFlag())
+	}
 
 	if _, err := client.SetFlagRuleOverride(context.Background(), &arbiterv1.SetFlagRuleOverrideRequest{
 		BundleId:  pub.BundleId,
@@ -528,6 +573,9 @@ func TestServerWatchOverridesStreamsSnapshotAndMutations(t *testing.T) {
 	}
 	if strategyEvent.GetStrategy().GetKillSwitch() {
 		t.Fatalf("unexpected strategy payload: %+v", strategyEvent.GetStrategy())
+	}
+	if strategyEvent.GetStrategy().GetKillSwitchState() != arbiterv1.KillSwitchState_KILL_SWITCH_STATE_OFF {
+		t.Fatalf("unexpected strategy kill-switch state: %+v", strategyEvent.GetStrategy())
 	}
 }
 
@@ -734,6 +782,12 @@ func TestServerExpertSessions(t *testing.T) {
 	if len(run.Activations) != 2 {
 		t.Fatalf("unexpected activations: %+v", run.Activations)
 	}
+	if len(run.Activations[0].GetTrace()) == 0 {
+		t.Fatalf("expected activation trace, got %+v", run.Activations[0])
+	}
+	if step := run.Activations[0].GetTrace()[0]; step.GetScope() != "expert_rule" || step.GetSubject() != "SeedHighRisk" {
+		t.Fatalf("unexpected activation trace step: %+v", step)
+	}
 
 	if _, err := client.AssertFacts(context.Background(), &arbiterv1.AssertFactsRequest{
 		SessionId: start.SessionId,
@@ -860,12 +914,95 @@ func TestServerExpertMutationRules(t *testing.T) {
 	}
 }
 
+func TestServerOverrideAuditIncludesKillSwitchState(t *testing.T) {
+	sink := &captureSink{}
+	client, cleanup := newTestClientWithSink(t, sink)
+	defer cleanup()
+
+	pub, err := client.PublishBundle(context.Background(), &arbiterv1.PublishBundleRequest{
+		Name:   "checkout",
+		Source: []byte(testSource),
+	})
+	if err != nil {
+		t.Fatalf("PublishBundle: %v", err)
+	}
+
+	if _, err := client.SetFlagOverride(context.Background(), &arbiterv1.SetFlagOverrideRequest{
+		BundleId:   pub.BundleId,
+		FlagKey:    "checkout_v2",
+		KillSwitch: wrapperspb.Bool(false),
+	}); err != nil {
+		t.Fatalf("SetFlagOverride: %v", err)
+	}
+
+	event := sink.Last()
+	if event.Kind != "override" || event.Override == nil {
+		t.Fatalf("unexpected audit event: %+v", event)
+	}
+	if event.Override.Scope != "flag" || event.Override.Target != "checkout_v2" {
+		t.Fatalf("unexpected override audit payload: %+v", event.Override)
+	}
+	if event.Override.KillSwitchState != "off" {
+		t.Fatalf("unexpected kill-switch state: %+v", event.Override)
+	}
+}
+
+func TestServerExpertAuditIncludesActivationTrace(t *testing.T) {
+	sink := &captureSink{}
+	client, cleanup := newTestClientWithSink(t, sink)
+	defer cleanup()
+
+	pub, err := client.PublishBundle(context.Background(), &arbiterv1.PublishBundleRequest{
+		Name:   "checkout",
+		Source: []byte(testSource),
+	})
+	if err != nil {
+		t.Fatalf("PublishBundle: %v", err)
+	}
+
+	envelope := mustStruct(t, map[string]any{
+		"user": map[string]any{
+			"id":         "user_1",
+			"risk_score": 0.95,
+		},
+	})
+	start, err := client.StartSession(context.Background(), &arbiterv1.StartSessionRequest{
+		BundleId: pub.BundleId,
+		Envelope: envelope,
+	})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	if _, err := client.RunSession(context.Background(), &arbiterv1.RunSessionRequest{
+		SessionId: start.SessionId,
+		RequestId: "req_expert_audit",
+	}); err != nil {
+		t.Fatalf("RunSession: %v", err)
+	}
+
+	event := sink.Last()
+	if event.Kind != "expert" || event.Expert == nil {
+		t.Fatalf("unexpected audit event: %+v", event)
+	}
+	if len(event.Expert.Activations) == 0 || len(event.Expert.Activations[0].Trace) == 0 {
+		t.Fatalf("expected activation trace in audit event: %+v", event.Expert)
+	}
+	if step := event.Expert.Activations[0].Trace[0]; step.Scope != "expert_rule" || step.Subject != "SeedHighRisk" {
+		t.Fatalf("unexpected expert activation trace step: %+v", step)
+	}
+}
+
 func newTestClient(t *testing.T) (arbiterv1.ArbiterServiceClient, func()) {
+	return newTestClientWithSink(t, audit.NopSink{})
+}
+
+func newTestClientWithSink(t *testing.T, sink audit.Sink) (arbiterv1.ArbiterServiceClient, func()) {
 	t.Helper()
 
 	listener := bufconn.Listen(1 << 20)
 	grpcSrv := grpc.NewServer()
-	arbiterv1.RegisterArbiterServiceServer(grpcSrv, NewServer(NewRegistry(), overrides.NewStore(), audit.NopSink{}))
+	arbiterv1.RegisterArbiterServiceServer(grpcSrv, NewServer(NewRegistry(), overrides.NewStore(), sink))
 	go func() {
 		_ = grpcSrv.Serve(listener)
 	}()
@@ -908,6 +1045,19 @@ func assertOverrideSnapshot(t *testing.T, snapshot *arbiterv1.BundleOverrides, b
 	}
 	if len(snapshot.GetRules()) != 1 || len(snapshot.GetFlags()) != 1 || len(snapshot.GetFlagRules()) != 1 || len(snapshot.GetStrategies()) != 1 {
 		t.Fatalf("unexpected override snapshot shape: %+v", snapshot)
+	}
+}
+
+func assertOverrideKillSwitchState(t *testing.T, snapshot *arbiterv1.BundleOverrides, want arbiterv1.KillSwitchState) {
+	t.Helper()
+	if got := snapshot.GetRules()[0].GetKillSwitchState(); got != want {
+		t.Fatalf("rule kill-switch state = %v, want %v", got, want)
+	}
+	if got := snapshot.GetFlags()[0].GetKillSwitchState(); got != want {
+		t.Fatalf("flag kill-switch state = %v, want %v", got, want)
+	}
+	if got := snapshot.GetStrategies()[0].GetKillSwitchState(); got != want {
+		t.Fatalf("strategy kill-switch state = %v, want %v", got, want)
 	}
 }
 

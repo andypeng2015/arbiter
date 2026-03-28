@@ -294,6 +294,7 @@ func protoActivations(items []expert.Activation) ([]*arbiterv1.ExpertActivation,
 			Params:  params,
 			Changed: item.Changed,
 			Detail:  item.Detail,
+			Trace:   protoTrace(item.Trace),
 		})
 	}
 	return out, nil

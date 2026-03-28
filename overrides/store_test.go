@@ -3,6 +3,8 @@ package overrides
 import (
 	"testing"
 	"time"
+
+	"github.com/odvcencio/arbiter/ir"
 )
 
 func TestStoreSnapshotRoundTripViaFile(t *testing.T) {
@@ -229,6 +231,33 @@ func TestStoreRestoreBundleReplacesOnlySelectedBundle(t *testing.T) {
 	}
 	if _, ok := store.Flag("bundle_b", "checkout_v2"); !ok {
 		t.Fatalf("expected unrelated bundle_b override to remain")
+	}
+}
+
+func TestOverrideKillSwitchState(t *testing.T) {
+	enabled := true
+	disabled := false
+
+	tests := []struct {
+		name string
+		got  ir.KillSwitchState
+		want ir.KillSwitchState
+	}{
+		{name: "rule absent", got: RuleOverride{}.KillSwitchState(), want: ir.KillSwitchUnset},
+		{name: "rule on", got: RuleOverride{KillSwitch: &enabled}.KillSwitchState(), want: ir.KillSwitchOn},
+		{name: "rule off", got: RuleOverride{KillSwitch: &disabled}.KillSwitchState(), want: ir.KillSwitchOff},
+		{name: "flag absent", got: FlagOverride{}.KillSwitchState(), want: ir.KillSwitchUnset},
+		{name: "flag on", got: FlagOverride{KillSwitch: &enabled}.KillSwitchState(), want: ir.KillSwitchOn},
+		{name: "flag off", got: FlagOverride{KillSwitch: &disabled}.KillSwitchState(), want: ir.KillSwitchOff},
+		{name: "strategy absent", got: StrategyOverride{}.KillSwitchState(), want: ir.KillSwitchUnset},
+		{name: "strategy on", got: StrategyOverride{KillSwitch: &enabled}.KillSwitchState(), want: ir.KillSwitchOn},
+		{name: "strategy off", got: StrategyOverride{KillSwitch: &disabled}.KillSwitchState(), want: ir.KillSwitchOff},
+	}
+
+	for _, tt := range tests {
+		if tt.got != tt.want {
+			t.Fatalf("%s: state = %q, want %q", tt.name, tt.got, tt.want)
+		}
 	}
 }
 

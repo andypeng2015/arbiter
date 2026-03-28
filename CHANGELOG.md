@@ -8,7 +8,8 @@
 - **Explicit kill-switch state** — `kill_switch on` and `kill_switch off` are preserved through compile, bundle, runtime, hover, explain, and explore surfaces. Kill-switch state is no longer collapsed to a single bool.
 - **Typed declaration family** — `input`, `feature`, `fact`, `outcome`, and `table` are now documented and surfaced as one typed-data family in inspection output.
 - **Authoring doctrine** — the README now recommends a canonical `.arb` file shape, modality choice doctrine, and module split strategy for readable bundles.
-- **Structured observability vocabulary** — governed traces now carry shared `phase`, `scope`, `subject`, `kind`, `check`, `result`, and `detail` semantics across rules, flags, and strategies, and expert activations now include their own per-firing trace.
+- **Structured observability vocabulary** — governed traces now carry shared `phase`, `scope`, `subject`, `kind`, `check`, `result`, and `detail` semantics across rules, flags, and strategies; the same structured `TraceStep` shape now flows through gRPC responses; and expert activations include their own per-firing trace in both API and audit surfaces.
+- **Explicit override kill-switch state** — override snapshots, watch events, and audit override mutations now expose canonical `kill_switch_state` (`on`, `off`, or unset) instead of forcing operators to reconstruct intent from paired bool fields.
 
 ### VM / Runtime
 

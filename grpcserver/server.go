@@ -11,6 +11,7 @@ import (
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/flags"
 	"github.com/odvcencio/arbiter/govern"
+	"github.com/odvcencio/arbiter/ir"
 	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/overrides"
 	"github.com/odvcencio/arbiter/vm"
@@ -501,10 +502,11 @@ func (s *Server) SetRuleOverride(ctx context.Context, req *arbiterv1.SetRuleOver
 		BundleID:  req.GetBundleId(),
 		Kind:      "override",
 		Override: &audit.OverrideChange{
-			Scope:      "rule",
-			Target:     req.GetRuleName(),
-			KillSwitch: ov.KillSwitch,
-			Rollout:    ov.Rollout,
+			Scope:           "rule",
+			Target:          req.GetRuleName(),
+			KillSwitch:      ov.KillSwitch,
+			KillSwitchState: string(ov.KillSwitchState()),
+			Rollout:         ov.Rollout,
 		},
 	})
 	return &arbiterv1.SetRuleOverrideResponse{}, nil
@@ -532,9 +534,10 @@ func (s *Server) SetFlagOverride(ctx context.Context, req *arbiterv1.SetFlagOver
 		BundleID:  req.GetBundleId(),
 		Kind:      "override",
 		Override: &audit.OverrideChange{
-			Scope:      "flag",
-			Target:     req.GetFlagKey(),
-			KillSwitch: ov.KillSwitch,
+			Scope:           "flag",
+			Target:          req.GetFlagKey(),
+			KillSwitch:      ov.KillSwitch,
+			KillSwitchState: string(ov.KillSwitchState()),
 		},
 	})
 	return &arbiterv1.SetFlagOverrideResponse{}, nil
@@ -613,10 +616,11 @@ func (s *Server) SetStrategyOverride(ctx context.Context, req *arbiterv1.SetStra
 		BundleID:  req.GetBundleId(),
 		Kind:      "override",
 		Override: &audit.OverrideChange{
-			Scope:      "strategy_candidate",
-			Target:     req.GetStrategyName() + "/" + req.GetCandidateLabel(),
-			KillSwitch: ov.KillSwitch,
-			Rollout:    ov.Rollout,
+			Scope:           "strategy_candidate",
+			Target:          req.GetStrategyName() + "/" + req.GetCandidateLabel(),
+			KillSwitch:      ov.KillSwitch,
+			KillSwitchState: string(ov.KillSwitchState()),
+			Rollout:         ov.Rollout,
 		},
 	})
 	return &arbiterv1.SetStrategyOverrideResponse{}, nil
@@ -727,9 +731,14 @@ func protoTrace(steps []govern.TraceStep) []*arbiterv1.TraceStep {
 	out := make([]*arbiterv1.TraceStep, 0, len(steps))
 	for _, step := range steps {
 		out = append(out, &arbiterv1.TraceStep{
-			Check:  step.Check,
-			Result: step.Result,
-			Detail: step.Detail,
+			Check:   step.Check,
+			Result:  step.Result,
+			Detail:  step.Detail,
+			Phase:   step.Phase,
+			Scope:   step.Scope,
+			Subject: step.Subject,
+			Kind:    step.Kind,
+			Target:  step.Target,
 		})
 	}
 	return out
@@ -821,7 +830,10 @@ func (s *Server) protoOverrideEvent(event overrides.OverrideEvent) *arbiterv1.Ov
 }
 
 func protoRuleOverrideEntry(ruleName string, ov overrides.RuleOverride) *arbiterv1.RuleOverrideEntry {
-	out := &arbiterv1.RuleOverrideEntry{RuleName: ruleName}
+	out := &arbiterv1.RuleOverrideEntry{
+		RuleName:        ruleName,
+		KillSwitchState: protoKillSwitchState(ov.KillSwitchState()),
+	}
 	if ov.KillSwitch != nil {
 		out.KillSwitchSet = true
 		out.KillSwitch = *ov.KillSwitch
@@ -845,7 +857,10 @@ func normalizeOverrideRollout(raw uint32) (uint16, error) {
 }
 
 func protoFlagOverrideEntry(flagKey string, ov overrides.FlagOverride) *arbiterv1.FlagOverrideEntry {
-	out := &arbiterv1.FlagOverrideEntry{FlagKey: flagKey}
+	out := &arbiterv1.FlagOverrideEntry{
+		FlagKey:         flagKey,
+		KillSwitchState: protoKillSwitchState(ov.KillSwitchState()),
+	}
 	if ov.KillSwitch != nil {
 		out.KillSwitchSet = true
 		out.KillSwitch = *ov.KillSwitch
@@ -864,8 +879,9 @@ func protoFlagRuleOverrideEntry(flagKey string, ruleIndex int, ov overrides.Flag
 
 func protoStrategyOverrideEntry(strategyName, candidateLabel string, ov overrides.StrategyOverride) *arbiterv1.StrategyOverrideEntry {
 	out := &arbiterv1.StrategyOverrideEntry{
-		StrategyName:   strategyName,
-		CandidateLabel: candidateLabel,
+		StrategyName:    strategyName,
+		CandidateLabel:  candidateLabel,
+		KillSwitchState: protoKillSwitchState(ov.KillSwitchState()),
 	}
 	if ov.KillSwitch != nil {
 		out.KillSwitchSet = true
@@ -876,6 +892,17 @@ func protoStrategyOverrideEntry(strategyName, candidateLabel string, ov override
 		out.Rollout = uint32(*ov.Rollout)
 	}
 	return out
+}
+
+func protoKillSwitchState(state ir.KillSwitchState) arbiterv1.KillSwitchState {
+	switch state {
+	case ir.KillSwitchOn:
+		return arbiterv1.KillSwitchState_KILL_SWITCH_STATE_ON
+	case ir.KillSwitchOff:
+		return arbiterv1.KillSwitchState_KILL_SWITCH_STATE_OFF
+	default:
+		return arbiterv1.KillSwitchState_KILL_SWITCH_STATE_UNSPECIFIED
+	}
 }
 
 func protoOverrideEventType(eventType overrides.OverrideEventType) arbiterv1.OverrideEventType {

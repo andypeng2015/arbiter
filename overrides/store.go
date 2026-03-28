@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/odvcencio/arbiter/ir"
 )
 
 // RuleOverride overlays rule-level governance fields at runtime.
@@ -14,9 +16,19 @@ type RuleOverride struct {
 	Rollout    *uint16
 }
 
+// KillSwitchState reports the override's explicit kill-switch mode.
+func (o RuleOverride) KillSwitchState() ir.KillSwitchState {
+	return killSwitchState(o.KillSwitch)
+}
+
 // FlagOverride overlays flag-level governance fields at runtime.
 type FlagOverride struct {
 	KillSwitch *bool
+}
+
+// KillSwitchState reports the override's explicit kill-switch mode.
+func (o FlagOverride) KillSwitchState() ir.KillSwitchState {
+	return killSwitchState(o.KillSwitch)
 }
 
 // FlagRuleOverride overlays flag rule targeting fields at runtime.
@@ -28,6 +40,21 @@ type FlagRuleOverride struct {
 type StrategyOverride struct {
 	KillSwitch *bool
 	Rollout    *uint16
+}
+
+// KillSwitchState reports the override's explicit kill-switch mode.
+func (o StrategyOverride) KillSwitchState() ir.KillSwitchState {
+	return killSwitchState(o.KillSwitch)
+}
+
+func killSwitchState(enabled *bool) ir.KillSwitchState {
+	if enabled == nil {
+		return ir.KillSwitchUnset
+	}
+	if *enabled {
+		return ir.KillSwitchOn
+	}
+	return ir.KillSwitchOff
 }
 
 // View exposes read-only access to runtime overrides.

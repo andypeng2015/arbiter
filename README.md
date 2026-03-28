@@ -456,6 +456,8 @@ Rules, flags, and strategies preserve the legacy `check/result/detail` shape for
 
 Expert activations now carry the same trace structure per firing, so a session snapshot tells you both what mutated and which governance/match checks made that mutation eligible.
 
+That same `TraceStep` shape now flows through gRPC responses too: `EvaluateRules`, `ResolveFlag`, `EvaluateStrategy`, `RunSession`, and `GetSessionTrace` all expose the structured fields instead of flattening back to `check/result/detail` only.
+
 ### Runtime Overrides
 
 Kill switches and rollout percentages can be changed at runtime without recompiling. The override store layers on top of compiled governance fields.
@@ -471,6 +473,8 @@ store.SetFlag("bundle_id", "new_feature", overrides.FlagOverride{
 ```
 
 When the store is opened from a file, override mutations are persisted on every write.
+
+Override inspection surfaces now expose explicit kill-switch mode as well as the legacy bools: snapshots, watch events, and audit records carry `kill_switch_state` (`on`, `off`, or unset) so UIs do not need to reconstruct state from `kill_switch_set` plus `kill_switch`.
 
 ## Serving
 
@@ -508,7 +512,7 @@ Bundles are published once and evaluated many times. Each bundle compiles rules,
 
 `GetBundle` returns the raw `.arb` source for one immutable `bundle_id` or the active bundle for one `bundle_name`. `WatchBundles` streams an initial snapshot plus `published`, `activated`, and `rolled_back` events so sidecars and local agents can keep a compiled local cache hot without polling.
 
-`GetOverrides` returns the current runtime override set for one bundle, and `WatchOverrides` streams a typed snapshot followed by `rule`, `flag`, and `flag_rule` mutations keyed to immutable `bundle_id`.
+`GetOverrides` returns the current runtime override set for one bundle, and `WatchOverrides` streams a typed snapshot followed by `rule`, `flag`, and `flag_rule` mutations keyed to immutable `bundle_id`. Override entries preserve the compatibility bool fields and also expose canonical `kill_switch_state` so operator tooling can reason about override intent directly.
 
 `arbiter serve` now defaults to `127.0.0.1:8081` and can be hardened in-process with:
 
@@ -528,7 +532,7 @@ sink, _ := audit.NewJSONLSink("/var/log/arbiter/decisions.jsonl")
 server := grpcserver.NewServer(registry, overrides, sink)
 ```
 
-Each audit event captures the full context: matched rules, flag resolutions, expert session outcomes, governance trace steps, timestamps, request IDs, and bundle IDs.
+Each audit event captures the full context: matched rules, flag resolutions, expert session outcomes, governance trace steps, timestamps, request IDs, and bundle IDs. Override mutations also preserve explicit `kill_switch_state`, and expert activations include their per-firing trace in the audited payload.
 
 Bundle publishes, activations, rollbacks, and override mutations are also emitted as audit events.
 

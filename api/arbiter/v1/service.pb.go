@@ -137,6 +137,56 @@ func (OverrideEventType) EnumDescriptor() ([]byte, []int) {
 	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{1}
 }
 
+// Unspecified means no explicit kill-switch state is set.
+type KillSwitchState int32
+
+const (
+	KillSwitchState_KILL_SWITCH_STATE_UNSPECIFIED KillSwitchState = 0
+	KillSwitchState_KILL_SWITCH_STATE_ON          KillSwitchState = 1
+	KillSwitchState_KILL_SWITCH_STATE_OFF         KillSwitchState = 2
+)
+
+// Enum value maps for KillSwitchState.
+var (
+	KillSwitchState_name = map[int32]string{
+		0: "KILL_SWITCH_STATE_UNSPECIFIED",
+		1: "KILL_SWITCH_STATE_ON",
+		2: "KILL_SWITCH_STATE_OFF",
+	}
+	KillSwitchState_value = map[string]int32{
+		"KILL_SWITCH_STATE_UNSPECIFIED": 0,
+		"KILL_SWITCH_STATE_ON":          1,
+		"KILL_SWITCH_STATE_OFF":         2,
+	}
+)
+
+func (x KillSwitchState) Enum() *KillSwitchState {
+	p := new(KillSwitchState)
+	*p = x
+	return p
+}
+
+func (x KillSwitchState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (KillSwitchState) Descriptor() protoreflect.EnumDescriptor {
+	return file_arbiter_v1_service_proto_enumTypes[2].Descriptor()
+}
+
+func (KillSwitchState) Type() protoreflect.EnumType {
+	return &file_arbiter_v1_service_proto_enumTypes[2]
+}
+
+func (x KillSwitchState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use KillSwitchState.Descriptor instead.
+func (KillSwitchState) EnumDescriptor() ([]byte, []int) {
+	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{2}
+}
+
 type PublishBundleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1118,14 +1168,15 @@ func (x *BundleOverrides) GetStrategies() []*StrategyOverrideEntry {
 }
 
 type RuleOverrideEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RuleName      string                 `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
-	KillSwitchSet bool                   `protobuf:"varint,2,opt,name=kill_switch_set,json=killSwitchSet,proto3" json:"kill_switch_set,omitempty"`
-	KillSwitch    bool                   `protobuf:"varint,3,opt,name=kill_switch,json=killSwitch,proto3" json:"kill_switch,omitempty"`
-	RolloutSet    bool                   `protobuf:"varint,4,opt,name=rollout_set,json=rolloutSet,proto3" json:"rollout_set,omitempty"`
-	Rollout       uint32                 `protobuf:"varint,5,opt,name=rollout,proto3" json:"rollout,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	RuleName        string                 `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
+	KillSwitchSet   bool                   `protobuf:"varint,2,opt,name=kill_switch_set,json=killSwitchSet,proto3" json:"kill_switch_set,omitempty"`
+	KillSwitch      bool                   `protobuf:"varint,3,opt,name=kill_switch,json=killSwitch,proto3" json:"kill_switch,omitempty"`
+	RolloutSet      bool                   `protobuf:"varint,4,opt,name=rollout_set,json=rolloutSet,proto3" json:"rollout_set,omitempty"`
+	Rollout         uint32                 `protobuf:"varint,5,opt,name=rollout,proto3" json:"rollout,omitempty"`
+	KillSwitchState KillSwitchState        `protobuf:"varint,6,opt,name=kill_switch_state,json=killSwitchState,proto3,enum=arbiter.v1.KillSwitchState" json:"kill_switch_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RuleOverrideEntry) Reset() {
@@ -1193,13 +1244,21 @@ func (x *RuleOverrideEntry) GetRollout() uint32 {
 	return 0
 }
 
+func (x *RuleOverrideEntry) GetKillSwitchState() KillSwitchState {
+	if x != nil {
+		return x.KillSwitchState
+	}
+	return KillSwitchState_KILL_SWITCH_STATE_UNSPECIFIED
+}
+
 type FlagOverrideEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FlagKey       string                 `protobuf:"bytes,1,opt,name=flag_key,json=flagKey,proto3" json:"flag_key,omitempty"`
-	KillSwitchSet bool                   `protobuf:"varint,2,opt,name=kill_switch_set,json=killSwitchSet,proto3" json:"kill_switch_set,omitempty"`
-	KillSwitch    bool                   `protobuf:"varint,3,opt,name=kill_switch,json=killSwitch,proto3" json:"kill_switch,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	FlagKey         string                 `protobuf:"bytes,1,opt,name=flag_key,json=flagKey,proto3" json:"flag_key,omitempty"`
+	KillSwitchSet   bool                   `protobuf:"varint,2,opt,name=kill_switch_set,json=killSwitchSet,proto3" json:"kill_switch_set,omitempty"`
+	KillSwitch      bool                   `protobuf:"varint,3,opt,name=kill_switch,json=killSwitch,proto3" json:"kill_switch,omitempty"`
+	KillSwitchState KillSwitchState        `protobuf:"varint,4,opt,name=kill_switch_state,json=killSwitchState,proto3,enum=arbiter.v1.KillSwitchState" json:"kill_switch_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *FlagOverrideEntry) Reset() {
@@ -1251,6 +1310,13 @@ func (x *FlagOverrideEntry) GetKillSwitch() bool {
 		return x.KillSwitch
 	}
 	return false
+}
+
+func (x *FlagOverrideEntry) GetKillSwitchState() KillSwitchState {
+	if x != nil {
+		return x.KillSwitchState
+	}
+	return KillSwitchState_KILL_SWITCH_STATE_UNSPECIFIED
 }
 
 type FlagRuleOverrideEntry struct {
@@ -1322,15 +1388,16 @@ func (x *FlagRuleOverrideEntry) GetRollout() uint32 {
 }
 
 type StrategyOverrideEntry struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	StrategyName   string                 `protobuf:"bytes,1,opt,name=strategy_name,json=strategyName,proto3" json:"strategy_name,omitempty"`
-	CandidateLabel string                 `protobuf:"bytes,2,opt,name=candidate_label,json=candidateLabel,proto3" json:"candidate_label,omitempty"`
-	KillSwitchSet  bool                   `protobuf:"varint,3,opt,name=kill_switch_set,json=killSwitchSet,proto3" json:"kill_switch_set,omitempty"`
-	KillSwitch     bool                   `protobuf:"varint,4,opt,name=kill_switch,json=killSwitch,proto3" json:"kill_switch,omitempty"`
-	RolloutSet     bool                   `protobuf:"varint,5,opt,name=rollout_set,json=rolloutSet,proto3" json:"rollout_set,omitempty"`
-	Rollout        uint32                 `protobuf:"varint,6,opt,name=rollout,proto3" json:"rollout,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	StrategyName    string                 `protobuf:"bytes,1,opt,name=strategy_name,json=strategyName,proto3" json:"strategy_name,omitempty"`
+	CandidateLabel  string                 `protobuf:"bytes,2,opt,name=candidate_label,json=candidateLabel,proto3" json:"candidate_label,omitempty"`
+	KillSwitchSet   bool                   `protobuf:"varint,3,opt,name=kill_switch_set,json=killSwitchSet,proto3" json:"kill_switch_set,omitempty"`
+	KillSwitch      bool                   `protobuf:"varint,4,opt,name=kill_switch,json=killSwitch,proto3" json:"kill_switch,omitempty"`
+	RolloutSet      bool                   `protobuf:"varint,5,opt,name=rollout_set,json=rolloutSet,proto3" json:"rollout_set,omitempty"`
+	Rollout         uint32                 `protobuf:"varint,6,opt,name=rollout,proto3" json:"rollout,omitempty"`
+	KillSwitchState KillSwitchState        `protobuf:"varint,7,opt,name=kill_switch_state,json=killSwitchState,proto3,enum=arbiter.v1.KillSwitchState" json:"kill_switch_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StrategyOverrideEntry) Reset() {
@@ -1403,6 +1470,13 @@ func (x *StrategyOverrideEntry) GetRollout() uint32 {
 		return x.Rollout
 	}
 	return 0
+}
+
+func (x *StrategyOverrideEntry) GetKillSwitchState() KillSwitchState {
+	if x != nil {
+		return x.KillSwitchState
+	}
+	return KillSwitchState_KILL_SWITCH_STATE_UNSPECIFIED
 }
 
 type OverrideEvent struct {
@@ -1542,6 +1616,11 @@ type TraceStep struct {
 	Check         string                 `protobuf:"bytes,1,opt,name=check,proto3" json:"check,omitempty"`
 	Result        bool                   `protobuf:"varint,2,opt,name=result,proto3" json:"result,omitempty"`
 	Detail        string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	Phase         string                 `protobuf:"bytes,4,opt,name=phase,proto3" json:"phase,omitempty"`
+	Scope         string                 `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
+	Subject       string                 `protobuf:"bytes,6,opt,name=subject,proto3" json:"subject,omitempty"`
+	Kind          string                 `protobuf:"bytes,7,opt,name=kind,proto3" json:"kind,omitempty"`
+	Target        string                 `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1593,6 +1672,41 @@ func (x *TraceStep) GetResult() bool {
 func (x *TraceStep) GetDetail() string {
 	if x != nil {
 		return x.Detail
+	}
+	return ""
+}
+
+func (x *TraceStep) GetPhase() string {
+	if x != nil {
+		return x.Phase
+	}
+	return ""
+}
+
+func (x *TraceStep) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *TraceStep) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *TraceStep) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *TraceStep) GetTarget() string {
+	if x != nil {
+		return x.Target
 	}
 	return ""
 }
@@ -2218,6 +2332,7 @@ type ExpertActivation struct {
 	Params        *structpb.Struct       `protobuf:"bytes,5,opt,name=params,proto3" json:"params,omitempty"`
 	Changed       bool                   `protobuf:"varint,6,opt,name=changed,proto3" json:"changed,omitempty"`
 	Detail        string                 `protobuf:"bytes,7,opt,name=detail,proto3" json:"detail,omitempty"`
+	Trace         []*TraceStep           `protobuf:"bytes,8,rep,name=trace,proto3" json:"trace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2299,6 +2414,13 @@ func (x *ExpertActivation) GetDetail() string {
 		return x.Detail
 	}
 	return ""
+}
+
+func (x *ExpertActivation) GetTrace() []*TraceStep {
+	if x != nil {
+		return x.Trace
+	}
+	return nil
 }
 
 type StartSessionRequest struct {
@@ -3487,7 +3609,7 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"flag_rules\x18\x04 \x03(\v2!.arbiter.v1.FlagRuleOverrideEntryR\tflagRules\x12A\n" +
 	"\n" +
 	"strategies\x18\x05 \x03(\v2!.arbiter.v1.StrategyOverrideEntryR\n" +
-	"strategies\"\xb4\x01\n" +
+	"strategies\"\xfd\x01\n" +
 	"\x11RuleOverrideEntry\x12\x1b\n" +
 	"\trule_name\x18\x01 \x01(\tR\bruleName\x12&\n" +
 	"\x0fkill_switch_set\x18\x02 \x01(\bR\rkillSwitchSet\x12\x1f\n" +
@@ -3495,19 +3617,21 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"killSwitch\x12\x1f\n" +
 	"\vrollout_set\x18\x04 \x01(\bR\n" +
 	"rolloutSet\x12\x18\n" +
-	"\arollout\x18\x05 \x01(\rR\arollout\"w\n" +
+	"\arollout\x18\x05 \x01(\rR\arollout\x12G\n" +
+	"\x11kill_switch_state\x18\x06 \x01(\x0e2\x1b.arbiter.v1.KillSwitchStateR\x0fkillSwitchState\"\xc0\x01\n" +
 	"\x11FlagOverrideEntry\x12\x19\n" +
 	"\bflag_key\x18\x01 \x01(\tR\aflagKey\x12&\n" +
 	"\x0fkill_switch_set\x18\x02 \x01(\bR\rkillSwitchSet\x12\x1f\n" +
 	"\vkill_switch\x18\x03 \x01(\bR\n" +
-	"killSwitch\"\x8c\x01\n" +
+	"killSwitch\x12G\n" +
+	"\x11kill_switch_state\x18\x04 \x01(\x0e2\x1b.arbiter.v1.KillSwitchStateR\x0fkillSwitchState\"\x8c\x01\n" +
 	"\x15FlagRuleOverrideEntry\x12\x19\n" +
 	"\bflag_key\x18\x01 \x01(\tR\aflagKey\x12\x1d\n" +
 	"\n" +
 	"rule_index\x18\x02 \x01(\rR\truleIndex\x12\x1f\n" +
 	"\vrollout_set\x18\x03 \x01(\bR\n" +
 	"rolloutSet\x12\x18\n" +
-	"\arollout\x18\x04 \x01(\rR\arollout\"\xe9\x01\n" +
+	"\arollout\x18\x04 \x01(\rR\arollout\"\xb2\x02\n" +
 	"\x15StrategyOverrideEntry\x12#\n" +
 	"\rstrategy_name\x18\x01 \x01(\tR\fstrategyName\x12'\n" +
 	"\x0fcandidate_label\x18\x02 \x01(\tR\x0ecandidateLabel\x12&\n" +
@@ -3516,7 +3640,8 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"killSwitch\x12\x1f\n" +
 	"\vrollout_set\x18\x05 \x01(\bR\n" +
 	"rolloutSet\x12\x18\n" +
-	"\arollout\x18\x06 \x01(\rR\arollout\"\xa2\x04\n" +
+	"\arollout\x18\x06 \x01(\rR\arollout\x12G\n" +
+	"\x11kill_switch_state\x18\a \x01(\x0e2\x1b.arbiter.v1.KillSwitchStateR\x0fkillSwitchState\"\xa2\x04\n" +
 	"\rOverrideEvent\x121\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1d.arbiter.v1.OverrideEventTypeR\x04type\x12\x1b\n" +
 	"\tbundle_id\x18\x02 \x01(\tR\bbundleId\x127\n" +
@@ -3531,11 +3656,16 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\rstrategy_name\x18\n" +
 	" \x01(\tR\fstrategyName\x12'\n" +
 	"\x0fcandidate_label\x18\v \x01(\tR\x0ecandidateLabel\x12=\n" +
-	"\bstrategy\x18\f \x01(\v2!.arbiter.v1.StrategyOverrideEntryR\bstrategy\"Q\n" +
+	"\bstrategy\x18\f \x01(\v2!.arbiter.v1.StrategyOverrideEntryR\bstrategy\"\xc3\x01\n" +
 	"\tTraceStep\x12\x14\n" +
 	"\x05check\x18\x01 \x01(\tR\x05check\x12\x16\n" +
 	"\x06result\x18\x02 \x01(\bR\x06result\x12\x16\n" +
-	"\x06detail\x18\x03 \x01(\tR\x06detail\"\xa0\x01\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x14\n" +
+	"\x05phase\x18\x04 \x01(\tR\x05phase\x12\x14\n" +
+	"\x05scope\x18\x05 \x01(\tR\x05scope\x12\x18\n" +
+	"\asubject\x18\x06 \x01(\tR\asubject\x12\x12\n" +
+	"\x04kind\x18\a \x01(\tR\x04kind\x12\x16\n" +
+	"\x06target\x18\b \x01(\tR\x06target\"\xa0\x01\n" +
 	"\tRuleMatch\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bpriority\x18\x02 \x01(\x05R\bpriority\x12\x16\n" +
@@ -3588,7 +3718,7 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\rExpertOutcome\x12\x12\n" +
 	"\x04rule\x18\x01 \x01(\tR\x04rule\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
-	"\x06params\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06params\"\xcb\x01\n" +
+	"\x06params\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06params\"\xf8\x01\n" +
 	"\x10ExpertActivation\x12\x14\n" +
 	"\x05round\x18\x01 \x01(\rR\x05round\x12\x12\n" +
 	"\x04rule\x18\x02 \x01(\tR\x04rule\x12\x12\n" +
@@ -3596,7 +3726,8 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\x06target\x18\x04 \x01(\tR\x06target\x12/\n" +
 	"\x06params\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x18\n" +
 	"\achanged\x18\x06 \x01(\bR\achanged\x12\x16\n" +
-	"\x06detail\x18\a \x01(\tR\x06detail\"\xb6\x01\n" +
+	"\x06detail\x18\a \x01(\tR\x06detail\x12+\n" +
+	"\x05trace\x18\b \x03(\v2\x15.arbiter.v1.TraceStepR\x05trace\"\xb6\x01\n" +
 	"\x13StartSessionRequest\x12\x1b\n" +
 	"\tbundle_id\x18\x01 \x01(\tR\bbundleId\x123\n" +
 	"\benvelope\x18\x02 \x01(\v2\x17.google.protobuf.StructR\benvelope\x12,\n" +
@@ -3688,7 +3819,11 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\x18OVERRIDE_EVENT_TYPE_RULE\x10\x02\x12\x1c\n" +
 	"\x18OVERRIDE_EVENT_TYPE_FLAG\x10\x03\x12!\n" +
 	"\x1dOVERRIDE_EVENT_TYPE_FLAG_RULE\x10\x04\x12 \n" +
-	"\x1cOVERRIDE_EVENT_TYPE_STRATEGY\x10\x052\xa2\x0e\n" +
+	"\x1cOVERRIDE_EVENT_TYPE_STRATEGY\x10\x05*i\n" +
+	"\x0fKillSwitchState\x12!\n" +
+	"\x1dKILL_SWITCH_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14KILL_SWITCH_STATE_ON\x10\x01\x12\x19\n" +
+	"\x15KILL_SWITCH_STATE_OFF\x10\x022\xa2\x0e\n" +
 	"\x0eArbiterService\x12T\n" +
 	"\rPublishBundle\x12 .arbiter.v1.PublishBundleRequest\x1a!.arbiter.v1.PublishBundleResponse\x12N\n" +
 	"\vListBundles\x12\x1e.arbiter.v1.ListBundlesRequest\x1a\x1f.arbiter.v1.ListBundlesResponse\x12W\n" +
@@ -3725,166 +3860,171 @@ func file_arbiter_v1_service_proto_rawDescGZIP() []byte {
 	return file_arbiter_v1_service_proto_rawDescData
 }
 
-var file_arbiter_v1_service_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_arbiter_v1_service_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_arbiter_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_arbiter_v1_service_proto_goTypes = []any{
 	(BundleEventType)(0),                // 0: arbiter.v1.BundleEventType
 	(OverrideEventType)(0),              // 1: arbiter.v1.OverrideEventType
-	(*PublishBundleRequest)(nil),        // 2: arbiter.v1.PublishBundleRequest
-	(*PublishBundleResponse)(nil),       // 3: arbiter.v1.PublishBundleResponse
-	(*BundleSummary)(nil),               // 4: arbiter.v1.BundleSummary
-	(*ListBundlesRequest)(nil),          // 5: arbiter.v1.ListBundlesRequest
-	(*ListBundlesResponse)(nil),         // 6: arbiter.v1.ListBundlesResponse
-	(*ActivateBundleRequest)(nil),       // 7: arbiter.v1.ActivateBundleRequest
-	(*ActivateBundleResponse)(nil),      // 8: arbiter.v1.ActivateBundleResponse
-	(*RollbackBundleRequest)(nil),       // 9: arbiter.v1.RollbackBundleRequest
-	(*RollbackBundleResponse)(nil),      // 10: arbiter.v1.RollbackBundleResponse
-	(*GetBundleRequest)(nil),            // 11: arbiter.v1.GetBundleRequest
-	(*GetBundleResponse)(nil),           // 12: arbiter.v1.GetBundleResponse
-	(*WatchBundlesRequest)(nil),         // 13: arbiter.v1.WatchBundlesRequest
-	(*BundleEvent)(nil),                 // 14: arbiter.v1.BundleEvent
-	(*GetOverridesRequest)(nil),         // 15: arbiter.v1.GetOverridesRequest
-	(*GetOverridesResponse)(nil),        // 16: arbiter.v1.GetOverridesResponse
-	(*WatchOverridesRequest)(nil),       // 17: arbiter.v1.WatchOverridesRequest
-	(*BundleOverrides)(nil),             // 18: arbiter.v1.BundleOverrides
-	(*RuleOverrideEntry)(nil),           // 19: arbiter.v1.RuleOverrideEntry
-	(*FlagOverrideEntry)(nil),           // 20: arbiter.v1.FlagOverrideEntry
-	(*FlagRuleOverrideEntry)(nil),       // 21: arbiter.v1.FlagRuleOverrideEntry
-	(*StrategyOverrideEntry)(nil),       // 22: arbiter.v1.StrategyOverrideEntry
-	(*OverrideEvent)(nil),               // 23: arbiter.v1.OverrideEvent
-	(*TraceStep)(nil),                   // 24: arbiter.v1.TraceStep
-	(*RuleMatch)(nil),                   // 25: arbiter.v1.RuleMatch
-	(*EvaluateRulesRequest)(nil),        // 26: arbiter.v1.EvaluateRulesRequest
-	(*EvaluateRulesResponse)(nil),       // 27: arbiter.v1.EvaluateRulesResponse
-	(*ResolveFlagRequest)(nil),          // 28: arbiter.v1.ResolveFlagRequest
-	(*ResolveFlagResponse)(nil),         // 29: arbiter.v1.ResolveFlagResponse
-	(*EvaluateStrategyRequest)(nil),     // 30: arbiter.v1.EvaluateStrategyRequest
-	(*EvaluateStrategyResponse)(nil),    // 31: arbiter.v1.EvaluateStrategyResponse
-	(*ExpertFact)(nil),                  // 32: arbiter.v1.ExpertFact
-	(*ExpertOutcome)(nil),               // 33: arbiter.v1.ExpertOutcome
-	(*ExpertActivation)(nil),            // 34: arbiter.v1.ExpertActivation
-	(*StartSessionRequest)(nil),         // 35: arbiter.v1.StartSessionRequest
-	(*StartSessionResponse)(nil),        // 36: arbiter.v1.StartSessionResponse
-	(*RunSessionRequest)(nil),           // 37: arbiter.v1.RunSessionRequest
-	(*RunSessionResponse)(nil),          // 38: arbiter.v1.RunSessionResponse
-	(*AssertFactsRequest)(nil),          // 39: arbiter.v1.AssertFactsRequest
-	(*AssertFactsResponse)(nil),         // 40: arbiter.v1.AssertFactsResponse
-	(*FactRef)(nil),                     // 41: arbiter.v1.FactRef
-	(*RetractFactsRequest)(nil),         // 42: arbiter.v1.RetractFactsRequest
-	(*RetractFactsResponse)(nil),        // 43: arbiter.v1.RetractFactsResponse
-	(*GetSessionTraceRequest)(nil),      // 44: arbiter.v1.GetSessionTraceRequest
-	(*GetSessionTraceResponse)(nil),     // 45: arbiter.v1.GetSessionTraceResponse
-	(*CloseSessionRequest)(nil),         // 46: arbiter.v1.CloseSessionRequest
-	(*CloseSessionResponse)(nil),        // 47: arbiter.v1.CloseSessionResponse
-	(*SetRuleOverrideRequest)(nil),      // 48: arbiter.v1.SetRuleOverrideRequest
-	(*SetRuleOverrideResponse)(nil),     // 49: arbiter.v1.SetRuleOverrideResponse
-	(*SetFlagOverrideRequest)(nil),      // 50: arbiter.v1.SetFlagOverrideRequest
-	(*SetFlagOverrideResponse)(nil),     // 51: arbiter.v1.SetFlagOverrideResponse
-	(*SetFlagRuleOverrideRequest)(nil),  // 52: arbiter.v1.SetFlagRuleOverrideRequest
-	(*SetFlagRuleOverrideResponse)(nil), // 53: arbiter.v1.SetFlagRuleOverrideResponse
-	(*SetStrategyOverrideRequest)(nil),  // 54: arbiter.v1.SetStrategyOverrideRequest
-	(*SetStrategyOverrideResponse)(nil), // 55: arbiter.v1.SetStrategyOverrideResponse
-	(*timestamppb.Timestamp)(nil),       // 56: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),             // 57: google.protobuf.Struct
-	(*wrapperspb.BoolValue)(nil),        // 58: google.protobuf.BoolValue
-	(*wrapperspb.UInt32Value)(nil),      // 59: google.protobuf.UInt32Value
+	(KillSwitchState)(0),                // 2: arbiter.v1.KillSwitchState
+	(*PublishBundleRequest)(nil),        // 3: arbiter.v1.PublishBundleRequest
+	(*PublishBundleResponse)(nil),       // 4: arbiter.v1.PublishBundleResponse
+	(*BundleSummary)(nil),               // 5: arbiter.v1.BundleSummary
+	(*ListBundlesRequest)(nil),          // 6: arbiter.v1.ListBundlesRequest
+	(*ListBundlesResponse)(nil),         // 7: arbiter.v1.ListBundlesResponse
+	(*ActivateBundleRequest)(nil),       // 8: arbiter.v1.ActivateBundleRequest
+	(*ActivateBundleResponse)(nil),      // 9: arbiter.v1.ActivateBundleResponse
+	(*RollbackBundleRequest)(nil),       // 10: arbiter.v1.RollbackBundleRequest
+	(*RollbackBundleResponse)(nil),      // 11: arbiter.v1.RollbackBundleResponse
+	(*GetBundleRequest)(nil),            // 12: arbiter.v1.GetBundleRequest
+	(*GetBundleResponse)(nil),           // 13: arbiter.v1.GetBundleResponse
+	(*WatchBundlesRequest)(nil),         // 14: arbiter.v1.WatchBundlesRequest
+	(*BundleEvent)(nil),                 // 15: arbiter.v1.BundleEvent
+	(*GetOverridesRequest)(nil),         // 16: arbiter.v1.GetOverridesRequest
+	(*GetOverridesResponse)(nil),        // 17: arbiter.v1.GetOverridesResponse
+	(*WatchOverridesRequest)(nil),       // 18: arbiter.v1.WatchOverridesRequest
+	(*BundleOverrides)(nil),             // 19: arbiter.v1.BundleOverrides
+	(*RuleOverrideEntry)(nil),           // 20: arbiter.v1.RuleOverrideEntry
+	(*FlagOverrideEntry)(nil),           // 21: arbiter.v1.FlagOverrideEntry
+	(*FlagRuleOverrideEntry)(nil),       // 22: arbiter.v1.FlagRuleOverrideEntry
+	(*StrategyOverrideEntry)(nil),       // 23: arbiter.v1.StrategyOverrideEntry
+	(*OverrideEvent)(nil),               // 24: arbiter.v1.OverrideEvent
+	(*TraceStep)(nil),                   // 25: arbiter.v1.TraceStep
+	(*RuleMatch)(nil),                   // 26: arbiter.v1.RuleMatch
+	(*EvaluateRulesRequest)(nil),        // 27: arbiter.v1.EvaluateRulesRequest
+	(*EvaluateRulesResponse)(nil),       // 28: arbiter.v1.EvaluateRulesResponse
+	(*ResolveFlagRequest)(nil),          // 29: arbiter.v1.ResolveFlagRequest
+	(*ResolveFlagResponse)(nil),         // 30: arbiter.v1.ResolveFlagResponse
+	(*EvaluateStrategyRequest)(nil),     // 31: arbiter.v1.EvaluateStrategyRequest
+	(*EvaluateStrategyResponse)(nil),    // 32: arbiter.v1.EvaluateStrategyResponse
+	(*ExpertFact)(nil),                  // 33: arbiter.v1.ExpertFact
+	(*ExpertOutcome)(nil),               // 34: arbiter.v1.ExpertOutcome
+	(*ExpertActivation)(nil),            // 35: arbiter.v1.ExpertActivation
+	(*StartSessionRequest)(nil),         // 36: arbiter.v1.StartSessionRequest
+	(*StartSessionResponse)(nil),        // 37: arbiter.v1.StartSessionResponse
+	(*RunSessionRequest)(nil),           // 38: arbiter.v1.RunSessionRequest
+	(*RunSessionResponse)(nil),          // 39: arbiter.v1.RunSessionResponse
+	(*AssertFactsRequest)(nil),          // 40: arbiter.v1.AssertFactsRequest
+	(*AssertFactsResponse)(nil),         // 41: arbiter.v1.AssertFactsResponse
+	(*FactRef)(nil),                     // 42: arbiter.v1.FactRef
+	(*RetractFactsRequest)(nil),         // 43: arbiter.v1.RetractFactsRequest
+	(*RetractFactsResponse)(nil),        // 44: arbiter.v1.RetractFactsResponse
+	(*GetSessionTraceRequest)(nil),      // 45: arbiter.v1.GetSessionTraceRequest
+	(*GetSessionTraceResponse)(nil),     // 46: arbiter.v1.GetSessionTraceResponse
+	(*CloseSessionRequest)(nil),         // 47: arbiter.v1.CloseSessionRequest
+	(*CloseSessionResponse)(nil),        // 48: arbiter.v1.CloseSessionResponse
+	(*SetRuleOverrideRequest)(nil),      // 49: arbiter.v1.SetRuleOverrideRequest
+	(*SetRuleOverrideResponse)(nil),     // 50: arbiter.v1.SetRuleOverrideResponse
+	(*SetFlagOverrideRequest)(nil),      // 51: arbiter.v1.SetFlagOverrideRequest
+	(*SetFlagOverrideResponse)(nil),     // 52: arbiter.v1.SetFlagOverrideResponse
+	(*SetFlagRuleOverrideRequest)(nil),  // 53: arbiter.v1.SetFlagRuleOverrideRequest
+	(*SetFlagRuleOverrideResponse)(nil), // 54: arbiter.v1.SetFlagRuleOverrideResponse
+	(*SetStrategyOverrideRequest)(nil),  // 55: arbiter.v1.SetStrategyOverrideRequest
+	(*SetStrategyOverrideResponse)(nil), // 56: arbiter.v1.SetStrategyOverrideResponse
+	(*timestamppb.Timestamp)(nil),       // 57: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),             // 58: google.protobuf.Struct
+	(*wrapperspb.BoolValue)(nil),        // 59: google.protobuf.BoolValue
+	(*wrapperspb.UInt32Value)(nil),      // 60: google.protobuf.UInt32Value
 }
 var file_arbiter_v1_service_proto_depIdxs = []int32{
-	56, // 0: arbiter.v1.PublishBundleResponse.published_at:type_name -> google.protobuf.Timestamp
-	56, // 1: arbiter.v1.BundleSummary.published_at:type_name -> google.protobuf.Timestamp
-	4,  // 2: arbiter.v1.ListBundlesResponse.bundles:type_name -> arbiter.v1.BundleSummary
-	4,  // 3: arbiter.v1.ActivateBundleResponse.bundle:type_name -> arbiter.v1.BundleSummary
-	4,  // 4: arbiter.v1.RollbackBundleResponse.bundle:type_name -> arbiter.v1.BundleSummary
-	4,  // 5: arbiter.v1.GetBundleResponse.bundle:type_name -> arbiter.v1.BundleSummary
+	57, // 0: arbiter.v1.PublishBundleResponse.published_at:type_name -> google.protobuf.Timestamp
+	57, // 1: arbiter.v1.BundleSummary.published_at:type_name -> google.protobuf.Timestamp
+	5,  // 2: arbiter.v1.ListBundlesResponse.bundles:type_name -> arbiter.v1.BundleSummary
+	5,  // 3: arbiter.v1.ActivateBundleResponse.bundle:type_name -> arbiter.v1.BundleSummary
+	5,  // 4: arbiter.v1.RollbackBundleResponse.bundle:type_name -> arbiter.v1.BundleSummary
+	5,  // 5: arbiter.v1.GetBundleResponse.bundle:type_name -> arbiter.v1.BundleSummary
 	0,  // 6: arbiter.v1.BundleEvent.type:type_name -> arbiter.v1.BundleEventType
-	4,  // 7: arbiter.v1.BundleEvent.bundle:type_name -> arbiter.v1.BundleSummary
-	18, // 8: arbiter.v1.GetOverridesResponse.overrides:type_name -> arbiter.v1.BundleOverrides
-	19, // 9: arbiter.v1.BundleOverrides.rules:type_name -> arbiter.v1.RuleOverrideEntry
-	20, // 10: arbiter.v1.BundleOverrides.flags:type_name -> arbiter.v1.FlagOverrideEntry
-	21, // 11: arbiter.v1.BundleOverrides.flag_rules:type_name -> arbiter.v1.FlagRuleOverrideEntry
-	22, // 12: arbiter.v1.BundleOverrides.strategies:type_name -> arbiter.v1.StrategyOverrideEntry
-	1,  // 13: arbiter.v1.OverrideEvent.type:type_name -> arbiter.v1.OverrideEventType
-	18, // 14: arbiter.v1.OverrideEvent.snapshot:type_name -> arbiter.v1.BundleOverrides
-	19, // 15: arbiter.v1.OverrideEvent.rule:type_name -> arbiter.v1.RuleOverrideEntry
-	20, // 16: arbiter.v1.OverrideEvent.flag:type_name -> arbiter.v1.FlagOverrideEntry
-	21, // 17: arbiter.v1.OverrideEvent.flag_rule:type_name -> arbiter.v1.FlagRuleOverrideEntry
-	22, // 18: arbiter.v1.OverrideEvent.strategy:type_name -> arbiter.v1.StrategyOverrideEntry
-	57, // 19: arbiter.v1.RuleMatch.params:type_name -> google.protobuf.Struct
-	57, // 20: arbiter.v1.EvaluateRulesRequest.context:type_name -> google.protobuf.Struct
-	25, // 21: arbiter.v1.EvaluateRulesResponse.matched:type_name -> arbiter.v1.RuleMatch
-	24, // 22: arbiter.v1.EvaluateRulesResponse.trace:type_name -> arbiter.v1.TraceStep
-	57, // 23: arbiter.v1.ResolveFlagRequest.context:type_name -> google.protobuf.Struct
-	57, // 24: arbiter.v1.ResolveFlagResponse.values:type_name -> google.protobuf.Struct
-	24, // 25: arbiter.v1.ResolveFlagResponse.trace:type_name -> arbiter.v1.TraceStep
-	57, // 26: arbiter.v1.EvaluateStrategyRequest.context:type_name -> google.protobuf.Struct
-	57, // 27: arbiter.v1.EvaluateStrategyResponse.params:type_name -> google.protobuf.Struct
-	24, // 28: arbiter.v1.EvaluateStrategyResponse.trace:type_name -> arbiter.v1.TraceStep
-	57, // 29: arbiter.v1.ExpertFact.fields:type_name -> google.protobuf.Struct
-	57, // 30: arbiter.v1.ExpertOutcome.params:type_name -> google.protobuf.Struct
-	57, // 31: arbiter.v1.ExpertActivation.params:type_name -> google.protobuf.Struct
-	57, // 32: arbiter.v1.StartSessionRequest.envelope:type_name -> google.protobuf.Struct
-	32, // 33: arbiter.v1.StartSessionRequest.facts:type_name -> arbiter.v1.ExpertFact
-	33, // 34: arbiter.v1.RunSessionResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
-	32, // 35: arbiter.v1.RunSessionResponse.facts:type_name -> arbiter.v1.ExpertFact
-	34, // 36: arbiter.v1.RunSessionResponse.activations:type_name -> arbiter.v1.ExpertActivation
-	32, // 37: arbiter.v1.AssertFactsRequest.facts:type_name -> arbiter.v1.ExpertFact
-	41, // 38: arbiter.v1.RetractFactsRequest.facts:type_name -> arbiter.v1.FactRef
-	33, // 39: arbiter.v1.GetSessionTraceResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
-	32, // 40: arbiter.v1.GetSessionTraceResponse.facts:type_name -> arbiter.v1.ExpertFact
-	34, // 41: arbiter.v1.GetSessionTraceResponse.activations:type_name -> arbiter.v1.ExpertActivation
-	58, // 42: arbiter.v1.SetRuleOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
-	59, // 43: arbiter.v1.SetRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
-	58, // 44: arbiter.v1.SetFlagOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
-	59, // 45: arbiter.v1.SetFlagRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
-	58, // 46: arbiter.v1.SetStrategyOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
-	59, // 47: arbiter.v1.SetStrategyOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
-	2,  // 48: arbiter.v1.ArbiterService.PublishBundle:input_type -> arbiter.v1.PublishBundleRequest
-	5,  // 49: arbiter.v1.ArbiterService.ListBundles:input_type -> arbiter.v1.ListBundlesRequest
-	7,  // 50: arbiter.v1.ArbiterService.ActivateBundle:input_type -> arbiter.v1.ActivateBundleRequest
-	9,  // 51: arbiter.v1.ArbiterService.RollbackBundle:input_type -> arbiter.v1.RollbackBundleRequest
-	11, // 52: arbiter.v1.ArbiterService.GetBundle:input_type -> arbiter.v1.GetBundleRequest
-	13, // 53: arbiter.v1.ArbiterService.WatchBundles:input_type -> arbiter.v1.WatchBundlesRequest
-	15, // 54: arbiter.v1.ArbiterService.GetOverrides:input_type -> arbiter.v1.GetOverridesRequest
-	17, // 55: arbiter.v1.ArbiterService.WatchOverrides:input_type -> arbiter.v1.WatchOverridesRequest
-	26, // 56: arbiter.v1.ArbiterService.EvaluateRules:input_type -> arbiter.v1.EvaluateRulesRequest
-	28, // 57: arbiter.v1.ArbiterService.ResolveFlag:input_type -> arbiter.v1.ResolveFlagRequest
-	30, // 58: arbiter.v1.ArbiterService.EvaluateStrategy:input_type -> arbiter.v1.EvaluateStrategyRequest
-	35, // 59: arbiter.v1.ArbiterService.StartSession:input_type -> arbiter.v1.StartSessionRequest
-	37, // 60: arbiter.v1.ArbiterService.RunSession:input_type -> arbiter.v1.RunSessionRequest
-	39, // 61: arbiter.v1.ArbiterService.AssertFacts:input_type -> arbiter.v1.AssertFactsRequest
-	42, // 62: arbiter.v1.ArbiterService.RetractFacts:input_type -> arbiter.v1.RetractFactsRequest
-	44, // 63: arbiter.v1.ArbiterService.GetSessionTrace:input_type -> arbiter.v1.GetSessionTraceRequest
-	46, // 64: arbiter.v1.ArbiterService.CloseSession:input_type -> arbiter.v1.CloseSessionRequest
-	48, // 65: arbiter.v1.ArbiterService.SetRuleOverride:input_type -> arbiter.v1.SetRuleOverrideRequest
-	50, // 66: arbiter.v1.ArbiterService.SetFlagOverride:input_type -> arbiter.v1.SetFlagOverrideRequest
-	52, // 67: arbiter.v1.ArbiterService.SetFlagRuleOverride:input_type -> arbiter.v1.SetFlagRuleOverrideRequest
-	54, // 68: arbiter.v1.ArbiterService.SetStrategyOverride:input_type -> arbiter.v1.SetStrategyOverrideRequest
-	3,  // 69: arbiter.v1.ArbiterService.PublishBundle:output_type -> arbiter.v1.PublishBundleResponse
-	6,  // 70: arbiter.v1.ArbiterService.ListBundles:output_type -> arbiter.v1.ListBundlesResponse
-	8,  // 71: arbiter.v1.ArbiterService.ActivateBundle:output_type -> arbiter.v1.ActivateBundleResponse
-	10, // 72: arbiter.v1.ArbiterService.RollbackBundle:output_type -> arbiter.v1.RollbackBundleResponse
-	12, // 73: arbiter.v1.ArbiterService.GetBundle:output_type -> arbiter.v1.GetBundleResponse
-	14, // 74: arbiter.v1.ArbiterService.WatchBundles:output_type -> arbiter.v1.BundleEvent
-	16, // 75: arbiter.v1.ArbiterService.GetOverrides:output_type -> arbiter.v1.GetOverridesResponse
-	23, // 76: arbiter.v1.ArbiterService.WatchOverrides:output_type -> arbiter.v1.OverrideEvent
-	27, // 77: arbiter.v1.ArbiterService.EvaluateRules:output_type -> arbiter.v1.EvaluateRulesResponse
-	29, // 78: arbiter.v1.ArbiterService.ResolveFlag:output_type -> arbiter.v1.ResolveFlagResponse
-	31, // 79: arbiter.v1.ArbiterService.EvaluateStrategy:output_type -> arbiter.v1.EvaluateStrategyResponse
-	36, // 80: arbiter.v1.ArbiterService.StartSession:output_type -> arbiter.v1.StartSessionResponse
-	38, // 81: arbiter.v1.ArbiterService.RunSession:output_type -> arbiter.v1.RunSessionResponse
-	40, // 82: arbiter.v1.ArbiterService.AssertFacts:output_type -> arbiter.v1.AssertFactsResponse
-	43, // 83: arbiter.v1.ArbiterService.RetractFacts:output_type -> arbiter.v1.RetractFactsResponse
-	45, // 84: arbiter.v1.ArbiterService.GetSessionTrace:output_type -> arbiter.v1.GetSessionTraceResponse
-	47, // 85: arbiter.v1.ArbiterService.CloseSession:output_type -> arbiter.v1.CloseSessionResponse
-	49, // 86: arbiter.v1.ArbiterService.SetRuleOverride:output_type -> arbiter.v1.SetRuleOverrideResponse
-	51, // 87: arbiter.v1.ArbiterService.SetFlagOverride:output_type -> arbiter.v1.SetFlagOverrideResponse
-	53, // 88: arbiter.v1.ArbiterService.SetFlagRuleOverride:output_type -> arbiter.v1.SetFlagRuleOverrideResponse
-	55, // 89: arbiter.v1.ArbiterService.SetStrategyOverride:output_type -> arbiter.v1.SetStrategyOverrideResponse
-	69, // [69:90] is the sub-list for method output_type
-	48, // [48:69] is the sub-list for method input_type
-	48, // [48:48] is the sub-list for extension type_name
-	48, // [48:48] is the sub-list for extension extendee
-	0,  // [0:48] is the sub-list for field type_name
+	5,  // 7: arbiter.v1.BundleEvent.bundle:type_name -> arbiter.v1.BundleSummary
+	19, // 8: arbiter.v1.GetOverridesResponse.overrides:type_name -> arbiter.v1.BundleOverrides
+	20, // 9: arbiter.v1.BundleOverrides.rules:type_name -> arbiter.v1.RuleOverrideEntry
+	21, // 10: arbiter.v1.BundleOverrides.flags:type_name -> arbiter.v1.FlagOverrideEntry
+	22, // 11: arbiter.v1.BundleOverrides.flag_rules:type_name -> arbiter.v1.FlagRuleOverrideEntry
+	23, // 12: arbiter.v1.BundleOverrides.strategies:type_name -> arbiter.v1.StrategyOverrideEntry
+	2,  // 13: arbiter.v1.RuleOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
+	2,  // 14: arbiter.v1.FlagOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
+	2,  // 15: arbiter.v1.StrategyOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
+	1,  // 16: arbiter.v1.OverrideEvent.type:type_name -> arbiter.v1.OverrideEventType
+	19, // 17: arbiter.v1.OverrideEvent.snapshot:type_name -> arbiter.v1.BundleOverrides
+	20, // 18: arbiter.v1.OverrideEvent.rule:type_name -> arbiter.v1.RuleOverrideEntry
+	21, // 19: arbiter.v1.OverrideEvent.flag:type_name -> arbiter.v1.FlagOverrideEntry
+	22, // 20: arbiter.v1.OverrideEvent.flag_rule:type_name -> arbiter.v1.FlagRuleOverrideEntry
+	23, // 21: arbiter.v1.OverrideEvent.strategy:type_name -> arbiter.v1.StrategyOverrideEntry
+	58, // 22: arbiter.v1.RuleMatch.params:type_name -> google.protobuf.Struct
+	58, // 23: arbiter.v1.EvaluateRulesRequest.context:type_name -> google.protobuf.Struct
+	26, // 24: arbiter.v1.EvaluateRulesResponse.matched:type_name -> arbiter.v1.RuleMatch
+	25, // 25: arbiter.v1.EvaluateRulesResponse.trace:type_name -> arbiter.v1.TraceStep
+	58, // 26: arbiter.v1.ResolveFlagRequest.context:type_name -> google.protobuf.Struct
+	58, // 27: arbiter.v1.ResolveFlagResponse.values:type_name -> google.protobuf.Struct
+	25, // 28: arbiter.v1.ResolveFlagResponse.trace:type_name -> arbiter.v1.TraceStep
+	58, // 29: arbiter.v1.EvaluateStrategyRequest.context:type_name -> google.protobuf.Struct
+	58, // 30: arbiter.v1.EvaluateStrategyResponse.params:type_name -> google.protobuf.Struct
+	25, // 31: arbiter.v1.EvaluateStrategyResponse.trace:type_name -> arbiter.v1.TraceStep
+	58, // 32: arbiter.v1.ExpertFact.fields:type_name -> google.protobuf.Struct
+	58, // 33: arbiter.v1.ExpertOutcome.params:type_name -> google.protobuf.Struct
+	58, // 34: arbiter.v1.ExpertActivation.params:type_name -> google.protobuf.Struct
+	25, // 35: arbiter.v1.ExpertActivation.trace:type_name -> arbiter.v1.TraceStep
+	58, // 36: arbiter.v1.StartSessionRequest.envelope:type_name -> google.protobuf.Struct
+	33, // 37: arbiter.v1.StartSessionRequest.facts:type_name -> arbiter.v1.ExpertFact
+	34, // 38: arbiter.v1.RunSessionResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
+	33, // 39: arbiter.v1.RunSessionResponse.facts:type_name -> arbiter.v1.ExpertFact
+	35, // 40: arbiter.v1.RunSessionResponse.activations:type_name -> arbiter.v1.ExpertActivation
+	33, // 41: arbiter.v1.AssertFactsRequest.facts:type_name -> arbiter.v1.ExpertFact
+	42, // 42: arbiter.v1.RetractFactsRequest.facts:type_name -> arbiter.v1.FactRef
+	34, // 43: arbiter.v1.GetSessionTraceResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
+	33, // 44: arbiter.v1.GetSessionTraceResponse.facts:type_name -> arbiter.v1.ExpertFact
+	35, // 45: arbiter.v1.GetSessionTraceResponse.activations:type_name -> arbiter.v1.ExpertActivation
+	59, // 46: arbiter.v1.SetRuleOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
+	60, // 47: arbiter.v1.SetRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
+	59, // 48: arbiter.v1.SetFlagOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
+	60, // 49: arbiter.v1.SetFlagRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
+	59, // 50: arbiter.v1.SetStrategyOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
+	60, // 51: arbiter.v1.SetStrategyOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
+	3,  // 52: arbiter.v1.ArbiterService.PublishBundle:input_type -> arbiter.v1.PublishBundleRequest
+	6,  // 53: arbiter.v1.ArbiterService.ListBundles:input_type -> arbiter.v1.ListBundlesRequest
+	8,  // 54: arbiter.v1.ArbiterService.ActivateBundle:input_type -> arbiter.v1.ActivateBundleRequest
+	10, // 55: arbiter.v1.ArbiterService.RollbackBundle:input_type -> arbiter.v1.RollbackBundleRequest
+	12, // 56: arbiter.v1.ArbiterService.GetBundle:input_type -> arbiter.v1.GetBundleRequest
+	14, // 57: arbiter.v1.ArbiterService.WatchBundles:input_type -> arbiter.v1.WatchBundlesRequest
+	16, // 58: arbiter.v1.ArbiterService.GetOverrides:input_type -> arbiter.v1.GetOverridesRequest
+	18, // 59: arbiter.v1.ArbiterService.WatchOverrides:input_type -> arbiter.v1.WatchOverridesRequest
+	27, // 60: arbiter.v1.ArbiterService.EvaluateRules:input_type -> arbiter.v1.EvaluateRulesRequest
+	29, // 61: arbiter.v1.ArbiterService.ResolveFlag:input_type -> arbiter.v1.ResolveFlagRequest
+	31, // 62: arbiter.v1.ArbiterService.EvaluateStrategy:input_type -> arbiter.v1.EvaluateStrategyRequest
+	36, // 63: arbiter.v1.ArbiterService.StartSession:input_type -> arbiter.v1.StartSessionRequest
+	38, // 64: arbiter.v1.ArbiterService.RunSession:input_type -> arbiter.v1.RunSessionRequest
+	40, // 65: arbiter.v1.ArbiterService.AssertFacts:input_type -> arbiter.v1.AssertFactsRequest
+	43, // 66: arbiter.v1.ArbiterService.RetractFacts:input_type -> arbiter.v1.RetractFactsRequest
+	45, // 67: arbiter.v1.ArbiterService.GetSessionTrace:input_type -> arbiter.v1.GetSessionTraceRequest
+	47, // 68: arbiter.v1.ArbiterService.CloseSession:input_type -> arbiter.v1.CloseSessionRequest
+	49, // 69: arbiter.v1.ArbiterService.SetRuleOverride:input_type -> arbiter.v1.SetRuleOverrideRequest
+	51, // 70: arbiter.v1.ArbiterService.SetFlagOverride:input_type -> arbiter.v1.SetFlagOverrideRequest
+	53, // 71: arbiter.v1.ArbiterService.SetFlagRuleOverride:input_type -> arbiter.v1.SetFlagRuleOverrideRequest
+	55, // 72: arbiter.v1.ArbiterService.SetStrategyOverride:input_type -> arbiter.v1.SetStrategyOverrideRequest
+	4,  // 73: arbiter.v1.ArbiterService.PublishBundle:output_type -> arbiter.v1.PublishBundleResponse
+	7,  // 74: arbiter.v1.ArbiterService.ListBundles:output_type -> arbiter.v1.ListBundlesResponse
+	9,  // 75: arbiter.v1.ArbiterService.ActivateBundle:output_type -> arbiter.v1.ActivateBundleResponse
+	11, // 76: arbiter.v1.ArbiterService.RollbackBundle:output_type -> arbiter.v1.RollbackBundleResponse
+	13, // 77: arbiter.v1.ArbiterService.GetBundle:output_type -> arbiter.v1.GetBundleResponse
+	15, // 78: arbiter.v1.ArbiterService.WatchBundles:output_type -> arbiter.v1.BundleEvent
+	17, // 79: arbiter.v1.ArbiterService.GetOverrides:output_type -> arbiter.v1.GetOverridesResponse
+	24, // 80: arbiter.v1.ArbiterService.WatchOverrides:output_type -> arbiter.v1.OverrideEvent
+	28, // 81: arbiter.v1.ArbiterService.EvaluateRules:output_type -> arbiter.v1.EvaluateRulesResponse
+	30, // 82: arbiter.v1.ArbiterService.ResolveFlag:output_type -> arbiter.v1.ResolveFlagResponse
+	32, // 83: arbiter.v1.ArbiterService.EvaluateStrategy:output_type -> arbiter.v1.EvaluateStrategyResponse
+	37, // 84: arbiter.v1.ArbiterService.StartSession:output_type -> arbiter.v1.StartSessionResponse
+	39, // 85: arbiter.v1.ArbiterService.RunSession:output_type -> arbiter.v1.RunSessionResponse
+	41, // 86: arbiter.v1.ArbiterService.AssertFacts:output_type -> arbiter.v1.AssertFactsResponse
+	44, // 87: arbiter.v1.ArbiterService.RetractFacts:output_type -> arbiter.v1.RetractFactsResponse
+	46, // 88: arbiter.v1.ArbiterService.GetSessionTrace:output_type -> arbiter.v1.GetSessionTraceResponse
+	48, // 89: arbiter.v1.ArbiterService.CloseSession:output_type -> arbiter.v1.CloseSessionResponse
+	50, // 90: arbiter.v1.ArbiterService.SetRuleOverride:output_type -> arbiter.v1.SetRuleOverrideResponse
+	52, // 91: arbiter.v1.ArbiterService.SetFlagOverride:output_type -> arbiter.v1.SetFlagOverrideResponse
+	54, // 92: arbiter.v1.ArbiterService.SetFlagRuleOverride:output_type -> arbiter.v1.SetFlagRuleOverrideResponse
+	56, // 93: arbiter.v1.ArbiterService.SetStrategyOverride:output_type -> arbiter.v1.SetStrategyOverrideResponse
+	73, // [73:94] is the sub-list for method output_type
+	52, // [52:73] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_arbiter_v1_service_proto_init() }
@@ -3897,7 +4037,7 @@ func file_arbiter_v1_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_arbiter_v1_service_proto_rawDesc), len(file_arbiter_v1_service_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   54,
 			NumExtensions: 0,
 			NumServices:   1,
