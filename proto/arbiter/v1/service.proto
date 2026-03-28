@@ -175,11 +175,30 @@ message RuntimePluginInfo {
   string version = 2;
 }
 
+message RuntimeControlTransport {
+  bool enabled = 1;
+  string address = 2;
+  bool public_listener = 3;
+  bool auth_enabled = 4;
+  bool tls_enabled = 5;
+  bool mutual_tls_enabled = 6;
+}
+
+message RuntimeCapabilityTransport {
+  bool configured = 1;
+  string target = 2;
+  bool auth_enabled = 3;
+  bool tls_enabled = 4;
+  string server_name = 5;
+}
+
 message GetRuntimeCapabilitiesResponse {
   repeated RuntimeSourceCapability sources = 1;
   repeated RuntimeHandlerCapability sinks = 2;
   repeated RuntimeHandlerCapability workers = 3;
   repeated RuntimePluginInfo plugins = 4;
+  RuntimeControlTransport control_transport = 5;
+  RuntimeCapabilityTransport capability_transport = 6;
 }
 
 message BundleOverrides {

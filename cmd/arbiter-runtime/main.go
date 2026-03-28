@@ -10,6 +10,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -138,14 +139,18 @@ func defaultRuntimeParallelism() int {
 const runtimeTracerName = "arbiter.runtime"
 
 type runtime struct {
-	config runtimeConfig
-	runner *workflow.Runner
-	wf     *workflow.Workflow
-	full   *arbiter.CompileResult
-	logger *slog.Logger
-	name   string
-	conn   *grpc.ClientConn
-	caps   *capability.Manifest
+	config              runtimeConfig
+	runner              *workflow.Runner
+	wf                  *workflow.Workflow
+	full                *arbiter.CompileResult
+	logger              *slog.Logger
+	name                string
+	conn                *grpc.ClientConn
+	caps                *capability.Manifest
+	serverTokens        []string
+	serverTLSConfig     *tls.Config
+	controlTransport    runtimeControlTransport
+	capabilityTransport runtimeCapabilityTransport
 
 	mu         sync.RWMutex
 	lastTick   time.Time
@@ -165,6 +170,27 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 	if config.deliveryParallelism <= 0 {
 		config.deliveryParallelism = 1
 	}
+
+	serverTokens := []string(nil)
+	var serverTLSConfig *tls.Config
+	controlTransport := runtimeControlTransport{}
+	if config.grpcAddr != "" {
+		serverTokens, err = grpcutil.LoadAuthTokens(config.authTokens, config.authTokenFile)
+		if err != nil {
+			return nil, fmt.Errorf("load runtime auth tokens: %w", err)
+		}
+		serverTLSConfig, err = grpcutil.LoadServerTLSConfig(config.tlsCertFile, config.tlsKeyFile, config.tlsClientCAFile)
+		if err != nil {
+			return nil, fmt.Errorf("load runtime TLS config: %w", err)
+		}
+		controlTransport = newRuntimeControlTransport(
+			config.grpcAddr,
+			serverTokens,
+			serverTLSConfig,
+			grpcutil.IsPublicListenAddr(config.grpcAddr),
+		)
+	}
+
 	full, err := arbiter.CompileFullFile(bundlePath)
 	if err != nil {
 		return nil, fmt.Errorf("compile %s: %w", bundlePath, err)
@@ -191,8 +217,9 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 
 	var capabilityConn *grpc.ClientConn
 	var capabilityManifest *capability.Manifest
+	capabilityTransport := runtimeCapabilityTransport{}
 	if config.capabilityGRPC != "" {
-		adapter, conn, normalizedCapabilityAddr, manifest, err := dialCapabilityRuntime(capabilityDialConfig{
+		adapter, conn, manifest, transport, err := dialCapabilityRuntime(capabilityDialConfig{
 			target:        config.capabilityGRPC,
 			token:         config.capabilityToken,
 			caFile:        config.capabilityCAFile,
@@ -209,8 +236,9 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 		}
 		capabilityConn = conn
 		capabilityManifest = manifest
+		capabilityTransport = transport
 		logger.Info("capability service connected",
-			"addr", normalizedCapabilityAddr,
+			"addr", transport.Target,
 			"plugin", manifest.Name,
 			"version", manifest.Version,
 			"source_schemes", len(manifest.Sources),
@@ -243,20 +271,16 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 		name:   bundlePath,
 		conn:   capabilityConn,
 		caps:   capabilityManifest,
+		serverTokens:        serverTokens,
+		serverTLSConfig:     serverTLSConfig,
+		controlTransport:    controlTransport,
+		capabilityTransport: capabilityTransport,
 	}, nil
 }
 
 func (rt *runtime) run(ctx context.Context) error {
 	var grpcSrv *grpc.Server
 	if rt.config.grpcAddr != "" {
-		tokens, err := grpcutil.LoadAuthTokens(rt.config.authTokens, rt.config.authTokenFile)
-		if err != nil {
-			return fmt.Errorf("load runtime auth tokens: %w", err)
-		}
-		tlsConfig, err := grpcutil.LoadServerTLSConfig(rt.config.tlsCertFile, rt.config.tlsKeyFile, rt.config.tlsClientCAFile)
-		if err != nil {
-			return fmt.Errorf("load runtime TLS config: %w", err)
-		}
 		lis, err := net.Listen("tcp", rt.config.grpcAddr)
 		if err != nil {
 			return fmt.Errorf("listen %s: %w", rt.config.grpcAddr, err)
@@ -268,8 +292,8 @@ func (rt *runtime) run(ctx context.Context) error {
 		streamInterceptors := []grpc.StreamServerInterceptor{
 			grpcserver.StreamRecoveryInterceptor(rt.logger),
 		}
-		if len(tokens) > 0 {
-			auth, err := grpcserver.NewStaticTokenAuth(tokens)
+		if len(rt.serverTokens) > 0 {
+			auth, err := grpcserver.NewStaticTokenAuth(rt.serverTokens)
 			if err != nil {
 				return err
 			}
@@ -284,20 +308,21 @@ func (rt *runtime) run(ctx context.Context) error {
 		if len(streamInterceptors) > 0 {
 			serverOptions = append(serverOptions, grpc.ChainStreamInterceptor(streamInterceptors...))
 		}
-		if tlsConfig != nil {
-			serverOptions = append(serverOptions, grpc.Creds(credentials.NewTLS(tlsConfig)))
+		if rt.serverTLSConfig != nil {
+			serverOptions = append(serverOptions, grpc.Creds(credentials.NewTLS(rt.serverTLSConfig)))
 		}
 
 		grpcSrv = grpc.NewServer(serverOptions...)
 		arbiterv1.RegisterRuntimeServiceServer(grpcSrv, newRuntimeRPCServer(rt))
 		go func() {
-			if grpcutil.IsPublicListenAddr(rt.config.grpcAddr) && tlsConfig == nil && len(tokens) == 0 {
+			if rt.controlTransport.PublicListener && !rt.controlTransport.TLSEnabled && !rt.controlTransport.AuthEnabled {
 				rt.logger.Warn("runtime gRPC listener is public without TLS or auth", "addr", rt.config.grpcAddr)
 			}
 			rt.logger.Info("runtime gRPC listening",
 				"addr", rt.config.grpcAddr,
-				"auth_enabled", len(tokens) > 0,
-				"tls_enabled", tlsConfig != nil)
+				"auth_enabled", rt.controlTransport.AuthEnabled,
+				"tls_enabled", rt.controlTransport.TLSEnabled,
+				"mutual_tls_enabled", rt.controlTransport.MutualTLSEnabled)
 			if err := grpcSrv.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 				rt.logger.Error("runtime gRPC server error", observability.KeyError, err.Error())
 			}
@@ -361,8 +386,12 @@ type capabilityDialConfig struct {
 	forceInsecure bool
 }
 
-func dialCapabilityRuntime(cfg capabilityDialConfig) (*capability.GRPCAdapter, *grpc.ClientConn, string, *capability.Manifest, error) {
-	conn, normalized, err := grpcutil.Dial(grpcutil.DialConfig{
+func dialCapabilityRuntime(cfg capabilityDialConfig) (*capability.GRPCAdapter, *grpc.ClientConn, *capability.Manifest, runtimeCapabilityTransport, error) {
+	normalized, tlsEnabled, err := grpcutil.NormalizeTarget(cfg.target, cfg.forceInsecure, cfg.caFile != "" || cfg.serverName != "")
+	if err != nil {
+		return nil, nil, nil, runtimeCapabilityTransport{}, err
+	}
+	conn, _, err := grpcutil.Dial(grpcutil.DialConfig{
 		Target:        cfg.target,
 		Token:         cfg.token,
 		CAFile:        cfg.caFile,
@@ -370,15 +399,15 @@ func dialCapabilityRuntime(cfg capabilityDialConfig) (*capability.GRPCAdapter, *
 		ForceInsecure: cfg.forceInsecure,
 	})
 	if err != nil {
-		return nil, nil, "", nil, err
+		return nil, nil, nil, runtimeCapabilityTransport{}, err
 	}
 	adapter := capability.NewGRPCAdapter(arbiterv1.NewCapabilityServiceClient(conn))
 	manifest, err := adapter.Discover(context.Background())
 	if err != nil {
 		_ = conn.Close()
-		return nil, nil, "", nil, err
+		return nil, nil, nil, runtimeCapabilityTransport{}, err
 	}
-	return adapter, conn, normalized, manifest, nil
+	return adapter, conn, manifest, newRuntimeCapabilityTransport(normalized, cfg.token != "", tlsEnabled, cfg.serverName), nil
 }
 
 func (rt *runtime) tick(ctx context.Context) {
@@ -463,6 +492,10 @@ func (rt *runtime) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		"retried":            rt.lastResult.Retried,
 		"capabilities":       capabilityStatus(rt.runner.Capabilities()),
 		"capability_plugins": capabilityPluginsStatus(rt.caps),
+		"transport": map[string]any{
+			"control":    rt.controlTransport,
+			"capability": rt.capabilityTransport,
+		},
 	}
 	rt.mu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")

@@ -21,14 +21,29 @@ func (s *runtimeRPCServer) GetRuntimeCapabilities(context.Context, *arbiterv1.Ge
 	if s == nil || s.rt == nil || s.rt.runner == nil {
 		return &arbiterv1.GetRuntimeCapabilitiesResponse{}, nil
 	}
-	return protoRuntimeCapabilities(s.rt.runner.Capabilities(), s.rt.caps), nil
+	return protoRuntimeCapabilities(s.rt.runner.Capabilities(), s.rt.caps, s.rt.controlTransport, s.rt.capabilityTransport), nil
 }
 
-func protoRuntimeCapabilities(surface workflow.CapabilitySurface, manifest *capability.Manifest) *arbiterv1.GetRuntimeCapabilitiesResponse {
+func protoRuntimeCapabilities(surface workflow.CapabilitySurface, manifest *capability.Manifest, control runtimeControlTransport, capabilityTransport runtimeCapabilityTransport) *arbiterv1.GetRuntimeCapabilitiesResponse {
 	resp := &arbiterv1.GetRuntimeCapabilitiesResponse{
 		Sources: make([]*arbiterv1.RuntimeSourceCapability, 0, len(surface.Sources)),
 		Sinks:   make([]*arbiterv1.RuntimeHandlerCapability, 0, len(surface.Sinks)),
 		Workers: make([]*arbiterv1.RuntimeHandlerCapability, 0, len(surface.Workers)),
+		ControlTransport: &arbiterv1.RuntimeControlTransport{
+			Enabled:         control.Enabled,
+			Address:         control.Address,
+			PublicListener:  control.PublicListener,
+			AuthEnabled:     control.AuthEnabled,
+			TlsEnabled:      control.TLSEnabled,
+			MutualTlsEnabled: control.MutualTLSEnabled,
+		},
+		CapabilityTransport: &arbiterv1.RuntimeCapabilityTransport{
+			Configured:  capabilityTransport.Configured,
+			Target:      capabilityTransport.Target,
+			AuthEnabled: capabilityTransport.AuthEnabled,
+			TlsEnabled:  capabilityTransport.TLSEnabled,
+			ServerName:  capabilityTransport.ServerName,
+		},
 	}
 	for _, item := range surface.Sources {
 		resp.Sources = append(resp.Sources, &arbiterv1.RuntimeSourceCapability{
