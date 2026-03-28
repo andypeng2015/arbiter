@@ -36,4 +36,30 @@ const client = new ArbiterClient("https://arbiter.internal:443", {
 });
 ```
 
+## Capability Plugins
+
+```js
+const grpc = require("@grpc/grpc-js");
+const { CapabilityServer } = require("./src");
+
+const plugin = new CapabilityServer({ name: "ops-plugin", version: "1.0.0" })
+  .registerSource("kafka", target => [{
+    type: "OrderEvent",
+    key: "evt-1",
+    fields: { topic: target, status: "new" },
+  }], { description: "load facts from kafka topics" })
+  .registerSink("discord", delivery => {
+    console.log("deliver", delivery.outcome.name, "to", delivery.handler_target);
+  }, { description: "post governed outcomes to discord" })
+  .registerWorker("python", ({ worker, delivery }) => ({
+    facts: [{
+      type: worker.output,
+      key: delivery.outcome.params.key,
+      fields: { status: "sent" },
+    }],
+  }), { description: "delegate worker execution to python" });
+
+plugin.listen("127.0.0.1:7090", grpc.ServerCredentials.createInsecure());
+```
+
 See [src/index.js](/home/draco/work/arbiter/sdks/node/src/index.js) and [examples/smoke.js](/home/draco/work/arbiter/sdks/node/examples/smoke.js).

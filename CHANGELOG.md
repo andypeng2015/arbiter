@@ -2,9 +2,17 @@
 
 ## Unreleased
 
+### Runtime Capability Plugins
+
+- **Custom sink and worker kinds** — arbiter handler clauses and worker runtime clauses now accept host-registered identifiers instead of only the built-in transport list. `chain` and `worker` remain reserved runtime kinds, while `chain://...` and `worker://...` remain runtime-owned source schemes.
+- **Portable capability protocol** — a new gRPC `CapabilityService` contract lets non-Go hosts implement source loaders, sink handlers, and worker runtimes over a shared SDK-facing protocol.
+- **Reference runtime hook-up** — `arbiter-runtime --capability-grpc ...` now dials one remote capability service, binds its declared source schemes, sink kinds, and worker kinds into the workflow runner, and exposes that manifest on `/status`.
+
 ### SDKs
 
 - **SDK surface parity** — the shipped Node, Python, and Rust clients now track the current gRPC control-plane surface instead of lagging behind it. Strategy evaluation, strategy-candidate override mutation, structured `TraceStep` fields, and explicit `kill_switch_state` now flow through the vendored SDK contracts as well.
+- **Capability-service mirrors** — the Node, Python, and Rust SDK trees now mirror the runtime capability proto as well, so embedders can implement source/sink/worker plugins in those languages instead of being limited to Go interfaces.
+- **Capability server helpers** — Node and Python now ship `CapabilityServer` helpers, and Rust ships `CapabilityPlugin` plus handler traits, so SDK authors can register source/sink/worker behavior without hand-writing raw gRPC service plumbing.
 
 ## v1.4.0
 

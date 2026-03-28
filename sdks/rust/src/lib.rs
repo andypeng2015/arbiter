@@ -1,11 +1,12 @@
-use std::{future::Future, time::Duration};
+use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
 use prost_types::{value::Kind, Struct, Value};
 use serde_json::Value as JsonValue;
 use tonic::{
+    async_trait,
     metadata::{Ascii, MetadataKey, MetadataValue},
     transport::{Channel, Endpoint},
-    Code, Request, Status,
+    Code, Request, Response, Status,
 };
 
 pub mod arbiter {
@@ -15,18 +16,22 @@ pub mod arbiter {
 }
 
 use arbiter::v1::{
-    arbiter_service_client::ArbiterServiceClient, ActivateBundleRequest, ActivateBundleResponse,
-    AssertFactsRequest, AssertFactsResponse, BundleEvent, CloseSessionRequest,
-    CloseSessionResponse, EvaluateRulesRequest, EvaluateRulesResponse, EvaluateStrategyRequest,
-    EvaluateStrategyResponse, ExpertFact, FactRef, GetBundleRequest, GetBundleResponse,
+    arbiter_service_client::ArbiterServiceClient,
+    capability_service_server::{CapabilityService, CapabilityServiceServer},
+    ActivateBundleRequest, ActivateBundleResponse, AssertFactsRequest, AssertFactsResponse,
+    BundleEvent, CloseSessionRequest, CloseSessionResponse, DeliverOutcomeRequest,
+    DeliverOutcomeResponse, EvaluateRulesRequest, EvaluateRulesResponse, EvaluateStrategyRequest,
+    EvaluateStrategyResponse, ExecuteWorkerRequest, ExecuteWorkerResponse, ExpertFact, FactRef,
+    GetBundleRequest, GetBundleResponse, GetCapabilitiesRequest, GetCapabilitiesResponse,
     GetOverridesRequest, GetOverridesResponse, GetSessionTraceRequest, GetSessionTraceResponse,
-    ListBundlesRequest, ListBundlesResponse, OverrideEvent, PublishBundleRequest,
-    PublishBundleResponse, ResolveFlagRequest, ResolveFlagResponse, RetractFactsRequest,
-    RetractFactsResponse, RollbackBundleRequest, RollbackBundleResponse, RunSessionRequest,
-    RunSessionResponse, SetFlagOverrideRequest, SetFlagOverrideResponse,
+    ListBundlesRequest, ListBundlesResponse, LoadSourceRequest, LoadSourceResponse, OverrideEvent,
+    PublishBundleRequest, PublishBundleResponse, ResolveFlagRequest, ResolveFlagResponse,
+    RetractFactsRequest, RetractFactsResponse, RollbackBundleRequest, RollbackBundleResponse,
+    RunSessionRequest, RunSessionResponse, SetFlagOverrideRequest, SetFlagOverrideResponse,
     SetFlagRuleOverrideRequest, SetFlagRuleOverrideResponse, SetRuleOverrideRequest,
     SetRuleOverrideResponse, SetStrategyOverrideRequest, SetStrategyOverrideResponse,
-    StartSessionRequest, StartSessionResponse, WatchBundlesRequest, WatchOverridesRequest,
+    SinkCapability, SourceCapability, StartSessionRequest, StartSessionResponse,
+    WatchBundlesRequest, WatchOverridesRequest, WorkerCapability, WorkerSpec,
 };
 
 #[derive(Clone, Debug)]
@@ -590,6 +595,256 @@ pub fn fact_ref(typ: impl Into<String>, key: impl Into<String>) -> FactRef {
     }
 }
 
+#[async_trait]
+pub trait SourceHandler: Send + Sync + 'static {
+    async fn load_source(&self, target: String) -> Result<Vec<ExpertFact>, Status>;
+}
+
+#[async_trait]
+pub trait SinkHandler: Send + Sync + 'static {
+    async fn deliver_outcome(&self, delivery: arbiter::v1::DeliveryContext) -> Result<(), Status>;
+}
+
+#[async_trait]
+pub trait WorkerHandler: Send + Sync + 'static {
+    async fn execute_worker(
+        &self,
+        worker: WorkerSpec,
+        delivery: arbiter::v1::DeliveryContext,
+    ) -> Result<ExecuteWorkerResponse, Status>;
+}
+
+#[derive(Clone)]
+struct RegisteredSource {
+    description: String,
+    handler: Arc<dyn SourceHandler>,
+}
+
+#[derive(Clone)]
+struct RegisteredSink {
+    description: String,
+    handler: Arc<dyn SinkHandler>,
+}
+
+#[derive(Clone)]
+struct RegisteredWorker {
+    description: String,
+    handler: Arc<dyn WorkerHandler>,
+}
+
+#[derive(Clone, Default)]
+pub struct CapabilityPlugin {
+    name: String,
+    version: String,
+    sources: HashMap<String, RegisteredSource>,
+    sinks: HashMap<String, RegisteredSink>,
+    workers: HashMap<String, RegisteredWorker>,
+}
+
+impl CapabilityPlugin {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            version: String::new(),
+            sources: HashMap::new(),
+            sinks: HashMap::new(),
+            workers: HashMap::new(),
+        }
+    }
+
+    pub fn with_version(mut self, version: impl Into<String>) -> Self {
+        self.version = version.into();
+        self
+    }
+
+    pub fn register_source<H>(
+        &mut self,
+        scheme: impl Into<String>,
+        description: impl Into<String>,
+        handler: H,
+    ) -> Result<&mut Self, Status>
+    where
+        H: SourceHandler,
+    {
+        let scheme = normalize_capability_id(scheme.into(), "source scheme", true)?;
+        if is_reserved_source_scheme(&scheme) {
+            return Err(Status::invalid_argument(format!(
+                "source scheme {scheme} is reserved"
+            )));
+        }
+        self.sources.insert(
+            scheme,
+            RegisteredSource {
+                description: description.into(),
+                handler: Arc::new(handler),
+            },
+        );
+        Ok(self)
+    }
+
+    pub fn register_sink<H>(
+        &mut self,
+        kind: impl Into<String>,
+        description: impl Into<String>,
+        handler: H,
+    ) -> Result<&mut Self, Status>
+    where
+        H: SinkHandler,
+    {
+        let kind = normalize_capability_id(kind.into(), "sink kind", false)?;
+        if is_reserved_handler_kind(&kind) {
+            return Err(Status::invalid_argument(format!(
+                "sink kind {kind} is reserved"
+            )));
+        }
+        self.sinks.insert(
+            kind,
+            RegisteredSink {
+                description: description.into(),
+                handler: Arc::new(handler),
+            },
+        );
+        Ok(self)
+    }
+
+    pub fn register_worker<H>(
+        &mut self,
+        kind: impl Into<String>,
+        description: impl Into<String>,
+        handler: H,
+    ) -> Result<&mut Self, Status>
+    where
+        H: WorkerHandler,
+    {
+        let kind = normalize_capability_id(kind.into(), "worker kind", false)?;
+        if is_reserved_handler_kind(&kind) {
+            return Err(Status::invalid_argument(format!(
+                "worker kind {kind} is reserved"
+            )));
+        }
+        self.workers.insert(
+            kind,
+            RegisteredWorker {
+                description: description.into(),
+                handler: Arc::new(handler),
+            },
+        );
+        Ok(self)
+    }
+
+    pub fn manifest(&self) -> GetCapabilitiesResponse {
+        let mut sources: Vec<_> = self
+            .sources
+            .iter()
+            .map(|(scheme, item)| SourceCapability {
+                scheme: scheme.clone(),
+                description: item.description.clone(),
+            })
+            .collect();
+        sources.sort_by(|a, b| a.scheme.cmp(&b.scheme));
+
+        let mut sinks: Vec<_> = self
+            .sinks
+            .iter()
+            .map(|(kind, item)| SinkCapability {
+                kind: kind.clone(),
+                description: item.description.clone(),
+            })
+            .collect();
+        sinks.sort_by(|a, b| a.kind.cmp(&b.kind));
+
+        let mut workers: Vec<_> = self
+            .workers
+            .iter()
+            .map(|(kind, item)| WorkerCapability {
+                kind: kind.clone(),
+                description: item.description.clone(),
+            })
+            .collect();
+        workers.sort_by(|a, b| a.kind.cmp(&b.kind));
+
+        GetCapabilitiesResponse {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            sources,
+            sinks,
+            workers,
+        }
+    }
+
+    pub fn into_service(self) -> CapabilityServiceServer<Self> {
+        CapabilityServiceServer::new(self)
+    }
+}
+
+#[async_trait]
+impl CapabilityService for CapabilityPlugin {
+    async fn get_capabilities(
+        &self,
+        _request: Request<GetCapabilitiesRequest>,
+    ) -> Result<Response<GetCapabilitiesResponse>, Status> {
+        Ok(Response::new(self.manifest()))
+    }
+
+    async fn load_source(
+        &self,
+        request: Request<LoadSourceRequest>,
+    ) -> Result<Response<LoadSourceResponse>, Status> {
+        let target = request.into_inner().target;
+        let scheme = source_scheme(&target);
+        let item = self.sources.get(&scheme).ok_or_else(|| {
+            Status::unimplemented(format!(
+                "no source handler registered for scheme {}",
+                if scheme.is_empty() { "<none>" } else { &scheme }
+            ))
+        })?;
+        let facts = item.handler.load_source(target).await?;
+        Ok(Response::new(LoadSourceResponse { facts }))
+    }
+
+    async fn deliver_outcome(
+        &self,
+        request: Request<DeliverOutcomeRequest>,
+    ) -> Result<Response<DeliverOutcomeResponse>, Status> {
+        let delivery = request
+            .into_inner()
+            .delivery
+            .ok_or_else(|| Status::invalid_argument("delivery is required"))?;
+        let kind = delivery.handler_kind.clone();
+        let item = self.sinks.get(&kind).ok_or_else(|| {
+            Status::unimplemented(format!(
+                "no sink handler registered for kind {}",
+                if kind.is_empty() { "<none>" } else { &kind }
+            ))
+        })?;
+        item.handler.deliver_outcome(delivery).await?;
+        Ok(Response::new(DeliverOutcomeResponse {}))
+    }
+
+    async fn execute_worker(
+        &self,
+        request: Request<ExecuteWorkerRequest>,
+    ) -> Result<Response<ExecuteWorkerResponse>, Status> {
+        let input = request.into_inner();
+        let worker = input
+            .worker
+            .ok_or_else(|| Status::invalid_argument("worker is required"))?;
+        let delivery = input
+            .delivery
+            .ok_or_else(|| Status::invalid_argument("delivery is required"))?;
+        let kind = worker.kind.clone();
+        let item = self.workers.get(&kind).ok_or_else(|| {
+            Status::unimplemented(format!(
+                "no worker handler registered for kind {}",
+                if kind.is_empty() { "<none>" } else { &kind }
+            ))
+        })?;
+        Ok(Response::new(
+            item.handler.execute_worker(worker, delivery).await?,
+        ))
+    }
+}
+
 fn json_to_proto(value: JsonValue) -> Value {
     let kind = match value {
         JsonValue::Null => Kind::NullValue(0),
@@ -615,6 +870,35 @@ fn normalize_endpoint(dst: String) -> String {
     } else {
         format!("http://{dst}")
     }
+}
+
+fn normalize_capability_id(value: String, label: &str, lowercase: bool) -> Result<String, Status> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(Status::invalid_argument(format!(
+            "{label} must be non-empty"
+        )));
+    }
+    if lowercase {
+        Ok(trimmed.to_ascii_lowercase())
+    } else {
+        Ok(trimmed.to_string())
+    }
+}
+
+fn source_scheme(target: &str) -> String {
+    target
+        .split_once("://")
+        .map(|(scheme, _)| scheme.to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+fn is_reserved_source_scheme(scheme: &str) -> bool {
+    matches!(scheme, "chain" | "worker")
+}
+
+fn is_reserved_handler_kind(kind: &str) -> bool {
+    matches!(kind, "chain" | "worker")
 }
 
 fn should_retry(status: &Status) -> bool {

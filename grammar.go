@@ -192,6 +192,7 @@ func ArbiterGrammar() *Grammar {
 	))
 
 	g.Define("worker_handler_kind", Choice(
+		Sym("identifier"),
 		Str("webhook"),
 		Str("slack"),
 		Str("exec"),
@@ -316,6 +317,7 @@ func ArbiterGrammar() *Grammar {
 	))
 
 	g.Define("arbiter_handler_kind", Choice(
+		Sym("identifier"),
 		Str("webhook"),
 		Str("slack"),
 		Str("chain"),

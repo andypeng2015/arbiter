@@ -88,10 +88,13 @@ func compileWorkerDeclaration(program *ir.Program, worker *ir.Worker) (WorkerDec
 }
 
 func workerRuntimeKindAllowed(kind ArbiterHandlerKind) bool {
-	switch kind {
-	case ArbiterHandlerWebhook, ArbiterHandlerSlack, ArbiterHandlerExec, ArbiterHandlerGRPC, ArbiterHandlerAudit, ArbiterHandlerStdout:
-		return true
-	default:
+	if kind == "" {
 		return false
+	}
+	switch kind {
+	case ArbiterHandlerChain, ArbiterHandlerWorker:
+		return false
+	default:
+		return true
 	}
 }

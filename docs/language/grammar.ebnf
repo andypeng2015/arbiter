@@ -294,7 +294,8 @@ handler_clause     = "on" outcome_selector
 
 outcome_selector   = "*" | identifier ;
 
-handler_kind       = "webhook"
+handler_kind       = identifier
+                   | "webhook"
                    | "slack"
                    | "chain"
                    | "exec"

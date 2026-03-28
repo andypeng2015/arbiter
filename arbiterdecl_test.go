@@ -176,6 +176,39 @@ arbiter trading_system {
 	}
 }
 
+func TestCompileFullAllowsCustomRuntimeKinds(t *testing.T) {
+	result, err := CompileFull([]byte(`
+outcome Alert {
+	key: string
+}
+
+fact WorkerReceipt {
+	status: string
+}
+
+worker notify_ops {
+	input Alert
+	output WorkerReceipt
+	python "sdk://notify"
+}
+
+arbiter monitor {
+	poll 30s
+	on Alert discord "room://ops"
+	on Alert worker notify_ops
+}
+`))
+	if err != nil {
+		t.Fatalf("CompileFull: %v", err)
+	}
+	if got := result.Workers["notify_ops"].Kind; got != ArbiterHandlerKind("python") {
+		t.Fatalf("worker kind = %q, want python", got)
+	}
+	if got := result.Arbiters[0].Handlers[0].Kind; got != ArbiterHandlerKind("discord") {
+		t.Fatalf("handler kind = %q, want discord", got)
+	}
+}
+
 func TestCompileFullRejectsWorkerOutcomeMismatch(t *testing.T) {
 	_, err := CompileFull([]byte(`
 outcome Opportunity {

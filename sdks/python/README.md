@@ -29,4 +29,43 @@ with ArbiterClient("https://arbiter.internal:443", token="...", secure=True) as 
     ...
 ```
 
+## Capability Plugins
+
+```python
+from arbiter_sdk import CapabilityServer
+
+plugin = CapabilityServer(name="ops-plugin", version="1.0.0")
+
+plugin.register_source(
+    "kafka",
+    lambda target, _ctx: [{
+        "type": "OrderEvent",
+        "key": "evt-1",
+        "fields": {"topic": target, "status": "new"},
+    }],
+    description="load facts from kafka topics",
+)
+
+plugin.register_sink(
+    "discord",
+    lambda delivery, _ctx: print("deliver", delivery["outcome"]["name"], "to", delivery["handler_target"]),
+    description="post governed outcomes to discord",
+)
+
+plugin.register_worker(
+    "python",
+    lambda req, _ctx: {
+        "facts": [{
+            "type": req["worker"]["output"],
+            "key": req["delivery"]["outcome"]["params"]["key"],
+            "fields": {"status": "sent"},
+        }]
+    },
+    description="delegate worker execution to python",
+)
+
+server = plugin.serve("127.0.0.1:7090")
+server.wait_for_termination()
+```
+
 See [examples/smoke.py](/home/draco/work/arbiter/sdks/python/examples/smoke.py) for a runnable end-to-end example.

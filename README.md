@@ -393,7 +393,9 @@ expert rule HaltOnStaleFeed priority 0 {
 }
 ```
 
-`workflow` still owns `chain://...` and `worker://...` sources, validates that chain handlers and worker sources point at declared runtime objects, and rejects cyclic arbiter graphs. Built-in delivery implementations cover `audit` and `stdout`; `webhook`, `slack`, `exec`, and `grpc` stay pluggable through `RunnerOptions.Handlers` and `RunnerOptions.WorkerHandlers` so deployments can supply their own transport behavior without forking the runtime.
+`workflow` still owns `chain://...` and `worker://...` sources, validates that chain handlers and worker sources point at declared runtime objects, and rejects cyclic arbiter graphs. `chain` and `worker` remain reserved handler kinds, and `stdout` remains the only targetless runtime kind. Everything else is host-owned capability space: Go hosts can register sink and worker kinds directly through `RunnerOptions.Handlers` and `RunnerOptions.WorkerHandlers`, and non-Go runtimes can expose the gRPC `CapabilityService` and bind it through `capability.NewGRPCAdapter` or `arbiter-runtime --capability-grpc ...`. Built-in delivery implementations still cover `audit` and `stdout`, while transport kinds like `webhook`, `slack`, `exec`, `grpc`, or your own identifiers stay deployment-defined.
+
+That same capability surface is now visible to operators too: when a reference runtime is connected to a plugin sidecar, `/status` includes the plugin name/version plus the registered source schemes, sink kinds, and worker kinds so custom behavior is inspectable before a bundle ever fires.
 
 Arbiters are always killable by default. There is no `kill_switch` keyword inside an `arbiter` block because the loop should run unless a runtime stop path is used. The exact stop path can vary by deployment, but the invariant is the same: every arbiter must be stoppable quickly. In practice that can be wired through several control paths, including a control-plane override, a local override file, parent-context cancellation, or ordinary process shutdown/signal handling.
 
@@ -1066,7 +1068,7 @@ arbiter fraud_monitor {
 The `arbiter` declaration wires together:
 - **Triggers** — `poll` (interval), `stream` (subscription), `schedule` (cron)
 - **Sources** — fact providers loaded before each evaluation
-- **Handlers** — route outcomes to `webhook`, `slack`, `chain`, `exec`, `worker`, `grpc`, `audit`, or `stdout`
+- **Handlers** — route outcomes to reserved runtime kinds (`chain`, `worker`, `audit`, `stdout`) or any host-registered sink kind such as `webhook`, `slack`, `exec`, `grpc`, or `discord`
 
 ### Chained Arbiters
 
@@ -1122,6 +1124,7 @@ scenario "velocity detection triggers on transactions" {
 ```bash
 arbiter-runtime \
   --bundle monitor.arb \
+  --capability-grpc 127.0.0.1:7090 \
   --poll 5s \
   --status :7082 \
   --source-parallelism 8 \
@@ -1131,11 +1134,12 @@ arbiter-runtime \
 It handles the full lifecycle:
 - **Arbiter loop** — ticks on the declared poll interval, runs all arbiters in topological order
 - **Source polling** — loads external fact sources with retry and exponential backoff; keeps last-known-good facts on failure
-- **Worker dispatch** — executes `exec` and `webhook` workers, materializes results as `worker://` source facts
-- **Delivery retry** — outcomes route to handlers (webhook, slack, exec, grpc, audit, stdout) with durable retry journal
+- **Capability plugins** — optional gRPC sidecars can register source schemes plus sink and worker kinds without embedding Go
+- **Worker dispatch** — executes registered worker runtimes and materializes results as `worker://` source facts
+- **Delivery retry** — outcomes route to registered handlers with durable retry journal
 - **Bounded parallelism** — independent sources and handler targets can run concurrently inside one tick without changing per-target ordering
 - **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
-- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats)
+- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats, connected capability manifest)
 
 Build:
 
@@ -1323,9 +1327,9 @@ What you can rely on:
 What is evolving:
 
 - Continuous arbiter runtime (poll-based loops, source polling, worker dispatch, delivery retry are shipped; streaming triggers beyond poll are in progress)
-- Worker transports (`exec` and `webhook` are stable; `grpc` and `slack` are log-only)
+- Remote capability runtime ergonomics (`CapabilityService` is shipped for SDK-owned source/sink/worker plugins; richer auth/TLS/registry conventions are still evolving)
 - Fact source ecosystem (CSV, JSON, JSONL, HTTP, Terraform, Google Sheets shipped; additional connectors via `Loader`/`Saver` interfaces)
-- SDK wrapper libraries (Node, Python, and Rust wrappers now track the current control-plane surface; higher-level domain ergonomics beyond the gRPC model are still evolving)
+- SDK wrapper libraries (Node, Python, and Rust wrappers now track the current control-plane surface and ship the capability-service contract; higher-level domain ergonomics beyond the gRPC model are still evolving)
 
 Arbiter is maintained by a solo author. Contributions, feedback, and design-partner conversations are welcome.
 

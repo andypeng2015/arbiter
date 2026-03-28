@@ -11,8 +11,9 @@ const DEFAULT_RETRY = Object.freeze({
   retryableStatusCodes: [grpc.status.UNAVAILABLE, grpc.status.DEADLINE_EXCEEDED],
 });
 
-const protoPath = path.join(__dirname, "..", "proto", "arbiter", "v1", "service.proto");
-const packageDefinition = protoLoader.loadSync(protoPath, {
+const serviceProtoPath = path.join(__dirname, "..", "proto", "arbiter", "v1", "service.proto");
+const capabilityProtoPath = path.join(__dirname, "..", "proto", "arbiter", "v1", "capability.proto");
+const packageDefinition = protoLoader.loadSync([serviceProtoPath, capabilityProtoPath], {
   keepCase: false,
   longs: String,
   enums: String,
@@ -25,6 +26,8 @@ const packageDefinition = protoLoader.loadSync(protoPath, {
   ],
 });
 const proto = grpc.loadPackageDefinition(packageDefinition).arbiter.v1;
+const RESERVED_SOURCE_SCHEMES = new Set(["chain", "worker"]);
+const RESERVED_HANDLER_KINDS = new Set(["chain", "worker"]);
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -150,6 +153,179 @@ function createMetadataFactory(options) {
 
 function isRetryableError(err, retryOptions) {
   return Boolean(err) && retryOptions.retryableStatusCodes.includes(err.code);
+}
+
+function normalizeCapabilityName(value, label) {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
+  return value.trim();
+}
+
+function sourceScheme(target) {
+  if (typeof target !== "string") {
+    return "";
+  }
+  const index = target.indexOf("://");
+  if (index <= 0) {
+    return "";
+  }
+  return target.slice(0, index).toLowerCase();
+}
+
+function grpcError(code, details) {
+  const err = new Error(details);
+  err.code = code;
+  return err;
+}
+
+function toFactList(result) {
+  if (result === undefined || result === null) {
+    return [];
+  }
+  if (Array.isArray(result)) {
+    return result;
+  }
+  if (isPlainObject(result) && Array.isArray(result.facts)) {
+    return result.facts;
+  }
+  throw new TypeError("source handler must return an array of facts or { facts }");
+}
+
+function toWorkerResult(result) {
+  if (result === undefined || result === null) {
+    return { facts: [], outcomes: [] };
+  }
+  if (!isPlainObject(result)) {
+    throw new TypeError("worker handler must return an object with optional facts/outcomes arrays");
+  }
+  return {
+    facts: Array.isArray(result.facts) ? result.facts : [],
+    outcomes: Array.isArray(result.outcomes) ? result.outcomes : [],
+  };
+}
+
+class CapabilityServer {
+  constructor({ name = "", version = "" } = {}) {
+    this.name = String(name || "");
+    this.version = String(version || "");
+    this._sources = new Map();
+    this._sinks = new Map();
+    this._workers = new Map();
+  }
+
+  registerSource(scheme, handler, { description = "" } = {}) {
+    const normalized = normalizeCapabilityName(scheme, "source scheme").toLowerCase();
+    if (RESERVED_SOURCE_SCHEMES.has(normalized)) {
+      throw new Error(`source scheme ${normalized} is reserved`);
+    }
+    if (typeof handler !== "function") {
+      throw new TypeError("source handler must be a function");
+    }
+    this._sources.set(normalized, { description: String(description || ""), handler });
+    return this;
+  }
+
+  registerSink(kind, handler, { description = "" } = {}) {
+    const normalized = normalizeCapabilityName(kind, "sink kind");
+    if (RESERVED_HANDLER_KINDS.has(normalized)) {
+      throw new Error(`sink kind ${normalized} is reserved`);
+    }
+    if (typeof handler !== "function") {
+      throw new TypeError("sink handler must be a function");
+    }
+    this._sinks.set(normalized, { description: String(description || ""), handler });
+    return this;
+  }
+
+  registerWorker(kind, handler, { description = "" } = {}) {
+    const normalized = normalizeCapabilityName(kind, "worker kind");
+    if (RESERVED_HANDLER_KINDS.has(normalized)) {
+      throw new Error(`worker kind ${normalized} is reserved`);
+    }
+    if (typeof handler !== "function") {
+      throw new TypeError("worker handler must be a function");
+    }
+    this._workers.set(normalized, { description: String(description || ""), handler });
+    return this;
+  }
+
+  manifest() {
+    return {
+      name: this.name,
+      version: this.version,
+      sources: [...this._sources.entries()].map(([scheme, item]) => ({ scheme, description: item.description })),
+      sinks: [...this._sinks.entries()].map(([kind, item]) => ({ kind, description: item.description })),
+      workers: [...this._workers.entries()].map(([kind, item]) => ({ kind, description: item.description })),
+    };
+  }
+
+  addToServer(server) {
+    if (!server || typeof server.addService !== "function") {
+      throw new TypeError("server must be a grpc.Server");
+    }
+    server.addService(proto.CapabilityService.service, {
+      GetCapabilities: (_call, callback) => callback(null, this.manifest()),
+      LoadSource: (call, callback) => {
+        this._handleUnary(callback, async () => {
+          const scheme = sourceScheme(call.request.target);
+          const item = this._sources.get(scheme);
+          if (!item) {
+            throw grpcError(grpc.status.UNIMPLEMENTED, `no source handler registered for scheme ${scheme || "<none>"}`);
+          }
+          return { facts: toFactList(await Promise.resolve(item.handler(call.request.target, call))) };
+        });
+      },
+      DeliverOutcome: (call, callback) => {
+        this._handleUnary(callback, async () => {
+          const kind = call.request?.delivery?.handlerKind || "";
+          const item = this._sinks.get(kind);
+          if (!item) {
+            throw grpcError(grpc.status.UNIMPLEMENTED, `no sink handler registered for kind ${kind || "<none>"}`);
+          }
+          await Promise.resolve(item.handler(call.request.delivery, call));
+          return {};
+        });
+      },
+      ExecuteWorker: (call, callback) => {
+        this._handleUnary(callback, async () => {
+          const kind = call.request?.worker?.kind || "";
+          const item = this._workers.get(kind);
+          if (!item) {
+            throw grpcError(grpc.status.UNIMPLEMENTED, `no worker handler registered for kind ${kind || "<none>"}`);
+          }
+          return toWorkerResult(await Promise.resolve(item.handler({
+            worker: call.request.worker,
+            delivery: call.request.delivery,
+          }, call)));
+        });
+      },
+    });
+    return server;
+  }
+
+  async listen(address, credentials = grpc.ServerCredentials.createInsecure(), server = undefined) {
+    const boundServer = server || new grpc.Server();
+    this.addToServer(boundServer);
+    const port = await new Promise((resolve, reject) => {
+      boundServer.bindAsync(address, credentials, (err, value) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(value);
+      });
+    });
+    boundServer.start();
+    return { server: boundServer, port };
+  }
+
+  _handleUnary(callback, fn) {
+    Promise.resolve()
+      .then(fn)
+      .then(result => callback(null, result))
+      .catch(err => callback(err));
+  }
 }
 
 async function unary(client, method, request, createMetadata, retryOptions, extraMetadata) {
@@ -326,4 +502,7 @@ class ArbiterClient {
 
 module.exports = {
   ArbiterClient,
+  CapabilityServer,
+  capabilityProtoPath,
+  serviceProtoPath,
 };

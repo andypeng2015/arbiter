@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	arbiter-runtime --bundle rules.arb [--poll 5s] [--status :7082] [--checkpoint /var/lib/arbiter/state] [--source-parallelism 8] [--delivery-parallelism 8]
+//	arbiter-runtime --bundle rules.arb [--capability-grpc 127.0.0.1:7090] [--poll 5s] [--status :7082] [--checkpoint /var/lib/arbiter/state] [--source-parallelism 8] [--delivery-parallelism 8]
 package main
 
 import (
@@ -18,15 +18,21 @@ import (
 	"os"
 	"os/signal"
 	goruntime "runtime"
+	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	arbiter "github.com/odvcencio/arbiter"
+	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
+	"github.com/odvcencio/arbiter/capability"
 	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/workflow"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -35,6 +41,7 @@ func main() {
 	statusAddr := flag.String("status", ":7082", "health/status HTTP address")
 	checkpointDir := flag.String("checkpoint", "", "directory for checkpoint files")
 	deliveryLog := flag.String("delivery-log", "", "path for delivery journal (JSONL)")
+	capabilityGRPC := flag.String("capability-grpc", "", "optional gRPC capability service address for custom source/sink/worker runtimes")
 	sourceParallelism := flag.Int("source-parallelism", defaultRuntimeParallelism(), "max concurrent external source loads per tick")
 	deliveryParallelism := flag.Int("delivery-parallelism", defaultRuntimeParallelism(), "max concurrent handler delivery pipelines per tick")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
@@ -55,6 +62,7 @@ func main() {
 		statusAddr:          *statusAddr,
 		checkpointDir:       *checkpointDir,
 		deliveryLog:         *deliveryLog,
+		capabilityGRPC:      *capabilityGRPC,
 		sourceParallelism:   *sourceParallelism,
 		deliveryParallelism: *deliveryParallelism,
 	}, logger)
@@ -75,6 +83,7 @@ type runtimeConfig struct {
 	statusAddr          string
 	checkpointDir       string
 	deliveryLog         string
+	capabilityGRPC      string
 	sourceParallelism   int
 	deliveryParallelism int
 }
@@ -99,6 +108,8 @@ type runtime struct {
 	full   *arbiter.CompileResult
 	logger *slog.Logger
 	name   string
+	conn   *grpc.ClientConn
+	caps   *capability.Manifest
 
 	mu         sync.RWMutex
 	lastTick   time.Time
@@ -131,15 +142,43 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 		return nil, fmt.Errorf("compile workflow %s: %w", bundlePath, err)
 	}
 
-	runner, err := workflow.NewRunner(wf, workflow.RunnerOptions{
+	runnerOpts := workflow.RunnerOptions{
 		Handlers:                 defaultOutcomeHandlers(logger),
 		WorkerHandlers:           defaultWorkerHandlers(),
 		DeliveryLog:              config.deliveryLog,
 		MaxConcurrentSourceLoads: config.sourceParallelism,
 		MaxConcurrentDeliveries:  config.deliveryParallelism,
 		Stdout:                   os.Stdout,
-	})
+	}
+
+	var capabilityConn *grpc.ClientConn
+	var capabilityManifest *capability.Manifest
+	if config.capabilityGRPC != "" {
+		adapter, conn, manifest, err := dialCapabilityRuntime(config.capabilityGRPC)
+		if err != nil {
+			return nil, fmt.Errorf("connect capability service: %w", err)
+		}
+		runnerOpts, _, err = adapter.BindRunnerOptions(context.Background(), runnerOpts)
+		if err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("bind capability service: %w", err)
+		}
+		capabilityConn = conn
+		capabilityManifest = manifest
+		logger.Info("capability service connected",
+			"addr", config.capabilityGRPC,
+			"plugin", manifest.Name,
+			"version", manifest.Version,
+			"source_schemes", len(manifest.Sources),
+			"sink_kinds", len(manifest.Sinks),
+			"worker_kinds", len(manifest.Workers))
+	}
+
+	runner, err := workflow.NewRunner(wf, runnerOpts)
 	if err != nil {
+		if capabilityConn != nil {
+			_ = capabilityConn.Close()
+		}
 		return nil, fmt.Errorf("create runner: %w", err)
 	}
 
@@ -158,6 +197,8 @@ func newRuntime(bundlePath string, config runtimeConfig, logger *slog.Logger) (*
 		full:   full,
 		logger: logger,
 		name:   bundlePath,
+		conn:   capabilityConn,
+		caps:   capabilityManifest,
 	}, nil
 }
 
@@ -198,11 +239,28 @@ func (rt *runtime) run(ctx context.Context) error {
 					"retried", retried)
 			}
 			_ = rt.runner.Close()
+			if rt.conn != nil {
+				_ = rt.conn.Close()
+			}
 			return nil
 		case <-ticker.C:
 			rt.tick(ctx)
 		}
 	}
+}
+
+func dialCapabilityRuntime(target string) (*capability.GRPCAdapter, *grpc.ClientConn, *capability.Manifest, error) {
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	adapter := capability.NewGRPCAdapter(arbiterv1.NewCapabilityServiceClient(conn))
+	manifest, err := adapter.Discover(context.Background())
+	if err != nil {
+		_ = conn.Close()
+		return nil, nil, nil, err
+	}
+	return adapter, conn, manifest, nil
 }
 
 func (rt *runtime) tick(ctx context.Context) {
@@ -276,19 +334,66 @@ func (rt *runtime) handleReadyz(w http.ResponseWriter, _ *http.Request) {
 func (rt *runtime) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	rt.mu.RLock()
 	status := map[string]any{
-		"ready":     rt.ready,
-		"ticks":     rt.tickCount,
-		"errors":    rt.errors,
-		"last_tick": rt.lastTick,
-		"sources":   rt.lastResult.Sources,
-		"sinks":     rt.lastResult.Sinks,
-		"delivered": rt.lastResult.Delivered,
-		"enqueued":  rt.lastResult.Enqueued,
-		"retried":   rt.lastResult.Retried,
+		"ready":        rt.ready,
+		"ticks":        rt.tickCount,
+		"errors":       rt.errors,
+		"last_tick":    rt.lastTick,
+		"sources":      rt.lastResult.Sources,
+		"sinks":        rt.lastResult.Sinks,
+		"delivered":    rt.lastResult.Delivered,
+		"enqueued":     rt.lastResult.Enqueued,
+		"retried":      rt.lastResult.Retried,
+		"capabilities": capabilityStatus(rt.caps),
 	}
 	rt.mu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
+}
+
+func capabilityStatus(manifest *capability.Manifest) map[string]any {
+	if manifest == nil {
+		return nil
+	}
+	sources := make([]map[string]any, 0, len(manifest.Sources))
+	for _, item := range manifest.Sources {
+		sources = append(sources, map[string]any{
+			"scheme":      item.Scheme,
+			"description": item.Description,
+		})
+	}
+	slices.SortFunc(sources, func(a, b map[string]any) int {
+		return strings.Compare(a["scheme"].(string), b["scheme"].(string))
+	})
+
+	sinks := make([]map[string]any, 0, len(manifest.Sinks))
+	for _, item := range manifest.Sinks {
+		sinks = append(sinks, map[string]any{
+			"kind":        string(item.Kind),
+			"description": item.Description,
+		})
+	}
+	slices.SortFunc(sinks, func(a, b map[string]any) int {
+		return strings.Compare(a["kind"].(string), b["kind"].(string))
+	})
+
+	workers := make([]map[string]any, 0, len(manifest.Workers))
+	for _, item := range manifest.Workers {
+		workers = append(workers, map[string]any{
+			"kind":        string(item.Kind),
+			"description": item.Description,
+		})
+	}
+	slices.SortFunc(workers, func(a, b map[string]any) int {
+		return strings.Compare(a["kind"].(string), b["kind"].(string))
+	})
+
+	return map[string]any{
+		"name":    manifest.Name,
+		"version": manifest.Version,
+		"sources": sources,
+		"sinks":   sinks,
+		"workers": workers,
+	}
 }
 
 // --- Default Handlers ---

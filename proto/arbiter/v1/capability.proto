@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package arbiter.v1;
+
+option go_package = "github.com/odvcencio/arbiter/api/arbiter/v1;arbiterv1";
+
+import "arbiter/v1/service.proto";
+import "google/protobuf/timestamp.proto";
+
+service CapabilityService {
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+  rpc LoadSource(LoadSourceRequest) returns (LoadSourceResponse);
+  rpc DeliverOutcome(DeliverOutcomeRequest) returns (DeliverOutcomeResponse);
+  rpc ExecuteWorker(ExecuteWorkerRequest) returns (ExecuteWorkerResponse);
+}
+
+message GetCapabilitiesRequest {}
+
+message SourceCapability {
+  string scheme = 1;
+  string description = 2;
+}
+
+message SinkCapability {
+  string kind = 1;
+  string description = 2;
+}
+
+message WorkerCapability {
+  string kind = 1;
+  string description = 2;
+}
+
+message GetCapabilitiesResponse {
+  string name = 1;
+  string version = 2;
+  repeated SourceCapability sources = 3;
+  repeated SinkCapability sinks = 4;
+  repeated WorkerCapability workers = 5;
+}
+
+message LoadSourceRequest {
+  string target = 1;
+}
+
+message LoadSourceResponse {
+  repeated ExpertFact facts = 1;
+}
+
+message DeliveryContext {
+  string delivery_id = 1;
+  string arbiter_name = 2;
+  string worker_name = 3;
+  string handler_kind = 4;
+  string handler_target = 5;
+  ExpertOutcome outcome = 6;
+  uint32 attempt = 7;
+  google.protobuf.Timestamp enqueued_at = 8;
+  google.protobuf.Timestamp last_attempt_at = 9;
+  google.protobuf.Timestamp next_attempt_at = 10;
+  string last_error = 11;
+}
+
+message DeliverOutcomeRequest {
+  DeliveryContext delivery = 1;
+}
+
+message DeliverOutcomeResponse {}
+
+enum WorkerOutputKind {
+  WORKER_OUTPUT_KIND_UNSPECIFIED = 0;
+  WORKER_OUTPUT_KIND_FACT = 1;
+  WORKER_OUTPUT_KIND_OUTCOME = 2;
+}
+
+message WorkerSpec {
+  string name = 1;
+  string input = 2;
+  string output = 3;
+  WorkerOutputKind output_kind = 4;
+  string kind = 5;
+  string target = 6;
+}
+
+message ExecuteWorkerRequest {
+  WorkerSpec worker = 1;
+  DeliveryContext delivery = 2;
+}
+
+message ExecuteWorkerResponse {
+  repeated ExpertFact facts = 1;
+  repeated ExpertOutcome outcomes = 2;
+}
