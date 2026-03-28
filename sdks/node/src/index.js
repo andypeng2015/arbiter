@@ -248,6 +248,16 @@ class ArbiterClient {
     }, this._createMetadata, this._retry, metadata);
   }
 
+  evaluateStrategy({ bundleId = "", bundleName = "", strategyName, context = {}, requestId = "" }, metadata = undefined) {
+    return unary(this.client, "EvaluateStrategy", {
+      bundleId,
+      bundleName,
+      strategyName,
+      context,
+      requestId,
+    }, this._createMetadata, this._retry, metadata);
+  }
+
   startSession({ bundleId = "", bundleName = "", envelope = {}, facts = [] }, metadata = undefined) {
     return unary(this.client, "StartSession", {
       bundleId,
@@ -299,6 +309,16 @@ class ArbiterClient {
       bundleId,
       flagKey,
       ruleIndex,
+      rollout: rollout === undefined ? undefined : { value: rollout },
+    }, this._createMetadata, this._retry, metadata);
+  }
+
+  setStrategyOverride({ bundleId, strategyName, candidateLabel, killSwitch = undefined, rollout = undefined }, metadata = undefined) {
+    return unary(this.client, "SetStrategyOverride", {
+      bundleId,
+      strategyName,
+      candidateLabel,
+      killSwitch: killSwitch === undefined ? undefined : { value: killSwitch },
       rollout: rollout === undefined ? undefined : { value: rollout },
     }, this._createMetadata, this._retry, metadata);
   }

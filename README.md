@@ -1325,7 +1325,7 @@ What is evolving:
 - Continuous arbiter runtime (poll-based loops, source polling, worker dispatch, delivery retry are shipped; streaming triggers beyond poll are in progress)
 - Worker transports (`exec` and `webhook` are stable; `grpc` and `slack` are log-only)
 - Fact source ecosystem (CSV, JSON, JSONL, HTTP, Terraform, Google Sheets shipped; additional connectors via `Loader`/`Saver` interfaces)
-- SDK wrapper libraries (gRPC stubs + TypeScript WASM shipped; idiomatic wrappers not yet built)
+- SDK wrapper libraries (Node, Python, and Rust wrappers now track the current control-plane surface; higher-level domain ergonomics beyond the gRPC model are still evolving)
 
 Arbiter is maintained by a solo author. Contributions, feedback, and design-partner conversations are welcome.
 

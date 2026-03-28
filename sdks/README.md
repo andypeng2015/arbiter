@@ -14,9 +14,9 @@ All three target the same control-plane surface:
 - bundle publish, list, activation, rollback
 - bundle fetch and watch for local-agent sync
 - override fetch and watch for local-agent sync
-- rule evaluation and flag resolution
+- rule evaluation, flag resolution, and strategy evaluation
 - expert session lifecycle
-- runtime override mutation
+- runtime override mutation, including strategy-candidate governance
 
 Java is still pending. There is no JDK/Maven toolchain in this environment, so
 it was not added as an unverified skeleton.

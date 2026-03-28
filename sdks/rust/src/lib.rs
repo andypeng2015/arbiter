@@ -16,14 +16,17 @@ pub mod arbiter {
 
 use arbiter::v1::{
     arbiter_service_client::ArbiterServiceClient, ActivateBundleRequest, ActivateBundleResponse,
-    AssertFactsRequest, AssertFactsResponse, CloseSessionRequest, CloseSessionResponse,
-    EvaluateRulesRequest, EvaluateRulesResponse, ExpertFact, FactRef, GetSessionTraceRequest,
-    GetSessionTraceResponse, ListBundlesRequest, ListBundlesResponse, PublishBundleRequest,
+    AssertFactsRequest, AssertFactsResponse, BundleEvent, CloseSessionRequest,
+    CloseSessionResponse, EvaluateRulesRequest, EvaluateRulesResponse, EvaluateStrategyRequest,
+    EvaluateStrategyResponse, ExpertFact, FactRef, GetBundleRequest, GetBundleResponse,
+    GetOverridesRequest, GetOverridesResponse, GetSessionTraceRequest, GetSessionTraceResponse,
+    ListBundlesRequest, ListBundlesResponse, OverrideEvent, PublishBundleRequest,
     PublishBundleResponse, ResolveFlagRequest, ResolveFlagResponse, RetractFactsRequest,
     RetractFactsResponse, RollbackBundleRequest, RollbackBundleResponse, RunSessionRequest,
     RunSessionResponse, SetFlagOverrideRequest, SetFlagOverrideResponse,
     SetFlagRuleOverrideRequest, SetFlagRuleOverrideResponse, SetRuleOverrideRequest,
-    SetRuleOverrideResponse, StartSessionRequest, StartSessionResponse,
+    SetRuleOverrideResponse, SetStrategyOverrideRequest, SetStrategyOverrideResponse,
+    StartSessionRequest, StartSessionResponse, WatchBundlesRequest, WatchOverridesRequest,
 };
 
 #[derive(Clone, Debug)]
@@ -132,6 +135,101 @@ impl ArbiterClient {
         .await
     }
 
+    pub async fn get_bundle_by_id(
+        &self,
+        bundle_id: impl Into<String>,
+    ) -> Result<GetBundleResponse, tonic::Status> {
+        self.unary_with_retry(
+            GetBundleRequest {
+                bundle_id: bundle_id.into(),
+                bundle_name: String::new(),
+            },
+            |mut client, request| async move { client.get_bundle(request).await },
+        )
+        .await
+    }
+
+    pub async fn get_bundle_by_name(
+        &self,
+        bundle_name: impl Into<String>,
+    ) -> Result<GetBundleResponse, tonic::Status> {
+        self.unary_with_retry(
+            GetBundleRequest {
+                bundle_id: String::new(),
+                bundle_name: bundle_name.into(),
+            },
+            |mut client, request| async move { client.get_bundle(request).await },
+        )
+        .await
+    }
+
+    pub async fn watch_bundles(
+        &self,
+        names: Vec<String>,
+        active_only: bool,
+    ) -> Result<tonic::codec::Streaming<BundleEvent>, tonic::Status> {
+        let request = self.attach_metadata(WatchBundlesRequest { names, active_only })?;
+        let response = self.inner.clone().watch_bundles(request).await?;
+        Ok(response.into_inner())
+    }
+
+    pub async fn get_overrides_by_id(
+        &self,
+        bundle_id: impl Into<String>,
+    ) -> Result<GetOverridesResponse, tonic::Status> {
+        self.unary_with_retry(
+            GetOverridesRequest {
+                bundle_id: bundle_id.into(),
+                bundle_name: String::new(),
+            },
+            |mut client, request| async move { client.get_overrides(request).await },
+        )
+        .await
+    }
+
+    pub async fn get_overrides_by_name(
+        &self,
+        bundle_name: impl Into<String>,
+    ) -> Result<GetOverridesResponse, tonic::Status> {
+        self.unary_with_retry(
+            GetOverridesRequest {
+                bundle_id: String::new(),
+                bundle_name: bundle_name.into(),
+            },
+            |mut client, request| async move { client.get_overrides(request).await },
+        )
+        .await
+    }
+
+    pub async fn watch_overrides(
+        &self,
+        bundle_id: impl Into<String>,
+    ) -> Result<tonic::codec::Streaming<OverrideEvent>, tonic::Status> {
+        let request = self.attach_metadata(WatchOverridesRequest {
+            bundle_id: bundle_id.into(),
+        })?;
+        let response = self.inner.clone().watch_overrides(request).await?;
+        Ok(response.into_inner())
+    }
+
+    pub async fn evaluate_rules_by_id(
+        &self,
+        bundle_id: impl Into<String>,
+        context: JsonValue,
+        request_id: impl Into<String>,
+    ) -> Result<EvaluateRulesResponse, tonic::Status> {
+        self.unary_with_retry(
+            EvaluateRulesRequest {
+                bundle_id: bundle_id.into(),
+                bundle_name: String::new(),
+                context: Some(json_to_struct(context)),
+                request_id: request_id.into(),
+            },
+            |mut client, request| async move { client.evaluate_rules(request).await },
+        )
+        .await
+    }
+
     pub async fn evaluate_rules_by_name(
         &self,
         bundle_name: impl Into<String>,
@@ -146,6 +244,46 @@ impl ArbiterClient {
                 request_id: request_id.into(),
             },
             |mut client, request| async move { client.evaluate_rules(request).await },
+        )
+        .await
+    }
+
+    pub async fn evaluate_strategy_by_id(
+        &self,
+        bundle_id: impl Into<String>,
+        strategy_name: impl Into<String>,
+        context: JsonValue,
+        request_id: impl Into<String>,
+    ) -> Result<EvaluateStrategyResponse, tonic::Status> {
+        self.unary_with_retry(
+            EvaluateStrategyRequest {
+                bundle_id: bundle_id.into(),
+                bundle_name: String::new(),
+                strategy_name: strategy_name.into(),
+                context: Some(json_to_struct(context)),
+                request_id: request_id.into(),
+            },
+            |mut client, request| async move { client.evaluate_strategy(request).await },
+        )
+        .await
+    }
+
+    pub async fn evaluate_strategy_by_name(
+        &self,
+        bundle_name: impl Into<String>,
+        strategy_name: impl Into<String>,
+        context: JsonValue,
+        request_id: impl Into<String>,
+    ) -> Result<EvaluateStrategyResponse, tonic::Status> {
+        self.unary_with_retry(
+            EvaluateStrategyRequest {
+                bundle_id: String::new(),
+                bundle_name: bundle_name.into(),
+                strategy_name: strategy_name.into(),
+                context: Some(json_to_struct(context)),
+                request_id: request_id.into(),
+            },
+            |mut client, request| async move { client.evaluate_strategy(request).await },
         )
         .await
     }
@@ -170,6 +308,26 @@ impl ArbiterClient {
         .await
     }
 
+    pub async fn resolve_flag_by_id(
+        &self,
+        bundle_id: impl Into<String>,
+        flag_key: impl Into<String>,
+        context: JsonValue,
+        request_id: impl Into<String>,
+    ) -> Result<ResolveFlagResponse, tonic::Status> {
+        self.unary_with_retry(
+            ResolveFlagRequest {
+                bundle_id: bundle_id.into(),
+                bundle_name: String::new(),
+                flag_key: flag_key.into(),
+                context: Some(json_to_struct(context)),
+                request_id: request_id.into(),
+            },
+            |mut client, request| async move { client.resolve_flag(request).await },
+        )
+        .await
+    }
+
     pub async fn start_session_by_name(
         &self,
         bundle_name: impl Into<String>,
@@ -180,6 +338,24 @@ impl ArbiterClient {
             StartSessionRequest {
                 bundle_id: String::new(),
                 bundle_name: bundle_name.into(),
+                envelope: Some(json_to_struct(envelope)),
+                facts,
+            },
+            |mut client, request| async move { client.start_session(request).await },
+        )
+        .await
+    }
+
+    pub async fn start_session_by_id(
+        &self,
+        bundle_id: impl Into<String>,
+        envelope: JsonValue,
+        facts: Vec<ExpertFact>,
+    ) -> Result<StartSessionResponse, tonic::Status> {
+        self.unary_with_retry(
+            StartSessionRequest {
+                bundle_id: bundle_id.into(),
+                bundle_name: String::new(),
                 envelope: Some(json_to_struct(envelope)),
                 facts,
             },
@@ -310,6 +486,27 @@ impl ArbiterClient {
                 rollout,
             },
             |mut client, request| async move { client.set_flag_rule_override(request).await },
+        )
+        .await
+    }
+
+    pub async fn set_strategy_override(
+        &self,
+        bundle_id: impl Into<String>,
+        strategy_name: impl Into<String>,
+        candidate_label: impl Into<String>,
+        kill_switch: Option<bool>,
+        rollout: Option<u32>,
+    ) -> Result<SetStrategyOverrideResponse, tonic::Status> {
+        self.unary_with_retry(
+            SetStrategyOverrideRequest {
+                bundle_id: bundle_id.into(),
+                strategy_name: strategy_name.into(),
+                candidate_label: candidate_label.into(),
+                kill_switch,
+                rollout,
+            },
+            |mut client, request| async move { client.set_strategy_override(request).await },
         )
         .await
     }

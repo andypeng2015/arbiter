@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### SDKs
+
+- **SDK surface parity** — the shipped Node, Python, and Rust clients now track the current gRPC control-plane surface instead of lagging behind it. Strategy evaluation, strategy-candidate override mutation, structured `TraceStep` fields, and explicit `kill_switch_state` now flow through the vendored SDK contracts as well.
+
 ## v1.4.0
 
 ### Language Shape

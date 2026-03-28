@@ -84,6 +84,11 @@ class ArbiterServiceStub(object):
                 request_serializer=arbiter_dot_v1_dot_service__pb2.ResolveFlagRequest.SerializeToString,
                 response_deserializer=arbiter_dot_v1_dot_service__pb2.ResolveFlagResponse.FromString,
                 _registered_method=True)
+        self.EvaluateStrategy = channel.unary_unary(
+                '/arbiter.v1.ArbiterService/EvaluateStrategy',
+                request_serializer=arbiter_dot_v1_dot_service__pb2.EvaluateStrategyRequest.SerializeToString,
+                response_deserializer=arbiter_dot_v1_dot_service__pb2.EvaluateStrategyResponse.FromString,
+                _registered_method=True)
         self.StartSession = channel.unary_unary(
                 '/arbiter.v1.ArbiterService/StartSession',
                 request_serializer=arbiter_dot_v1_dot_service__pb2.StartSessionRequest.SerializeToString,
@@ -128,6 +133,11 @@ class ArbiterServiceStub(object):
                 '/arbiter.v1.ArbiterService/SetFlagRuleOverride',
                 request_serializer=arbiter_dot_v1_dot_service__pb2.SetFlagRuleOverrideRequest.SerializeToString,
                 response_deserializer=arbiter_dot_v1_dot_service__pb2.SetFlagRuleOverrideResponse.FromString,
+                _registered_method=True)
+        self.SetStrategyOverride = channel.unary_unary(
+                '/arbiter.v1.ArbiterService/SetStrategyOverride',
+                request_serializer=arbiter_dot_v1_dot_service__pb2.SetStrategyOverrideRequest.SerializeToString,
+                response_deserializer=arbiter_dot_v1_dot_service__pb2.SetStrategyOverrideResponse.FromString,
                 _registered_method=True)
 
 
@@ -194,6 +204,12 @@ class ArbiterServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def EvaluateStrategy(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def StartSession(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -243,6 +259,12 @@ class ArbiterServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def SetFlagRuleOverride(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetStrategyOverride(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -301,6 +323,11 @@ def add_ArbiterServiceServicer_to_server(servicer, server):
                     request_deserializer=arbiter_dot_v1_dot_service__pb2.ResolveFlagRequest.FromString,
                     response_serializer=arbiter_dot_v1_dot_service__pb2.ResolveFlagResponse.SerializeToString,
             ),
+            'EvaluateStrategy': grpc.unary_unary_rpc_method_handler(
+                    servicer.EvaluateStrategy,
+                    request_deserializer=arbiter_dot_v1_dot_service__pb2.EvaluateStrategyRequest.FromString,
+                    response_serializer=arbiter_dot_v1_dot_service__pb2.EvaluateStrategyResponse.SerializeToString,
+            ),
             'StartSession': grpc.unary_unary_rpc_method_handler(
                     servicer.StartSession,
                     request_deserializer=arbiter_dot_v1_dot_service__pb2.StartSessionRequest.FromString,
@@ -345,6 +372,11 @@ def add_ArbiterServiceServicer_to_server(servicer, server):
                     servicer.SetFlagRuleOverride,
                     request_deserializer=arbiter_dot_v1_dot_service__pb2.SetFlagRuleOverrideRequest.FromString,
                     response_serializer=arbiter_dot_v1_dot_service__pb2.SetFlagRuleOverrideResponse.SerializeToString,
+            ),
+            'SetStrategyOverride': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetStrategyOverride,
+                    request_deserializer=arbiter_dot_v1_dot_service__pb2.SetStrategyOverrideRequest.FromString,
+                    response_serializer=arbiter_dot_v1_dot_service__pb2.SetStrategyOverrideResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -628,6 +660,33 @@ class ArbiterService(object):
             _registered_method=True)
 
     @staticmethod
+    def EvaluateStrategy(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/arbiter.v1.ArbiterService/EvaluateStrategy',
+            arbiter_dot_v1_dot_service__pb2.EvaluateStrategyRequest.SerializeToString,
+            arbiter_dot_v1_dot_service__pb2.EvaluateStrategyResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def StartSession(request,
             target,
             options=(),
@@ -860,6 +919,33 @@ class ArbiterService(object):
             '/arbiter.v1.ArbiterService/SetFlagRuleOverride',
             arbiter_dot_v1_dot_service__pb2.SetFlagRuleOverrideRequest.SerializeToString,
             arbiter_dot_v1_dot_service__pb2.SetFlagRuleOverrideResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetStrategyOverride(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/arbiter.v1.ArbiterService/SetStrategyOverride',
+            arbiter_dot_v1_dot_service__pb2.SetStrategyOverrideRequest.SerializeToString,
+            arbiter_dot_v1_dot_service__pb2.SetStrategyOverrideResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -199,6 +199,26 @@ class ArbiterClient:
             ),
         )
 
+    def evaluate_strategy(
+        self,
+        strategy_name: str,
+        *,
+        bundle_id: str = "",
+        bundle_name: str = "",
+        context: Mapping[str, Any] | None = None,
+        request_id: str = "",
+    ) -> service_pb2.EvaluateStrategyResponse:
+        return self._invoke(
+            self.stub.EvaluateStrategy,
+            service_pb2.EvaluateStrategyRequest(
+                bundle_id=bundle_id,
+                bundle_name=bundle_name,
+                strategy_name=strategy_name,
+                context=_to_struct(context),
+                request_id=request_id,
+            ),
+        )
+
     def start_session(
         self,
         *,
@@ -304,3 +324,23 @@ class ArbiterClient:
         if rollout is not None:
             request.rollout.CopyFrom(wrappers_pb2.UInt32Value(value=rollout))
         return self._invoke(self.stub.SetFlagRuleOverride, request)
+
+    def set_strategy_override(
+        self,
+        bundle_id: str,
+        strategy_name: str,
+        candidate_label: str,
+        *,
+        kill_switch: bool | None = None,
+        rollout: int | None = None,
+    ) -> service_pb2.SetStrategyOverrideResponse:
+        request = service_pb2.SetStrategyOverrideRequest(
+            bundle_id=bundle_id,
+            strategy_name=strategy_name,
+            candidate_label=candidate_label,
+        )
+        if kill_switch is not None:
+            request.kill_switch.CopyFrom(wrappers_pb2.BoolValue(value=kill_switch))
+        if rollout is not None:
+            request.rollout.CopyFrom(wrappers_pb2.UInt32Value(value=rollout))
+        return self._invoke(self.stub.SetStrategyOverride, request)
