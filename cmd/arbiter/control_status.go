@@ -157,22 +157,46 @@ func newControlStatusPayload(
 	overridesFile string,
 	audit *controlAuditTracker,
 ) controlStatusPayload {
-	ready := registry != nil && store != nil && sessions != nil
-	reason := ""
-	if !ready {
-		reason = "status unavailable"
-	}
+	bundles := controlBundlesPayload(registry, bundleFile)
+	overrideStatus := controlOverridesPayload(registry, store, overridesFile)
+	sessionStatus := controlSessionsPayload(registry, sessions)
+	auditStatus := controlAuditPayload(audit)
 	return controlStatusPayload{
-		Readiness: controlReadinessStatus{
-			Ready:  ready,
-			Reason: reason,
-		},
+		Readiness: controlReadinessPayload(registry != nil && store != nil && sessions != nil, bundles, overrideStatus, auditStatus),
 		Transport: controlTransportStatus{Control: transport},
-		Bundles:   controlBundlesPayload(registry, bundleFile),
-		Overrides: controlOverridesPayload(registry, store, overridesFile),
-		Sessions:  controlSessionsPayload(registry, sessions),
-		Audit:     controlAuditPayload(audit),
+		Bundles:   bundles,
+		Overrides: overrideStatus,
+		Sessions:  sessionStatus,
+		Audit:     auditStatus,
 	}
+}
+
+func controlReadinessPayload(available bool, bundles controlBundlesStatus, overrides controlOverridesStatus, audit controlAuditStatus) controlReadinessStatus {
+	if !available {
+		return controlReadinessStatus{
+			Ready:  false,
+			Reason: "status unavailable",
+		}
+	}
+	if bundles.Persisted && !bundles.Healthy {
+		return controlReadinessStatus{
+			Ready:  false,
+			Reason: "bundle persistence unhealthy",
+		}
+	}
+	if overrides.Persisted && !overrides.Healthy {
+		return controlReadinessStatus{
+			Ready:  false,
+			Reason: "override persistence unhealthy",
+		}
+	}
+	if audit.Configured && !audit.Healthy {
+		return controlReadinessStatus{
+			Ready:  false,
+			Reason: "audit unhealthy",
+		}
+	}
+	return controlReadinessStatus{Ready: true}
 }
 
 func controlAuditPayload(audit *controlAuditTracker) controlAuditStatus {

@@ -17,15 +17,22 @@ import (
 //
 //	GET /metrics  — Prometheus text exposition format
 //	GET /healthz  — liveness probe (always 200 ok)
-//	GET /readyz   — readiness probe (always 200 ok once server is started)
+//	GET /readyz   — readiness probe (200 when ready; 503 when caller-supplied readiness says otherwise)
 //	GET /status   — JSON status payload (or a default identity summary)
 func NewHTTPServer(addr string, reg *prometheus.Registry) *http.Server {
-	return NewHTTPServerWithStatus(addr, reg, nil)
+	return NewHTTPServerWithStatusAndReadiness(addr, reg, nil, nil)
 }
 
 // NewHTTPServerWithStatus creates an HTTP server that also exposes a caller-
 // supplied JSON status payload on /status.
 func NewHTTPServerWithStatus(addr string, reg *prometheus.Registry, status func() any) *http.Server {
+	return NewHTTPServerWithStatusAndReadiness(addr, reg, status, nil)
+}
+
+// NewHTTPServerWithStatusAndReadiness creates an HTTP server that also exposes
+// caller-supplied JSON status payload on /status and an optional readiness
+// callback for /readyz.
+func NewHTTPServerWithStatusAndReadiness(addr string, reg *prometheus.Registry, status func() any, readiness func() (bool, string)) *http.Server {
 	mux := http.NewServeMux()
 
 	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
@@ -36,6 +43,13 @@ func NewHTTPServerWithStatus(addr string, reg *prometheus.Registry, status func(
 	})
 
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if readiness != nil {
+			ready, reason := readiness()
+			if !ready {
+				http.Error(w, reason, http.StatusServiceUnavailable)
+				return
+			}
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})

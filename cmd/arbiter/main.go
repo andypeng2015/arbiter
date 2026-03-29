@@ -984,9 +984,17 @@ func serveCmd(cfg serveConfig) error {
 	if cfg.statusAddr != "" {
 		reg := prometheus.NewRegistry()
 		grpcserver.RegisterMetrics(reg)
-		statusSrv = grpcserver.NewHTTPServerWithStatus(cfg.statusAddr, reg, func() any {
-			return statusSource.Payload()
-		})
+		statusSrv = grpcserver.NewHTTPServerWithStatusAndReadiness(
+			cfg.statusAddr,
+			reg,
+			func() any {
+				return statusSource.Payload()
+			},
+			func() (bool, string) {
+				payload := statusSource.Payload()
+				return payload.Readiness.Ready, payload.Readiness.Reason
+			},
+		)
 		statusSrv.ReadHeaderTimeout = 5 * time.Second
 		go func() {
 			logger.Info("arbiter status listening", "addr", cfg.statusAddr)

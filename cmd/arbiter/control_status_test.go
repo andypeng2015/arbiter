@@ -117,6 +117,67 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 	}
 }
 
+func TestControlReadinessPayloadTracksDurabilityHealth(t *testing.T) {
+	tests := []struct {
+		name       string
+		available  bool
+		bundles    controlBundlesStatus
+		overrides  controlOverridesStatus
+		audit      controlAuditStatus
+		wantReady  bool
+		wantReason string
+	}{
+		{
+			name:       "unavailable",
+			available:  false,
+			wantReady:  false,
+			wantReason: "status unavailable",
+		},
+		{
+			name:       "bundle persistence unhealthy",
+			available:  true,
+			bundles:    controlBundlesStatus{Persisted: true, Healthy: false},
+			wantReady:  false,
+			wantReason: "bundle persistence unhealthy",
+		},
+		{
+			name:       "override persistence unhealthy",
+			available:  true,
+			bundles:    controlBundlesStatus{Persisted: true, Healthy: true},
+			overrides:  controlOverridesStatus{Persisted: true, Healthy: false},
+			wantReady:  false,
+			wantReason: "override persistence unhealthy",
+		},
+		{
+			name:       "audit unhealthy",
+			available:  true,
+			bundles:    controlBundlesStatus{Persisted: true, Healthy: true},
+			overrides:  controlOverridesStatus{Persisted: true, Healthy: true},
+			audit:      controlAuditStatus{Configured: true, Healthy: false},
+			wantReady:  false,
+			wantReason: "audit unhealthy",
+		},
+		{
+			name:       "healthy",
+			available:  true,
+			bundles:    controlBundlesStatus{Persisted: true, Healthy: true},
+			overrides:  controlOverridesStatus{Persisted: true, Healthy: true},
+			audit:      controlAuditStatus{Configured: true, Healthy: true},
+			wantReady:  true,
+			wantReason: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := controlReadinessPayload(tt.available, tt.bundles, tt.overrides, tt.audit)
+			if got.Ready != tt.wantReady || got.Reason != tt.wantReason {
+				t.Fatalf("controlReadinessPayload() = %+v, want ready=%t reason=%q", got, tt.wantReady, tt.wantReason)
+			}
+		})
+	}
+}
+
 func TestProtoControlStatus(t *testing.T) {
 	payload := controlStatusPayload{
 		Readiness: controlReadinessStatus{Ready: true},

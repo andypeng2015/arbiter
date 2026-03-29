@@ -543,7 +543,7 @@ Bundles are published once and evaluated many times. Each bundle compiles rules,
 - `--session-ttl`, `--session-max`, and `--session-max-per-owner` to constrain expert-session state
 - `--data-dir` or explicit `--bundle-file` / `--overrides-file` for file-backed persistence, or `--ephemeral` for memory-only mode
 
-The hosted control plane now exposes the same kind of operator surface as the runtime and agent. `ControlService.GetControlStatus` and HTTP `/status` report `readiness -> transport -> bundles -> overrides -> sessions -> audit`, including listener auth/TLS posture, whether bundle and override persistence are actually healthy, active bundle versions, live expert-session occupancy, and whether decision recording is durable, healthy, and currently succeeding.
+The hosted control plane now exposes the same kind of operator surface as the runtime and agent. `ControlService.GetControlStatus` and HTTP `/status` report `readiness -> transport -> bundles -> overrides -> sessions -> audit`, including listener auth/TLS posture, whether bundle and override persistence are actually healthy, active bundle versions, live expert-session occupancy, and whether decision recording is durable, healthy, and currently succeeding. HTTP `/readyz` now follows that same readiness model instead of reporting green while configured durable surfaces are failing.
 
 ### Audit
 
@@ -1174,7 +1174,7 @@ It handles the full lifecycle:
 - **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON sections: `readiness`, `transport`, `capabilities`, `activity`, plus legacy flat mirrors for compatibility)
 - **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` and `RuntimeService.GetRuntimeStatus` expose the runtime's canonical capability and status surfaces over gRPC for SDKs and CLI clients
 - **Agent control RPC** — optional `AgentService.GetAgentStatus` exposes the agent's canonical `readiness -> transport -> sync` surface over the same local gRPC listener
-- **Hosted control RPC** — `ControlService.GetControlStatus` exposes the hosted control plane's canonical `readiness -> transport -> bundles -> overrides -> sessions -> audit` surface over the same gRPC listener as bundle lifecycle and evaluation APIs, including live bundle/override persistence health plus audit health and last-error state
+- **Hosted control RPC** — `ControlService.GetControlStatus` exposes the hosted control plane's canonical `readiness -> transport -> bundles -> overrides -> sessions -> audit` surface over the same gRPC listener as bundle lifecycle and evaluation APIs, including live bundle/override persistence health plus audit health and last-error state. The paired HTTP `/readyz` now degrades when those configured durable surfaces are unhealthy.
 
 Runtime transport is now opinionated instead of ad hoc:
 

@@ -305,3 +305,24 @@ func TestNewHTTPServerWithStatusUsesCustomPayload(t *testing.T) {
 		t.Fatalf("unexpected status payload: %+v", payload)
 	}
 }
+
+func TestNewHTTPServerWithStatusAndReadinessUsesCallback(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	srv := NewHTTPServerWithStatusAndReadiness(":0", reg, func() any {
+		return map[string]any{"service": "arbiter-control", "ready": false}
+	}, func() (bool, string) {
+		return false, "audit unhealthy"
+	})
+	if srv == nil {
+		t.Fatal("NewHTTPServerWithStatusAndReadiness returned nil")
+	}
+
+	rr := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("/readyz code = %d", rr.Code)
+	}
+	if body := rr.Body.String(); body == "" || !strings.Contains(body, "audit unhealthy") {
+		t.Fatalf("unexpected readiness body: %q", body)
+	}
+}
