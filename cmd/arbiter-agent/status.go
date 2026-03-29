@@ -102,16 +102,16 @@ func newAgentStatusPayload(status dataplane.AgentStatus, reason string, policy r
 func agentIssues(status dataplane.AgentStatus, reason string, policy readinessPolicy, transport agentTransportStatus) []statusview.Issue {
 	issues := make([]statusview.Issue, 0)
 	if trimmed := strings.TrimSpace(reason); trimmed != "" {
-		issues = append(issues, statusview.Error("readiness", "agent", agentReadinessCode(trimmed), trimmed, true))
+		issues = append(issues, statusview.New(agentReadinessCode(trimmed), "agent", trimmed))
 	}
 	if transport.Control.PublicListener && !transport.Control.TLSEnabled && !transport.Control.AuthEnabled {
-		issues = append(issues, statusview.Warning("transport", agentTransportSubject(transport.Control.Address, "agent-control"), "public_control_insecure", "public control listener has no TLS or auth"))
+		issues = append(issues, statusview.New(statusview.CodePublicControlInsecure, agentTransportSubject(transport.Control.Address, "agent-control"), "public control listener has no TLS or auth"))
 	}
 	if transport.Upstream.Configured && grpcutil.IsPublicListenAddr(transport.Upstream.Target) && !transport.Upstream.TLSEnabled && !transport.Upstream.AuthEnabled {
-		issues = append(issues, statusview.Warning("transport", agentTransportSubject(transport.Upstream.Target, "upstream"), "upstream_transport_insecure", "upstream transport has no TLS or auth"))
+		issues = append(issues, statusview.New(statusview.CodeUpstreamTransportInsecure, agentTransportSubject(transport.Upstream.Target, "upstream"), "upstream transport has no TLS or auth"))
 	}
 	if trimmed := strings.TrimSpace(status.LastUpstreamError); trimmed != "" {
-		issues = append(issues, statusview.Warning("upstream", "control-plane", "upstream_error", trimmed))
+		issues = append(issues, statusview.New(statusview.CodeUpstreamError, "control-plane", trimmed))
 	}
 
 	limitMs := policy.maxStaleness.Milliseconds()
@@ -129,47 +129,47 @@ func agentIssues(status dataplane.AgentStatus, reason string, policy readinessPo
 		if limitMs > 0 {
 			switch {
 			case item.BundleSyncedAt.IsZero():
-				issues = append(issues, statusview.Error("sync", subject, "bundle_never_synced", "bundle has never synced", true))
+				issues = append(issues, statusview.New(statusview.CodeBundleNeverSynced, subject, "bundle has never synced"))
 			case item.StalenessMs > limitMs:
-				issues = append(issues, statusview.Error("sync", subject, "bundle_stale", fmt.Sprintf("bundle stale (%dms > %dms)", item.StalenessMs, limitMs), true))
+				issues = append(issues, statusview.New(statusview.CodeBundleStale, subject, fmt.Sprintf("bundle stale (%dms > %dms)", item.StalenessMs, limitMs)))
 			}
 			if item.OverrideConfigured && !item.OverrideSyncedAt.IsZero() && item.OverrideStalenessMs > limitMs {
-				issues = append(issues, statusview.Error("sync", subject, "override_stale", fmt.Sprintf("overrides stale (%dms > %dms)", item.OverrideStalenessMs, limitMs), true))
+				issues = append(issues, statusview.New(statusview.CodeOverrideStale, subject, fmt.Sprintf("overrides stale (%dms > %dms)", item.OverrideStalenessMs, limitMs)))
 			}
 		}
 		if !item.BundleWatchConnected {
-			issues = append(issues, statusview.Warning("sync", subject, "bundle_watch_disconnected", "bundle watch disconnected"))
+			issues = append(issues, statusview.New(statusview.CodeBundleWatchDisconnected, subject, "bundle watch disconnected"))
 		}
 		if item.OverrideConfigured && !item.OverrideWatchConnected {
-			issues = append(issues, statusview.Warning("sync", subject, "override_watch_disconnected", "override watch disconnected"))
+			issues = append(issues, statusview.New(statusview.CodeOverrideWatchDisconnected, subject, "override watch disconnected"))
 		}
 		if trimmed := strings.TrimSpace(item.LastBundleError); trimmed != "" {
-			issues = append(issues, statusview.Warning("sync", subject, "bundle_sync_error", trimmed))
+			issues = append(issues, statusview.New(statusview.CodeBundleSyncError, subject, trimmed))
 		}
 		if trimmed := strings.TrimSpace(item.LastOverrideError); trimmed != "" {
-			issues = append(issues, statusview.Warning("sync", subject, "override_sync_error", trimmed))
+			issues = append(issues, statusview.New(statusview.CodeOverrideSyncError, subject, trimmed))
 		}
 	}
 	return issues
 }
 
-func agentReadinessCode(reason string) string {
+func agentReadinessCode(reason string) statusview.Code {
 	switch strings.TrimSpace(reason) {
 	case "status unavailable":
-		return "status_unavailable"
+		return statusview.CodeStatusUnavailable
 	case "initial sync incomplete":
-		return "initial_sync_incomplete"
+		return statusview.CodeInitialSyncIncomplete
 	default:
 		if strings.Contains(reason, " has never synced") {
-			return "bundle_never_synced"
+			return statusview.CodeBundleNeverSynced
 		}
 		if strings.Contains(reason, " overrides stale ") {
-			return "override_stale"
+			return statusview.CodeOverrideStale
 		}
 		if strings.Contains(reason, " stale ") {
-			return "bundle_stale"
+			return statusview.CodeBundleStale
 		}
-		return "not_ready"
+		return statusview.CodeNotReady
 	}
 }
 

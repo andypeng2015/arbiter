@@ -8,6 +8,7 @@ import (
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/capability"
+	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/workflow"
 )
 
@@ -121,7 +122,7 @@ func TestRuntimeStatusPayloadExposesCanonicalSections(t *testing.T) {
 	if payload.Readiness.Ready || payload.Readiness.Reason != "first tick incomplete" {
 		t.Fatalf("unexpected readiness: %+v", payload.Readiness)
 	}
-	if len(payload.Issues) != 1 || payload.Issues[0].Code != "first_tick_incomplete" || !payload.Issues[0].Blocking {
+	if len(payload.Issues) != 1 || payload.Issues[0].Code != statusview.CodeFirstTickIncomplete || !payload.Issues[0].Blocking {
 		t.Fatalf("unexpected issues: %+v", payload.Issues)
 	}
 	if payload.Transport.Control.Address != "127.0.0.1:7081" || payload.Transport.Capability.Target != "plugin.internal:7443" {
@@ -263,7 +264,7 @@ func TestProtoRuntimeStatus(t *testing.T) {
 	if len(resp.GetIssues()) != 3 {
 		t.Fatalf("unexpected runtime issues: %+v", resp.GetIssues())
 	}
-	if resp.GetIssues()[0].GetCode() != "source_failures" || resp.GetIssues()[1].GetCode() != "sink_failures" || resp.GetIssues()[2].GetCode() != "sink_ambiguous" {
+	if resp.GetIssues()[0].GetCode() != string(statusview.CodeSourceFailures) || resp.GetIssues()[1].GetCode() != string(statusview.CodeSinkFailures) || resp.GetIssues()[2].GetCode() != string(statusview.CodeSinkAmbiguous) {
 		t.Fatalf("unexpected runtime issue codes: %+v", resp.GetIssues())
 	}
 	if len(resp.GetCapabilities().GetPlugins()) != 1 || resp.GetCapabilities().GetPlugins()[0].GetName() != "ops-plugin" {
@@ -292,7 +293,7 @@ func TestRuntimeIssuesExposeTransportWarnings(t *testing.T) {
 	if len(issues) != 3 {
 		t.Fatalf("expected transport warnings plus readiness issue, got %+v", issues)
 	}
-	if issues[1].Code != "public_control_insecure" || issues[2].Code != "capability_transport_insecure" {
+	if issues[1].Code != statusview.CodePublicControlInsecure || issues[2].Code != statusview.CodeCapabilityTransportInsecure {
 		t.Fatalf("unexpected transport issue codes: %+v", issues)
 	}
 }

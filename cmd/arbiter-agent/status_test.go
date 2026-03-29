@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/odvcencio/arbiter/dataplane"
+	"github.com/odvcencio/arbiter/internal/statusview"
 )
 
 const statusTestInitialSource = `
@@ -188,7 +189,7 @@ func TestNewAgentStatusPayloadExposesCanonicalSections(t *testing.T) {
 	if !payload.Readiness.Ready || payload.Readiness.MaxStalenessMs != 30000 {
 		t.Fatalf("unexpected readiness: %+v", payload.Readiness)
 	}
-	if len(payload.Issues) != 1 || payload.Issues[0].Code != "upstream_error" || payload.Issues[0].Blocking {
+	if len(payload.Issues) != 1 || payload.Issues[0].Code != statusview.CodeUpstreamError || payload.Issues[0].Blocking {
 		t.Fatalf("unexpected issues: %+v", payload.Issues)
 	}
 	if payload.Transport.Upstream.Target != "arbiter.internal:7443" || payload.Transport.Control.Address != "127.0.0.1:7081" {
@@ -243,7 +244,7 @@ func TestProtoAgentStatus(t *testing.T) {
 	if resp.GetTransport().GetUpstream().GetTarget() != "arbiter.internal:7443" {
 		t.Fatalf("unexpected upstream transport: %+v", resp.GetTransport().GetUpstream())
 	}
-	if len(resp.GetIssues()) != 1 || resp.GetIssues()[0].GetCode() != "upstream_error" {
+	if len(resp.GetIssues()) != 1 || resp.GetIssues()[0].GetCode() != string(statusview.CodeUpstreamError) {
 		t.Fatalf("unexpected issue payload: %+v", resp.GetIssues())
 	}
 	if resp.GetSync().GetPrimaryName() != "checkout" || resp.GetSync().GetBundleErrorsTotal() != 3 {
@@ -278,7 +279,7 @@ func TestAgentIssuesExposeBlockingAndWarningProblems(t *testing.T) {
 	if len(issues) < 5 {
 		t.Fatalf("expected multiple surfaced issues, got %+v", issues)
 	}
-	if issues[0].Code != "bundle_stale" || !issues[0].Blocking {
+	if issues[0].Code != statusview.CodeBundleStale || !issues[0].Blocking {
 		t.Fatalf("expected first blocking readiness issue, got %+v", issues[0])
 	}
 }
@@ -291,7 +292,7 @@ func TestAgentIssuesExposeTransportWarnings(t *testing.T) {
 	if len(issues) != 2 {
 		t.Fatalf("expected transport warnings, got %+v", issues)
 	}
-	if issues[0].Code != "public_control_insecure" || issues[1].Code != "upstream_transport_insecure" {
+	if issues[0].Code != statusview.CodePublicControlInsecure || issues[1].Code != statusview.CodeUpstreamTransportInsecure {
 		t.Fatalf("unexpected transport issue codes: %+v", issues)
 	}
 }

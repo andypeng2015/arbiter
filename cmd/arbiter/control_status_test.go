@@ -192,7 +192,7 @@ func TestControlIssuesExposeDurabilityProblems(t *testing.T) {
 	if len(issues) != 3 {
 		t.Fatalf("expected 3 issues, got %+v", issues)
 	}
-	if issues[0].Code != "bundle_persistence_unhealthy" || issues[1].Code != "override_persistence_unhealthy" || issues[2].Code != "audit_unhealthy" {
+	if issues[0].Code != statusview.CodeBundlePersistenceUnhealthy || issues[1].Code != statusview.CodeOverridePersistenceUnhealthy || issues[2].Code != statusview.CodeAuditUnhealthy {
 		t.Fatalf("unexpected issue codes: %+v", issues)
 	}
 	if !issues[0].Blocking || !issues[1].Blocking || !issues[2].Blocking {
@@ -207,7 +207,7 @@ func TestControlIssuesExposeTransportWarnings(t *testing.T) {
 		controlOverridesStatus{},
 		controlAuditStatus{},
 	)
-	if len(issues) != 1 || issues[0].Code != "public_control_insecure" || issues[0].Blocking {
+	if len(issues) != 1 || issues[0].Code != statusview.CodePublicControlInsecure || issues[0].Blocking {
 		t.Fatalf("unexpected transport issues: %+v", issues)
 	}
 }
@@ -216,7 +216,7 @@ func TestProtoControlStatus(t *testing.T) {
 	payload := controlStatusPayload{
 		Readiness: controlReadinessStatus{Ready: true},
 		Issues: []statusview.Issue{
-			statusview.Error("audit", "/tmp/decisions.jsonl", "audit_unhealthy", "audit unhealthy: disk full", true),
+			statusview.New(statusview.CodeAuditUnhealthy, "/tmp/decisions.jsonl", "audit unhealthy: disk full"),
 		},
 		Transport: controlTransportStatus{
 			Control: controlListenerTransport{
@@ -303,7 +303,7 @@ func TestProtoControlStatus(t *testing.T) {
 	if !resp.GetReadiness().GetReady() {
 		t.Fatalf("unexpected readiness: %+v", resp.GetReadiness())
 	}
-	if len(resp.GetIssues()) != 1 || resp.GetIssues()[0].GetCode() != "audit_unhealthy" || !resp.GetIssues()[0].GetBlocking() {
+	if len(resp.GetIssues()) != 1 || resp.GetIssues()[0].GetCode() != string(statusview.CodeAuditUnhealthy) || !resp.GetIssues()[0].GetBlocking() {
 		t.Fatalf("unexpected control issues payload: %+v", resp.GetIssues())
 	}
 	if resp.GetTransport().GetControl().GetAddress() != "127.0.0.1:8081" || !resp.GetTransport().GetControl().GetTlsEnabled() {

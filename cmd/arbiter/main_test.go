@@ -11,6 +11,7 @@ import (
 	"github.com/odvcencio/arbiter"
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
+	"github.com/odvcencio/arbiter/internal/statusview"
 )
 
 func TestFormatCLIErrorPreservesDiagnostics(t *testing.T) {
@@ -68,9 +69,9 @@ func TestParseRemoteInspectConfigSupportsFailOnIssues(t *testing.T) {
 
 func TestFailOnBlockingIssuesCountsBlockingOnly(t *testing.T) {
 	issues := []*arbiterv1.StatusIssue{
-		{Severity: "warning", Code: "upstream_error"},
-		{Severity: "error", Code: "audit_unhealthy", Blocking: true},
-		{Severity: "error", Code: "bundle_stale", Blocking: true},
+		{Severity: string(statusview.SeverityWarning), Code: string(statusview.CodeUpstreamError)},
+		{Severity: string(statusview.SeverityError), Code: string(statusview.CodeAuditUnhealthy), Blocking: true},
+		{Severity: string(statusview.SeverityError), Code: string(statusview.CodeBundleStale), Blocking: true},
 	}
 	if got := blockingIssueCount(issues); got != 2 {
 		t.Fatalf("blockingIssueCount() = %d, want 2", got)
@@ -334,7 +335,7 @@ func TestPrintRuntimeStatusUsesCanonicalSections(t *testing.T) {
 				Severity: "error",
 				Scope:    "readiness",
 				Subject:  "runtime",
-				Code:     "first_tick_incomplete",
+				Code:     string(statusview.CodeFirstTickIncomplete),
 				Message:  "first tick incomplete",
 				Blocking: true,
 			}},
@@ -413,7 +414,7 @@ func TestPrintAgentStatusUsesCanonicalSections(t *testing.T) {
 				Severity: "warning",
 				Scope:    "upstream",
 				Subject:  "control-plane",
-				Code:     "upstream_error",
+				Code:     string(statusview.CodeUpstreamError),
 				Message:  "upstream unavailable",
 			}},
 			Transport: &arbiterv1.AgentTransportStatus{
@@ -485,7 +486,7 @@ func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
 				Severity: "error",
 				Scope:    "audit",
 				Subject:  "/tmp/decisions.jsonl",
-				Code:     "audit_unhealthy",
+				Code:     string(statusview.CodeAuditUnhealthy),
 				Message:  "audit unhealthy: disk full",
 				Blocking: true,
 			}},

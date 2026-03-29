@@ -180,13 +180,13 @@ func newRuntimeStatusPayload(
 func runtimeIssues(ready bool, reason string, lastResult workflow.TickResult, control runtimeControlTransport, capabilityTransport runtimeCapabilityTransport) []statusview.Issue {
 	issues := make([]statusview.Issue, 0)
 	if !ready && strings.TrimSpace(reason) != "" {
-		issues = append(issues, statusview.Error("readiness", "runtime", "first_tick_incomplete", strings.TrimSpace(reason), true))
+		issues = append(issues, statusview.New(statusview.CodeFirstTickIncomplete, "runtime", strings.TrimSpace(reason)))
 	}
 	if control.PublicListener && !control.TLSEnabled && !control.AuthEnabled {
-		issues = append(issues, statusview.Warning("transport", runtimeIssueSubject(control.Address, "runtime-control"), "public_control_insecure", "public control listener has no TLS or auth"))
+		issues = append(issues, statusview.New(statusview.CodePublicControlInsecure, runtimeIssueSubject(control.Address, "runtime-control"), "public control listener has no TLS or auth"))
 	}
 	if capabilityTransport.Configured && grpcutil.IsPublicListenAddr(capabilityTransport.Target) && !capabilityTransport.TLSEnabled && !capabilityTransport.AuthEnabled {
-		issues = append(issues, statusview.Warning("transport", runtimeIssueSubject(capabilityTransport.Target, "capability"), "capability_transport_insecure", "capability transport has no TLS or auth"))
+		issues = append(issues, statusview.New(statusview.CodeCapabilityTransportInsecure, runtimeIssueSubject(capabilityTransport.Target, "capability"), "capability transport has no TLS or auth"))
 	}
 
 	sourceKeys := make([]string, 0, len(lastResult.Sources))
@@ -199,9 +199,9 @@ func runtimeIssues(ready bool, reason string, lastResult workflow.TickResult, co
 		subject := runtimeIssueSubject(item.Alias, item.Target, key)
 		switch {
 		case !item.Available:
-			issues = append(issues, statusview.Error("source", subject, "source_unavailable", runtimeIssueMessage("source unavailable", item.LastError), false))
+			issues = append(issues, statusview.New(statusview.CodeSourceUnavailable, subject, runtimeIssueMessage("source unavailable", item.LastError)))
 		case item.ConsecutiveFailures > 0:
-			issues = append(issues, statusview.Warning("source", subject, "source_failures", runtimeFailureMessage(item.ConsecutiveFailures, "consecutive source failures", item.LastError)))
+			issues = append(issues, statusview.New(statusview.CodeSourceFailures, subject, runtimeFailureMessage(item.ConsecutiveFailures, "consecutive source failures", item.LastError)))
 		}
 	}
 
@@ -214,12 +214,12 @@ func runtimeIssues(ready bool, reason string, lastResult workflow.TickResult, co
 		item := lastResult.Sinks[key]
 		subject := runtimeIssueSubject(item.Alias, item.Key, key)
 		if !item.Available {
-			issues = append(issues, statusview.Error("sink", subject, "sink_unavailable", runtimeIssueMessage("sink unavailable", item.LastError), false))
+			issues = append(issues, statusview.New(statusview.CodeSinkUnavailable, subject, runtimeIssueMessage("sink unavailable", item.LastError)))
 		} else if item.ConsecutiveFailures > 0 {
-			issues = append(issues, statusview.Warning("sink", subject, "sink_failures", runtimeFailureMessage(item.ConsecutiveFailures, "consecutive sink failures", item.LastError)))
+			issues = append(issues, statusview.New(statusview.CodeSinkFailures, subject, runtimeFailureMessage(item.ConsecutiveFailures, "consecutive sink failures", item.LastError)))
 		}
 		if item.Ambiguous > 0 {
-			issues = append(issues, statusview.Warning("sink", subject, "sink_ambiguous", fmt.Sprintf("%d ambiguous deliveries", item.Ambiguous)))
+			issues = append(issues, statusview.New(statusview.CodeSinkAmbiguous, subject, fmt.Sprintf("%d ambiguous deliveries", item.Ambiguous)))
 		}
 	}
 

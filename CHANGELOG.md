@@ -23,6 +23,7 @@
 - **Readiness follows durability health** — hosted control `/readyz` now uses the same readiness judgment as the `readiness` section, so configured bundle persistence, override persistence, or audit recording failures take the control plane out of readiness instead of leaving probes green.
 - **Canonical issue lists** — runtime, agent, and hosted control status now all expose an explicit `issues` surface with shared `severity`, `scope`, `subject`, `code`, `message`, and `blocking` fields, so operators and SDKs can inspect concrete failures and insecure transport posture without reconstructing them from mixed booleans and free-form reasons.
 - **CLI issue gating** — `arbiter runtime-status`, `arbiter agent-status`, and `arbiter control-status` now accept `--fail-on-issues`, so automation can fail fast on blocking status issues without scraping terminal output.
+- **Issue-code contract** — the status issue vocabulary is now centralized and documented, so `issues.code` is an explicit operator-facing contract instead of a scattered implementation detail.
 
 ### SDKs
 

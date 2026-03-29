@@ -207,19 +207,19 @@ func controlReadinessPayload(available bool, bundles controlBundlesStatus, overr
 func controlIssues(available bool, transport controlListenerTransport, bundles controlBundlesStatus, overrides controlOverridesStatus, audit controlAuditStatus) []statusview.Issue {
 	issues := make([]statusview.Issue, 0)
 	if !available {
-		return append(issues, statusview.Error("readiness", "control", "status_unavailable", "status unavailable", true))
+		return append(issues, statusview.New(statusview.CodeStatusUnavailable, "control", "status unavailable"))
 	}
 	if transport.PublicListener && !transport.TLSEnabled && !transport.AuthEnabled {
-		issues = append(issues, statusview.Warning("transport", controlIssueSubject(transport.Address, "control"), "public_control_insecure", "public control listener has no TLS or auth"))
+		issues = append(issues, statusview.New(statusview.CodePublicControlInsecure, controlIssueSubject(transport.Address, "control"), "public control listener has no TLS or auth"))
 	}
 	if bundles.Persisted && !bundles.Healthy {
-		issues = append(issues, statusview.Error("bundles", controlIssueSubject(bundles.File, "bundles"), "bundle_persistence_unhealthy", controlIssueMessage("bundle persistence unhealthy", bundles.LastError), true))
+		issues = append(issues, statusview.New(statusview.CodeBundlePersistenceUnhealthy, controlIssueSubject(bundles.File, "bundles"), controlIssueMessage("bundle persistence unhealthy", bundles.LastError)))
 	}
 	if overrides.Persisted && !overrides.Healthy {
-		issues = append(issues, statusview.Error("overrides", controlIssueSubject(overrides.File, "overrides"), "override_persistence_unhealthy", controlIssueMessage("override persistence unhealthy", overrides.LastError), true))
+		issues = append(issues, statusview.New(statusview.CodeOverridePersistenceUnhealthy, controlIssueSubject(overrides.File, "overrides"), controlIssueMessage("override persistence unhealthy", overrides.LastError)))
 	}
 	if audit.Configured && !audit.Healthy {
-		issues = append(issues, statusview.Error("audit", controlIssueSubject(audit.File, audit.Kind, "audit"), "audit_unhealthy", controlIssueMessage("audit unhealthy", audit.LastError), true))
+		issues = append(issues, statusview.New(statusview.CodeAuditUnhealthy, controlIssueSubject(audit.File, audit.Kind, "audit"), controlIssueMessage("audit unhealthy", audit.LastError)))
 	}
 	return issues
 }

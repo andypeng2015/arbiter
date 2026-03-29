@@ -620,6 +620,8 @@ Use `--auth-token`, `--auth-token-file`, `--tls-cert`, `--tls-key`, and optional
 
 Add `--fail-on-issues` to `runtime-status`, `agent-status`, or `control-status` when you want scripts or CI to exit non-zero on blocking issues instead of only printing them.
 
+Issue codes are treated as part of the operator contract. See [docs/status-issues.md](docs/status-issues.md) for the canonical vocabulary and blocking semantics.
+
 ### Self-Hosted Profile
 
 The credible self-hosted shape today is one Arbiter deployment per trust boundary, backed by persistent disk and protected with bearer auth plus TLS at the edge or directly in-process. Stateless rules, flags, strategies, and continuous runtimes scale cleanly behind a load balancer. Expert sessions do not migrate between replicas, so run them on one instance or use sticky routing when that mode is active.
