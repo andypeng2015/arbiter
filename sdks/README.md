@@ -21,6 +21,7 @@ All three target the same control-plane surface:
 - runtime capability introspection through `RuntimeService.GetRuntimeCapabilities`
 - runtime status introspection through `RuntimeService.GetRuntimeStatus`
 - agent sync-status introspection through `AgentService.GetAgentStatus`
+- hosted control-plane status introspection through `ControlService.GetControlStatus`
 
 They also ship the capability-service contract so Node, Python, and Rust hosts
 can implement remote source loaders, sink handlers, and worker runtimes for the
@@ -32,12 +33,15 @@ generated types:
 - Node exports `CapabilityServer`
 - Node exports `RuntimeClient`
 - Node exports `AgentClient`
+- Node exports `ControlClient`
 - Python exports `CapabilityServer`
 - Python exports `RuntimeClient`
 - Python exports `AgentClient`
+- Python exports `ControlClient`
 - Rust exports `CapabilityPlugin` plus `SourceHandler` / `SinkHandler` / `WorkerHandler`
 - Rust exports `RuntimeClient`
 - Rust exports `AgentClient`
+- Rust exports `ControlClient`
 
 Java is still pending. There is no JDK/Maven toolchain in this environment, so
 it was not added as an unverified skeleton.

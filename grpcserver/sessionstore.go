@@ -2,6 +2,7 @@ package grpcserver
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,21 @@ type ExpertSession struct {
 	CreatedAt  time.Time
 	LastAccess time.Time
 	closed     atomic.Bool
+}
+
+// SessionBundleStatus summarizes live sessions grouped by bundle.
+type SessionBundleStatus struct {
+	BundleID string
+	Active   int
+}
+
+// SessionStatus summarizes the live expert-session surface.
+type SessionStatus struct {
+	Active      int
+	TTL         time.Duration
+	MaxCount    int
+	MaxPerOwner int
+	Bundles     []SessionBundleStatus
 }
 
 // NewSessionStore creates an empty expert-session store.
@@ -166,6 +182,48 @@ func (ss *SessionStore) SetMaxPerOwner(maxOwner int) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	ss.maxOwner = maxOwner
+}
+
+// Status reports the current live-session surface after pruning expired entries.
+func (ss *SessionStore) Status() SessionStatus {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.pruneExpiredLocked(time.Now().UTC())
+
+	status := SessionStatus{
+		TTL:         ss.ttl,
+		MaxCount:    ss.maxCount,
+		MaxPerOwner: ss.maxOwner,
+	}
+	if len(ss.sessions) == 0 {
+		return status
+	}
+
+	byBundle := make(map[string]int, len(ss.sessions))
+	for _, handle := range ss.sessions {
+		if handle.closed.Load() {
+			continue
+		}
+		status.Active++
+		byBundle[handle.BundleID]++
+	}
+	if len(byBundle) == 0 {
+		return status
+	}
+
+	keys := make([]string, 0, len(byBundle))
+	for bundleID := range byBundle {
+		keys = append(keys, bundleID)
+	}
+	slices.Sort(keys)
+	status.Bundles = make([]SessionBundleStatus, 0, len(keys))
+	for _, bundleID := range keys {
+		status.Bundles = append(status.Bundles, SessionBundleStatus{
+			BundleID: bundleID,
+			Active:   byBundle[bundleID],
+		})
+	}
+	return status
 }
 
 func (ss *SessionStore) ensureOwnerCapacityLocked(owner string) error {

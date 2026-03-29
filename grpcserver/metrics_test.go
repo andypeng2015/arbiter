@@ -2,6 +2,9 @@ package grpcserver
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -277,5 +280,28 @@ func TestNewHTTPServer(t *testing.T) {
 	srv := NewHTTPServer(":0", reg)
 	if srv == nil {
 		t.Fatal("NewHTTPServer returned nil")
+	}
+}
+
+func TestNewHTTPServerWithStatusUsesCustomPayload(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	srv := NewHTTPServerWithStatus(":0", reg, func() any {
+		return map[string]any{"service": "arbiter-control", "ready": true}
+	})
+	if srv == nil {
+		t.Fatal("NewHTTPServerWithStatus returned nil")
+	}
+
+	rr := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/status", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/status code = %d", rr.Code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if payload["service"] != "arbiter-control" || payload["ready"] != true {
+		t.Fatalf("unexpected status payload: %+v", payload)
 	}
 }

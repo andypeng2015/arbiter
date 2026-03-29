@@ -1128,3 +1128,105 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "arbiter/v1/service.proto",
 }
+
+const (
+	ControlService_GetControlStatus_FullMethodName = "/arbiter.v1.ControlService/GetControlStatus"
+)
+
+// ControlServiceClient is the client API for ControlService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ControlServiceClient interface {
+	GetControlStatus(ctx context.Context, in *GetControlStatusRequest, opts ...grpc.CallOption) (*GetControlStatusResponse, error)
+}
+
+type controlServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewControlServiceClient(cc grpc.ClientConnInterface) ControlServiceClient {
+	return &controlServiceClient{cc}
+}
+
+func (c *controlServiceClient) GetControlStatus(ctx context.Context, in *GetControlStatusRequest, opts ...grpc.CallOption) (*GetControlStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetControlStatusResponse)
+	err := c.cc.Invoke(ctx, ControlService_GetControlStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ControlServiceServer is the server API for ControlService service.
+// All implementations must embed UnimplementedControlServiceServer
+// for forward compatibility.
+type ControlServiceServer interface {
+	GetControlStatus(context.Context, *GetControlStatusRequest) (*GetControlStatusResponse, error)
+	mustEmbedUnimplementedControlServiceServer()
+}
+
+// UnimplementedControlServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedControlServiceServer struct{}
+
+func (UnimplementedControlServiceServer) GetControlStatus(context.Context, *GetControlStatusRequest) (*GetControlStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetControlStatus not implemented")
+}
+func (UnimplementedControlServiceServer) mustEmbedUnimplementedControlServiceServer() {}
+func (UnimplementedControlServiceServer) testEmbeddedByValue()                        {}
+
+// UnsafeControlServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ControlServiceServer will
+// result in compilation errors.
+type UnsafeControlServiceServer interface {
+	mustEmbedUnimplementedControlServiceServer()
+}
+
+func RegisterControlServiceServer(s grpc.ServiceRegistrar, srv ControlServiceServer) {
+	// If the following call pancis, it indicates UnimplementedControlServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ControlService_ServiceDesc, srv)
+}
+
+func _ControlService_GetControlStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetControlStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServiceServer).GetControlStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlService_GetControlStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServiceServer).GetControlStatus(ctx, req.(*GetControlStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ControlService_ServiceDesc is the grpc.ServiceDesc for ControlService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ControlService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "arbiter.v1.ControlService",
+	HandlerType: (*ControlServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetControlStatus",
+			Handler:    _ControlService_GetControlStatus_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "arbiter/v1/service.proto",
+}

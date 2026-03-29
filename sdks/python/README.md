@@ -40,6 +40,16 @@ with RuntimeClient("http://127.0.0.1:7081") as runtime:
     print([(item.scheme, item.owner) for item in caps.sources])
 ```
 
+Use `ControlClient` to inspect one hosted `arbiter serve` control plane:
+
+```python
+from arbiter_sdk import ControlClient
+
+with ControlClient("http://127.0.0.1:8081") as control:
+    status = control.get_control_status()
+    print(status.bundles.active_total, status.sessions.active)
+```
+
 ## Capability Plugins
 
 ```python

@@ -1142,3 +1142,75 @@ class AgentService(object):
             timeout,
             metadata,
             _registered_method=True)
+
+
+class ControlServiceStub(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.GetControlStatus = channel.unary_unary(
+                '/arbiter.v1.ControlService/GetControlStatus',
+                request_serializer=arbiter_dot_v1_dot_service__pb2.GetControlStatusRequest.SerializeToString,
+                response_deserializer=arbiter_dot_v1_dot_service__pb2.GetControlStatusResponse.FromString,
+                _registered_method=True)
+
+
+class ControlServiceServicer(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def GetControlStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_ControlServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'GetControlStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetControlStatus,
+                    request_deserializer=arbiter_dot_v1_dot_service__pb2.GetControlStatusRequest.FromString,
+                    response_serializer=arbiter_dot_v1_dot_service__pb2.GetControlStatusResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'arbiter.v1.ControlService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('arbiter.v1.ControlService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class ControlService(object):
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def GetControlStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/arbiter.v1.ControlService/GetControlStatus',
+            arbiter_dot_v1_dot_service__pb2.GetControlStatusRequest.SerializeToString,
+            arbiter_dot_v1_dot_service__pb2.GetControlStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)

@@ -50,6 +50,19 @@ async function main() {
 }
 ```
 
+Use `ControlClient` to inspect one hosted `arbiter serve` control plane:
+
+```js
+const { ControlClient } = require("./src");
+
+async function main() {
+  const control = new ControlClient("http://127.0.0.1:8081");
+  const status = await control.getControlStatus();
+  console.log(status.bundles.activeTotal, status.sessions.active);
+  control.close();
+}
+```
+
 ## Capability Plugins
 
 ```js

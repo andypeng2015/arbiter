@@ -19,13 +19,15 @@ use arbiter::v1::{
     agent_service_client::AgentServiceClient,
     arbiter_service_client::ArbiterServiceClient,
     capability_service_server::{CapabilityService, CapabilityServiceServer},
+    control_service_client::ControlServiceClient,
     runtime_service_client::RuntimeServiceClient,
     ActivateBundleRequest, ActivateBundleResponse, AssertFactsRequest, AssertFactsResponse,
     BundleEvent, CloseSessionRequest, CloseSessionResponse, DeliverOutcomeRequest,
     DeliverOutcomeResponse, EvaluateRulesRequest, EvaluateRulesResponse, EvaluateStrategyRequest,
     EvaluateStrategyResponse, ExecuteWorkerRequest, ExecuteWorkerResponse, ExpertFact, FactRef,
     GetAgentStatusRequest, GetAgentStatusResponse, GetBundleRequest, GetBundleResponse,
-    GetCapabilitiesRequest, GetCapabilitiesResponse, GetOverridesRequest, GetOverridesResponse,
+    GetCapabilitiesRequest, GetCapabilitiesResponse, GetControlStatusRequest,
+    GetControlStatusResponse, GetOverridesRequest, GetOverridesResponse,
     GetRuntimeCapabilitiesRequest, GetRuntimeCapabilitiesResponse, GetRuntimeStatusRequest,
     GetSessionTraceRequest, GetSessionTraceResponse, ListBundlesRequest, ListBundlesResponse,
     LoadSourceRequest, LoadSourceResponse, OverrideEvent, PublishBundleRequest,
@@ -76,6 +78,14 @@ pub struct RuntimeClient {
 #[derive(Clone)]
 pub struct AgentClient {
     inner: AgentServiceClient<Channel>,
+    auth_token: Option<String>,
+    metadata: Vec<(String, String)>,
+    retry_policy: RetryPolicy,
+}
+
+#[derive(Clone)]
+pub struct ControlClient {
+    inner: ControlServiceClient<Channel>,
     auth_token: Option<String>,
     metadata: Vec<(String, String)>,
     retry_policy: RetryPolicy,
@@ -220,6 +230,90 @@ impl AgentClient {
         Req: Clone + Send + 'static,
         Resp: Send + 'static,
         F: FnMut(AgentServiceClient<Channel>, Request<Req>) -> Fut,
+        Fut: Future<Output = Result<tonic::Response<Resp>, Status>>,
+    {
+        let attempts = self.retry_policy.attempts.max(1);
+        let mut backoff = self.retry_policy.initial_backoff;
+        for attempt in 1..=attempts {
+            let request = self.attach_metadata(request.clone())?;
+            match call(self.inner.clone(), request).await {
+                Ok(response) => return Ok(response.into_inner()),
+                Err(status) if attempt < attempts && should_retry(&status) => {
+                    if !backoff.is_zero() {
+                        tokio::time::sleep(backoff).await;
+                    }
+                    let next = backoff.saturating_mul(self.retry_policy.multiplier.max(1));
+                    backoff = next.min(self.retry_policy.max_backoff);
+                }
+                Err(status) => return Err(status),
+            }
+        }
+        Err(Status::unavailable("exhausted retries"))
+    }
+
+    fn attach_metadata<Req>(&self, message: Req) -> Result<Request<Req>, Status> {
+        let mut request = Request::new(message);
+        if let Some(token) = &self.auth_token {
+            let value = MetadataValue::try_from(format!("Bearer {token}"))
+                .map_err(|_| Status::invalid_argument("invalid auth token"))?;
+            request.metadata_mut().insert("authorization", value);
+        }
+        for (key, value) in &self.metadata {
+            let key = MetadataKey::<Ascii>::from_bytes(key.as_bytes())
+                .map_err(|_| Status::invalid_argument(format!("invalid metadata key: {key}")))?;
+            let value = MetadataValue::try_from(value.as_str()).map_err(|_| {
+                Status::invalid_argument(format!("invalid metadata value for {key}"))
+            })?;
+            request.metadata_mut().insert(key, value);
+        }
+        Ok(request)
+    }
+}
+
+impl ControlClient {
+    pub async fn connect(dst: impl Into<String>) -> Result<Self, tonic::transport::Error> {
+        let endpoint = Endpoint::from_shared(normalize_endpoint(dst.into()))?;
+        let inner = ControlServiceClient::connect(endpoint).await?;
+        Ok(Self {
+            inner,
+            auth_token: None,
+            metadata: Vec::new(),
+            retry_policy: RetryPolicy::default(),
+        })
+    }
+
+    pub fn with_token(mut self, token: impl Into<String>) -> Self {
+        self.auth_token = Some(token.into());
+        self
+    }
+
+    pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn with_retry_policy(mut self, retry_policy: RetryPolicy) -> Self {
+        self.retry_policy = retry_policy;
+        self
+    }
+
+    pub async fn get_control_status(&self) -> Result<GetControlStatusResponse, tonic::Status> {
+        self.unary_with_retry(
+            GetControlStatusRequest {},
+            |mut client, request| async move { client.get_control_status(request).await },
+        )
+        .await
+    }
+
+    async fn unary_with_retry<Req, Resp, F, Fut>(
+        &self,
+        request: Req,
+        mut call: F,
+    ) -> Result<Resp, Status>
+    where
+        Req: Clone + Send + 'static,
+        Resp: Send + 'static,
+        F: FnMut(ControlServiceClient<Channel>, Request<Req>) -> Fut,
         Fut: Future<Output = Result<tonic::Response<Resp>, Status>>,
     {
         let attempts = self.retry_policy.attempts.max(1);

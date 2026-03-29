@@ -522,6 +522,10 @@ service ArbiterService {
     rpc SetFlagOverride(...)    // runtime flag kill switch
     rpc SetFlagRuleOverride(...)// runtime flag rule rollout changes
 }
+
+service ControlService {
+    rpc GetControlStatus(...)   // hosted control-plane posture and state
+}
 ```
 
 Bundles are published once and evaluated many times. Each bundle compiles rules, expert rules, flags, and segments from a single `.arb` source or from one root file expanded through `include`. Bundles now keep per-name history and an active version, so callers can evaluate by immutable `bundle_id` or by active `bundle_name`.
@@ -538,6 +542,8 @@ Bundles are published once and evaluated many times. Each bundle compiles rules,
 - `--rate-limit-rpm` / `--rate-limit-burst` for per-caller token-bucket limits
 - `--session-ttl`, `--session-max`, and `--session-max-per-owner` to constrain expert-session state
 - `--data-dir` or explicit `--bundle-file` / `--overrides-file` for file-backed persistence, or `--ephemeral` for memory-only mode
+
+The hosted control plane now exposes the same kind of operator surface as the runtime and agent. `ControlService.GetControlStatus` and HTTP `/status` report `readiness -> transport -> bundles -> overrides -> sessions`, including listener auth/TLS posture, persisted bundle/override files, active bundle versions, and live expert-session occupancy.
 
 ### Audit
 
@@ -591,7 +597,8 @@ arbiter expert tax.arb --envelope '{...}' [--facts '[...]']
 arbiter runtime-capabilities grpcs://runtime.internal:7443 --token "$ARBITER_RUNTIME_TOKEN" --ca-file /etc/arbiter/runtime-ca.pem --json
 arbiter runtime-status grpcs://runtime.internal:7443 --token "$ARBITER_RUNTIME_TOKEN" --ca-file /etc/arbiter/runtime-ca.pem
 arbiter agent-status grpcs://127.0.0.1:7081 --token "$ARBITER_AGENT_TOKEN"
-arbiter serve --grpc 127.0.0.1:8081 --auth-token "$ARBITER_TOKEN" --max-recv-bytes 4194304 --data-dir ./state
+arbiter control-status grpcs://arbiter.internal:7443 --token "$ARBITER_TOKEN" --ca-file /etc/arbiter/control-ca.pem
+arbiter serve --grpc 127.0.0.1:8081 --status 127.0.0.1:8082 --auth-token "$ARBITER_TOKEN" --max-recv-bytes 4194304 --data-dir ./state
 arbiter-agent --upstream https://arbiter.internal:443 --upstream-token "$ARBITER_TOKEN" --bundle-name checkout --grpc 127.0.0.1:7081 --status 127.0.0.1:7082
 ```
 
@@ -609,7 +616,7 @@ Use `--upstream-token`, `--upstream-ca-file`, `--upstream-server-name`, or `--up
 
 Use `--auth-token`, `--auth-token-file`, `--tls-cert`, `--tls-key`, and optional `--tls-client-ca` when the agent's local gRPC surface leaves localhost or crosses a trust boundary.
 
-`arbiter runtime-capabilities`, `arbiter runtime-status`, and `arbiter agent-status` accept `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure control-surface access, or `--plaintext` to force insecure transport against a bare target. The runtime inspection commands now split cleanly: `runtime-capabilities` reports transport plus capability algebra, `runtime-status` reports `readiness -> transport -> capabilities -> activity`, and `agent-status` reports `readiness -> transport -> sync`.
+`arbiter runtime-capabilities`, `arbiter runtime-status`, `arbiter agent-status`, and `arbiter control-status` accept `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure control-surface access, or `--plaintext` to force insecure transport against a bare target. The inspection commands now split cleanly: `runtime-capabilities` reports transport plus capability algebra, `runtime-status` reports `readiness -> transport -> capabilities -> activity`, `agent-status` reports `readiness -> transport -> sync`, and `control-status` reports `readiness -> transport -> bundles -> overrides -> sessions`.
 
 ### Self-Hosted Profile
 
@@ -1167,6 +1174,7 @@ It handles the full lifecycle:
 - **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON sections: `readiness`, `transport`, `capabilities`, `activity`, plus legacy flat mirrors for compatibility)
 - **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` and `RuntimeService.GetRuntimeStatus` expose the runtime's canonical capability and status surfaces over gRPC for SDKs and CLI clients
 - **Agent control RPC** — optional `AgentService.GetAgentStatus` exposes the agent's canonical `readiness -> transport -> sync` surface over the same local gRPC listener
+- **Hosted control RPC** — `ControlService.GetControlStatus` exposes the hosted control plane's canonical `readiness -> transport -> bundles -> overrides -> sessions` surface over the same gRPC listener as bundle lifecycle and evaluation APIs
 
 Runtime transport is now opinionated instead of ad hoc:
 

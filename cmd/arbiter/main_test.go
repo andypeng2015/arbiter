@@ -423,6 +423,86 @@ func TestPrintAgentStatusUsesCanonicalSections(t *testing.T) {
 	}
 }
 
+func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
+	out := captureStdout(t, func() {
+		printControlStatus(&arbiterv1.GetControlStatusResponse{
+			Readiness: &arbiterv1.ControlReadinessStatus{
+				Ready: true,
+			},
+			Transport: &arbiterv1.ControlTransportStatus{
+				Control: &arbiterv1.ControlListenerTransport{
+					Enabled:          true,
+					Address:          "127.0.0.1:8081",
+					AuthEnabled:      true,
+					TlsEnabled:       true,
+					MutualTlsEnabled: true,
+				},
+			},
+			Bundles: &arbiterv1.ControlBundlesStatus{
+				PublishedTotal: 2,
+				ActiveTotal:    1,
+				Persisted:      true,
+				File:           "/tmp/bundles.json",
+				Active: []*arbiterv1.ControlBundleStatus{{
+					Name:              "checkout",
+					BundleId:          "bundle-1",
+					Checksum:          "abc123",
+					PublishedVersions: 2,
+					RuleCount:         1,
+					FlagCount:         1,
+					StrategyCount:     1,
+				}},
+			},
+			Overrides: &arbiterv1.ControlOverridesStatus{
+				BundleTotal: 1,
+				Rules:       1,
+				Flags:       1,
+				Strategies:  1,
+				Persisted:   true,
+				File:        "/tmp/overrides.json",
+				Bundles: []*arbiterv1.ControlBundleOverrideStatus{{
+					Name:       "checkout",
+					BundleId:   "bundle-1",
+					Rules:      1,
+					Flags:      1,
+					Strategies: 1,
+				}},
+			},
+			Sessions: &arbiterv1.ControlSessionsStatus{
+				Active:      1,
+				TtlMs:       1800000,
+				MaxCount:    100,
+				MaxPerOwner: 5,
+				Bundles: []*arbiterv1.ControlSessionBundleStatus{{
+					Name:     "checkout",
+					BundleId: "bundle-1",
+					Active:   1,
+				}},
+			},
+		})
+	})
+
+	for _, fragment := range []string{
+		"control status",
+		"readiness:",
+		"transport:",
+		"127.0.0.1:8081",
+		"bundles:",
+		"published_total=2 active_total=1 persisted=true",
+		"/tmp/bundles.json",
+		"checkout bundle_id=bundle-1 versions=2 checksum=abc123",
+		"overrides:",
+		"bundle_total=1 rules=1 flags=1 flag_rules=0 strategies=1 persisted=true",
+		"/tmp/overrides.json",
+		"sessions:",
+		"active=1 ttl_ms=1800000 max_count=100 max_per_owner=5",
+	} {
+		if !strings.Contains(out, fragment) {
+			t.Fatalf("expected control status output to contain %q, got %s", fragment, out)
+		}
+	}
+}
+
 func writeCLIFile(t *testing.T, dir, name, contents string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

@@ -70,3 +70,34 @@ func TestSessionStoreRejectsOwnerOverCapacity(t *testing.T) {
 		t.Fatalf("expected first session %q to remain", first.ID)
 	}
 }
+
+func TestSessionStoreStatusReportsBundleBreakdownAndLimits(t *testing.T) {
+	store := NewSessionStore()
+	store.SetTTL(45 * time.Minute)
+	store.SetMaxCount(50)
+	store.SetMaxPerOwner(4)
+
+	if _, err := store.CreateForOwner("token:a", "bundle_a", nil, &expert.Session{}); err != nil {
+		t.Fatalf("CreateForOwner bundle_a: %v", err)
+	}
+	if _, err := store.CreateForOwner("token:b", "bundle_b", nil, &expert.Session{}); err != nil {
+		t.Fatalf("CreateForOwner bundle_b first: %v", err)
+	}
+	if _, err := store.CreateForOwner("token:c", "bundle_b", nil, &expert.Session{}); err != nil {
+		t.Fatalf("CreateForOwner bundle_b second: %v", err)
+	}
+
+	status := store.Status()
+	if status.Active != 3 || status.TTL != 45*time.Minute || status.MaxCount != 50 || status.MaxPerOwner != 4 {
+		t.Fatalf("unexpected status header: %+v", status)
+	}
+	if len(status.Bundles) != 2 {
+		t.Fatalf("unexpected bundle status count: %+v", status.Bundles)
+	}
+	if status.Bundles[0].BundleID != "bundle_a" || status.Bundles[0].Active != 1 {
+		t.Fatalf("unexpected first bundle status: %+v", status.Bundles[0])
+	}
+	if status.Bundles[1].BundleID != "bundle_b" || status.Bundles[1].Active != 2 {
+		t.Fatalf("unexpected second bundle status: %+v", status.Bundles[1])
+	}
+}

@@ -41,6 +41,10 @@ service AgentService {
   rpc GetAgentStatus(GetAgentStatusRequest) returns (GetAgentStatusResponse);
 }
 
+service ControlService {
+  rpc GetControlStatus(GetControlStatusRequest) returns (GetControlStatusResponse);
+}
+
 message PublishBundleRequest {
   string name = 1;
   bytes source = 2;
@@ -166,6 +170,8 @@ message GetRuntimeCapabilitiesRequest {}
 message GetRuntimeStatusRequest {}
 
 message GetAgentStatusRequest {}
+
+message GetControlStatusRequest {}
 
 message RuntimeSourceCapability {
   string scheme = 1;
@@ -343,6 +349,86 @@ message GetAgentStatusResponse {
   AgentReadinessStatus readiness = 1;
   AgentTransportStatus transport = 2;
   AgentSyncStatus sync = 3;
+}
+
+message ControlListenerTransport {
+  bool enabled = 1;
+  string address = 2;
+  bool public_listener = 3;
+  bool auth_enabled = 4;
+  bool tls_enabled = 5;
+  bool mutual_tls_enabled = 6;
+}
+
+message ControlTransportStatus {
+  ControlListenerTransport control = 1;
+}
+
+message ControlReadinessStatus {
+  bool ready = 1;
+  string reason = 2;
+}
+
+message ControlBundleStatus {
+  string name = 1;
+  string bundle_id = 2;
+  string checksum = 3;
+  google.protobuf.Timestamp published_at = 4;
+  uint32 published_versions = 5;
+  uint32 rule_count = 6;
+  uint32 flag_count = 7;
+  uint32 expert_rule_count = 8;
+  uint32 strategy_count = 9;
+}
+
+message ControlBundlesStatus {
+  uint32 published_total = 1;
+  uint32 active_total = 2;
+  bool persisted = 3;
+  string file = 4;
+  repeated ControlBundleStatus active = 5;
+}
+
+message ControlBundleOverrideStatus {
+  string name = 1;
+  string bundle_id = 2;
+  uint32 rules = 3;
+  uint32 flags = 4;
+  uint32 flag_rules = 5;
+  uint32 strategies = 6;
+}
+
+message ControlOverridesStatus {
+  uint32 bundle_total = 1;
+  uint32 rules = 2;
+  uint32 flags = 3;
+  uint32 flag_rules = 4;
+  uint32 strategies = 5;
+  bool persisted = 6;
+  string file = 7;
+  repeated ControlBundleOverrideStatus bundles = 8;
+}
+
+message ControlSessionBundleStatus {
+  string name = 1;
+  string bundle_id = 2;
+  uint32 active = 3;
+}
+
+message ControlSessionsStatus {
+  uint32 active = 1;
+  int64 ttl_ms = 2;
+  uint32 max_count = 3;
+  uint32 max_per_owner = 4;
+  repeated ControlSessionBundleStatus bundles = 5;
+}
+
+message GetControlStatusResponse {
+  ControlReadinessStatus readiness = 1;
+  ControlTransportStatus transport = 2;
+  ControlBundlesStatus bundles = 3;
+  ControlOverridesStatus overrides = 4;
+  ControlSessionsStatus sessions = 5;
 }
 
 message BundleOverrides {

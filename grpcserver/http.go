@@ -18,8 +18,14 @@ import (
 //	GET /metrics  — Prometheus text exposition format
 //	GET /healthz  — liveness probe (always 200 ok)
 //	GET /readyz   — readiness probe (always 200 ok once server is started)
-//	GET /status   — JSON summary of server identity
+//	GET /status   — JSON status payload (or a default identity summary)
 func NewHTTPServer(addr string, reg *prometheus.Registry) *http.Server {
+	return NewHTTPServerWithStatus(addr, reg, nil)
+}
+
+// NewHTTPServerWithStatus creates an HTTP server that also exposes a caller-
+// supplied JSON status payload on /status.
+func NewHTTPServerWithStatus(addr string, reg *prometheus.Registry, status func() any) *http.Server {
 	mux := http.NewServeMux()
 
 	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
@@ -37,6 +43,10 @@ func NewHTTPServer(addr string, reg *prometheus.Registry) *http.Server {
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		if status != nil {
+			_ = json.NewEncoder(w).Encode(status())
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"service": "arbiter-grpc",
 			"status":  "running",

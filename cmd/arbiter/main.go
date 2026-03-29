@@ -17,7 +17,8 @@
 //	arbiter runtime-capabilities <target> [--json] — inspect one runtime's gRPC capability surface
 //	arbiter runtime-status <target> [--json] — inspect one runtime's status surface over gRPC
 //	arbiter agent-status <target> [--json] — inspect one agent's status surface over gRPC
-//	arbiter serve [--grpc :8081] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
+//	arbiter control-status <target> [--json] — inspect one hosted control plane's status surface over gRPC
+//	arbiter serve [--grpc :8081] [--status 127.0.0.1:8082] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
 
 import (
@@ -28,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -49,6 +51,7 @@ import (
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/overrides"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -57,7 +60,7 @@ import (
 )
 
 const (
-	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, runtime-status, agent-status, serve"
+	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, runtime-status, agent-status, control-status, serve"
 	rootUsage   = "Usage: arbiter <command> <file>\nCommands: " + commandList
 )
 
@@ -81,6 +84,7 @@ var commandHandlers = map[string]func([]string) error{
 	"runtime-capabilities": runRuntimeCapabilities,
 	"runtime-status":       runRuntimeStatus,
 	"agent-status":         runAgentStatus,
+	"control-status":       runControlStatus,
 	"serve":                runServe,
 }
 
@@ -308,6 +312,13 @@ func runAgentStatus(args []string) error {
 	return agentStatusCmd(parseRemoteInspectConfig(args))
 }
 
+func runControlStatus(args []string) error {
+	if len(args) < 1 {
+		return usageError("Usage: arbiter control-status <target> [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+	}
+	return controlStatusCmd(parseRemoteInspectConfig(args))
+}
+
 func runExplore(args []string) error {
 	path := ""
 	if len(args) > 0 {
@@ -318,6 +329,7 @@ func runExplore(args []string) error {
 
 type serveConfig struct {
 	grpcAddr           string
+	statusAddr         string
 	auditFile          string
 	bundleFile         string
 	overridesFile      string
@@ -378,6 +390,7 @@ func parseRemoteInspectConfig(args []string) remoteInspectConfig {
 func runServe(args []string) error {
 	cfg := serveConfig{
 		grpcAddr:           "127.0.0.1:8081",
+		statusAddr:         "127.0.0.1:8082",
 		logLevel:           "info",
 		maxRecvBytes:       4 << 20,
 		maxSendBytes:       4 << 20,
@@ -390,6 +403,10 @@ func runServe(args []string) error {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--grpc" && i+1 < len(args) {
 			cfg.grpcAddr = args[i+1]
+			i++
+		}
+		if args[i] == "--status" && i+1 < len(args) {
+			cfg.statusAddr = args[i+1]
 			i++
 		}
 		if args[i] == "--audit-file" && i+1 < len(args) {
@@ -910,6 +927,15 @@ func serveCmd(cfg serveConfig) error {
 	sessions.SetTTL(cfg.sessionTTL)
 	sessions.SetMaxCount(cfg.sessionMax)
 	sessions.SetMaxPerOwner(cfg.sessionMaxPerOwner)
+	controlTransport := newControlListenerTransport(cfg.grpcAddr, tokens, tlsConfig)
+	statusSource := controlStatusSource{
+		registry:      registry,
+		store:         store,
+		sessions:      sessions,
+		transport:     controlTransport,
+		bundleFile:    bundleFile,
+		overridesFile: overridesFile,
+	}
 
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		grpcserver.UnaryRecoveryInterceptor(logger),
@@ -946,7 +972,30 @@ func serveCmd(cfg serveConfig) error {
 	}
 
 	grpcSrv := grpc.NewServer(serverOptions...)
-	arbiterv1.RegisterArbiterServiceServer(grpcSrv, grpcserver.NewServerWithLoggerAndSessions(registry, store, sink, logger, sessions))
+	controlServer := grpcserver.NewServerWithLoggerAndSessions(registry, store, sink, logger, sessions)
+	arbiterv1.RegisterArbiterServiceServer(grpcSrv, controlServer)
+	arbiterv1.RegisterControlServiceServer(grpcSrv, newControlRPCServer(statusSource))
+
+	var statusSrv *http.Server
+	if cfg.statusAddr != "" {
+		reg := prometheus.NewRegistry()
+		grpcserver.RegisterMetrics(reg)
+		statusSrv = grpcserver.NewHTTPServerWithStatus(cfg.statusAddr, reg, func() any {
+			return statusSource.Payload()
+		})
+		statusSrv.ReadHeaderTimeout = 5 * time.Second
+		go func() {
+			logger.Info("arbiter status listening", "addr", cfg.statusAddr)
+			if err := statusSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logger.Error("arbiter status server error", observability.KeyError, err.Error())
+			}
+		}()
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = statusSrv.Shutdown(shutdownCtx)
+		}()
+	}
 
 	if grpcutil.IsPublicListenAddr(cfg.grpcAddr) && tlsConfig == nil && len(tokens) == 0 {
 		logger.Warn("arbiter gRPC listener is public without TLS or auth", "addr", cfg.grpcAddr)
@@ -954,6 +1003,7 @@ func serveCmd(cfg serveConfig) error {
 	logger.Info(
 		"arbiter gRPC listening",
 		"addr", cfg.grpcAddr,
+		"status_addr", cfg.statusAddr,
 		"persistent_state", persistenceDir != "",
 		"state_dir", persistenceDir,
 		"auth_enabled", len(tokens) > 0,
@@ -1065,6 +1115,39 @@ func agentStatusCmd(cfg remoteInspectConfig) error {
 	}
 
 	printAgentStatus(resp)
+	return nil
+}
+
+func controlStatusCmd(cfg remoteInspectConfig) error {
+	conn, _, err := grpcutil.Dial(grpcutil.DialConfig{
+		Target:        cfg.target,
+		Token:         cfg.token,
+		CAFile:        cfg.caFile,
+		ServerName:    cfg.serverName,
+		ForceInsecure: cfg.forceInsecure,
+	})
+	if err != nil {
+		return fmt.Errorf("connect control plane %s: %w", strings.TrimSpace(cfg.target), err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := arbiterv1.NewControlServiceClient(conn).GetControlStatus(ctx, &arbiterv1.GetControlStatusRequest{})
+	if err != nil {
+		return fmt.Errorf("get control status: %w", err)
+	}
+	if cfg.jsonOut {
+		data, err := protojson.MarshalOptions{Indent: "  "}.Marshal(resp)
+		if err != nil {
+			return fmt.Errorf("marshal control status: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	printControlStatus(resp)
 	return nil
 }
 
@@ -1209,6 +1292,92 @@ func printAgentStatus(resp *arbiterv1.GetAgentStatusResponse) {
 			}
 		}
 	}
+}
+
+func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
+	fmt.Println("control status")
+	fmt.Println("readiness:")
+	if readiness := resp.GetReadiness(); readiness != nil {
+		fmt.Printf("  ready=%t\n", readiness.GetReady())
+		if reason := strings.TrimSpace(readiness.GetReason()); reason != "" {
+			fmt.Printf("  reason=%s\n", reason)
+		}
+	}
+
+	if transport := resp.GetTransport(); transport != nil {
+		fmt.Println("transport:")
+		printControlTransport("  control:", transport.GetControl())
+	}
+
+	if bundles := resp.GetBundles(); bundles != nil {
+		fmt.Println("bundles:")
+		fmt.Printf("  published_total=%d active_total=%d persisted=%t\n", bundles.GetPublishedTotal(), bundles.GetActiveTotal(), bundles.GetPersisted())
+		if file := strings.TrimSpace(bundles.GetFile()); file != "" {
+			fmt.Printf("  file=%s\n", file)
+		}
+		fmt.Println("  active:")
+		if len(bundles.GetActive()) == 0 {
+			fmt.Println("    - none")
+		} else {
+			for _, item := range bundles.GetActive() {
+				fmt.Printf("    - %s bundle_id=%s versions=%d checksum=%s\n", item.GetName(), item.GetBundleId(), item.GetPublishedVersions(), item.GetChecksum())
+				fmt.Printf("      rules=%d flags=%d expert_rules=%d strategies=%d\n", item.GetRuleCount(), item.GetFlagCount(), item.GetExpertRuleCount(), item.GetStrategyCount())
+				if ts := formatProtoTimestamp(item.GetPublishedAt()); ts != "" {
+					fmt.Printf("      published_at=%s\n", ts)
+				}
+			}
+		}
+	}
+
+	if overrides := resp.GetOverrides(); overrides != nil {
+		fmt.Println("overrides:")
+		fmt.Printf("  bundle_total=%d rules=%d flags=%d flag_rules=%d strategies=%d persisted=%t\n", overrides.GetBundleTotal(), overrides.GetRules(), overrides.GetFlags(), overrides.GetFlagRules(), overrides.GetStrategies(), overrides.GetPersisted())
+		if file := strings.TrimSpace(overrides.GetFile()); file != "" {
+			fmt.Printf("  file=%s\n", file)
+		}
+		fmt.Println("  bundles:")
+		if len(overrides.GetBundles()) == 0 {
+			fmt.Println("    - none")
+		} else {
+			for _, item := range overrides.GetBundles() {
+				label := item.GetName()
+				if label == "" {
+					label = item.GetBundleId()
+				}
+				fmt.Printf("    - %s bundle_id=%s rules=%d flags=%d flag_rules=%d strategies=%d\n", label, item.GetBundleId(), item.GetRules(), item.GetFlags(), item.GetFlagRules(), item.GetStrategies())
+			}
+		}
+	}
+
+	if sessions := resp.GetSessions(); sessions != nil {
+		fmt.Println("sessions:")
+		fmt.Printf("  active=%d ttl_ms=%d max_count=%d max_per_owner=%d\n", sessions.GetActive(), sessions.GetTtlMs(), sessions.GetMaxCount(), sessions.GetMaxPerOwner())
+		fmt.Println("  bundles:")
+		if len(sessions.GetBundles()) == 0 {
+			fmt.Println("    - none")
+		} else {
+			for _, item := range sessions.GetBundles() {
+				label := item.GetName()
+				if label == "" {
+					label = item.GetBundleId()
+				}
+				fmt.Printf("    - %s bundle_id=%s active=%d\n", label, item.GetBundleId(), item.GetActive())
+			}
+		}
+	}
+}
+
+func printControlTransport(label string, control *arbiterv1.ControlListenerTransport) {
+	if control == nil {
+		return
+	}
+	fmt.Println(label)
+	if control.GetEnabled() {
+		fmt.Printf("    - %s\n", control.GetAddress())
+		fmt.Printf("      auth=%t tls=%t mtls=%t public=%t\n", control.GetAuthEnabled(), control.GetTlsEnabled(), control.GetMutualTlsEnabled(), control.GetPublicListener())
+		return
+	}
+	fmt.Println("    - disabled")
 }
 
 func printRuntimeControlTransport(label string, control *arbiterv1.RuntimeControlTransport) {

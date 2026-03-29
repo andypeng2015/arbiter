@@ -550,10 +550,34 @@ class AgentClient {
   }
 }
 
+class ControlClient {
+  constructor(target, credentialsOrOptions = undefined, maybeOptions = undefined) {
+    const { credentials: explicitCredentials, options } = normalizeClientArgs(target, credentialsOrOptions, maybeOptions);
+    const { target: normalizedTarget, credentials } = resolveCredentials(target, explicitCredentials, options);
+    const channelOptions = { ...(options.channelOptions || {}) };
+    if (options.serverNameOverride) {
+      channelOptions["grpc.ssl_target_name_override"] = options.serverNameOverride;
+      channelOptions["grpc.default_authority"] = options.serverNameOverride;
+    }
+    this._createMetadata = createMetadataFactory(options);
+    this._retry = normalizeRetryOptions(options.retry);
+    this.client = new proto.ControlService(normalizedTarget, credentials, channelOptions);
+  }
+
+  close() {
+    this.client.close();
+  }
+
+  getControlStatus(metadata = undefined) {
+    return unary(this.client, "GetControlStatus", {}, this._createMetadata, this._retry, metadata);
+  }
+}
+
 module.exports = {
   AgentClient,
   ArbiterClient,
   CapabilityServer,
+  ControlClient,
   RuntimeClient,
   capabilityProtoPath,
   serviceProtoPath,

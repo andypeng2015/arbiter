@@ -30,6 +30,19 @@ println!("{}", caps.sources.len());
 # }
 ```
 
+Use `ControlClient` to inspect one hosted `arbiter serve` control plane:
+
+```rust
+use arbiter_sdk::ControlClient;
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let control = ControlClient::connect("127.0.0.1:8081").await?;
+let status = control.get_control_status().await?;
+println!("{}", status.bundles.unwrap().active_total);
+# Ok(())
+# }
+```
+
 ## Capability Plugins
 
 The crate also ships a capability-service helper for non-Go runtime plugins. Implement the handler traits, register them on a `CapabilityPlugin`, and hand the resulting service to tonic:
