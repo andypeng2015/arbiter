@@ -25,7 +25,7 @@
 
 ### Docs
 
-- **Stronger authoring split guidance** — the README now gives a firmer opinion on `.arb` file shape, split triggers, import direction, and colocating `.test.arb` files so bundles stay understandable as they grow.
+- **Authoring house style** — the README now gives a firmer opinion on `.arb` layout: typed declarations first, shared governance next, one dominant decision surface per file, runtime-edge modules at the boundary, explicit split triggers, inward import direction, colocated `.test.arb` files, and canonical `governance -> match/bind -> effect` clause order across modalities.
 
 ## v1.4.0
 

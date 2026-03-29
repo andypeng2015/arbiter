@@ -72,31 +72,39 @@ Segments, rollouts, kill switches, prerequisites, explainability — governance 
 
 Within stateless governed evaluation, rules collect applicable outcomes, strategies select one ordered path, and flags resolve named variants.
 
-For maximum readability, keep `.arb` modules predictable:
+For maximum readability, use one house style across the repo:
 
-- Put typed declarations first: `input`, `feature`, `fact`, `outcome`, `table`
-- Follow with shared governance: `const`, `tag`, `segment`
-- Then put the decision surface for that module: `rule`, `strategy`, `flag`, `expert rule`, or `arbiter`
-- Prefer one business surface per file. If a file starts answering two different questions, split it.
-- Split by business domain first, then by modality when a file stops fitting on one screen
+- Start each module with typed declarations: `input`, `feature`, `fact`, `outcome`, `table`
+- Follow with shared governance and reuse points: `const`, `tag`, `segment`
+- End with one dominant decision surface: `rule`, `strategy`, `flag`, `expert rule`, or `arbiter`
+- Prefer one business question per file. If a file starts answering two different questions, split it.
+- Split by business domain first, then by modality only when one file stops fitting on one screen
 - Keep workers and arbiters in runtime-facing modules; keep typed declarations and reusable segments in shared modules
-- Keep imports flowing inward: shared schemas/segments feed rules, flags, strategies, and experts; runtime-facing arbiters and workers sit at the edge
+- Keep imports flowing inward: shared schemas and segments feed rules, flags, strategies, and experts; runtime-facing arbiters and workers sit at the edge
 - Put the `.test.arb` file next to the module it explains so behavior and specification move together
-- A good split trigger is any file with more than one owner, more than one rollout surface, or more than one screen of governed declarations
+- Treat more than one owner, more than one rollout surface, or more than one screen of governed declarations as a split trigger
 
-One clean layout looks like:
+Across modalities, keep clause order predictable:
+
+- Governance prelude first: `kill_switch`, modality-specific prereq or stability clauses, then `rollout`
+- Matching or binding second: `when`, `segment`, candidate conditions, or fact bindings
+- Effect last: `then`, `otherwise`, `assert`, `emit`, or runtime routing
+- If a clause does not apply to a modality, skip it; do not reorder the rest
+
+One clean project layout looks like:
 
 ```text
 arbiter.toml
-schemas/input.arb
-schemas/outcomes.arb
-segments/risk.arb
-rules/payments.arb
-strategies/checkout.arb
-flags/experiments.arb
-expert/tax.arb
-workers/notify.arb
-arbiters/fraud_monitor.arb
+shared/input.arb
+shared/outcomes.arb
+shared/segments/risk.arb
+payments/rules.arb
+checkout/strategy.arb
+checkout/strategy.test.arb
+experiments/flags.arb
+tax/expert.arb
+runtime/workers/notify.arb
+runtime/arbiters/fraud_monitor.arb
 ```
 
 ### Rules
