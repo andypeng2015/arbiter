@@ -15,9 +15,9 @@
 //	arbiter bundle --verify <file.arbb> --pub <public-key.pem> — verify a signed bundle
 //	arbiter import <file.json> [-o output.arb] — decompile Arishem JSON to .arb
 //	arbiter runtime-capabilities <target> [--json] — inspect one runtime's gRPC capability surface
-//	arbiter runtime-status <target> [--json] — inspect one runtime's status surface over gRPC
-//	arbiter agent-status <target> [--json] — inspect one agent's status surface over gRPC
-//	arbiter control-status <target> [--json] — inspect one hosted control plane's status surface over gRPC
+//	arbiter runtime-status <target> [--json] [--fail-on-issues] — inspect one runtime's status surface over gRPC
+//	arbiter agent-status <target> [--json] [--fail-on-issues] — inspect one agent's status surface over gRPC
+//	arbiter control-status <target> [--json] [--fail-on-issues] — inspect one hosted control plane's status surface over gRPC
 //	arbiter serve [--grpc :8081] [--status 127.0.0.1:8082] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
 
@@ -300,21 +300,21 @@ func runRuntimeCapabilities(args []string) error {
 
 func runRuntimeStatus(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter runtime-status <target> [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+		return usageError("Usage: arbiter runtime-status <target> [--json] [--fail-on-issues] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
 	return runtimeStatusCmd(parseRemoteInspectConfig(args))
 }
 
 func runAgentStatus(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter agent-status <target> [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+		return usageError("Usage: arbiter agent-status <target> [--json] [--fail-on-issues] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
 	return agentStatusCmd(parseRemoteInspectConfig(args))
 }
 
 func runControlStatus(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter control-status <target> [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+		return usageError("Usage: arbiter control-status <target> [--json] [--fail-on-issues] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
 	return controlStatusCmd(parseRemoteInspectConfig(args))
 }
@@ -357,6 +357,7 @@ type remoteInspectConfig struct {
 	serverName    string
 	forceInsecure bool
 	jsonOut       bool
+	failOnIssues  bool
 }
 
 func parseRemoteInspectConfig(args []string) remoteInspectConfig {
@@ -365,6 +366,8 @@ func parseRemoteInspectConfig(args []string) remoteInspectConfig {
 		switch args[i] {
 		case "--json":
 			cfg.jsonOut = true
+		case "--fail-on-issues":
+			cfg.failOnIssues = true
 		case "--token":
 			if i+1 < len(args) {
 				cfg.token = args[i+1]
@@ -1090,11 +1093,11 @@ func runtimeStatusCmd(cfg remoteInspectConfig) error {
 			return fmt.Errorf("marshal runtime status: %w", err)
 		}
 		fmt.Println(string(data))
-		return nil
+		return failOnBlockingIssues("runtime status", cfg.failOnIssues, resp.GetIssues())
 	}
 
 	printRuntimeStatus(resp)
-	return nil
+	return failOnBlockingIssues("runtime status", cfg.failOnIssues, resp.GetIssues())
 }
 
 func agentStatusCmd(cfg remoteInspectConfig) error {
@@ -1123,11 +1126,11 @@ func agentStatusCmd(cfg remoteInspectConfig) error {
 			return fmt.Errorf("marshal agent status: %w", err)
 		}
 		fmt.Println(string(data))
-		return nil
+		return failOnBlockingIssues("agent status", cfg.failOnIssues, resp.GetIssues())
 	}
 
 	printAgentStatus(resp)
-	return nil
+	return failOnBlockingIssues("agent status", cfg.failOnIssues, resp.GetIssues())
 }
 
 func controlStatusCmd(cfg remoteInspectConfig) error {
@@ -1156,11 +1159,11 @@ func controlStatusCmd(cfg remoteInspectConfig) error {
 			return fmt.Errorf("marshal control status: %w", err)
 		}
 		fmt.Println(string(data))
-		return nil
+		return failOnBlockingIssues("control status", cfg.failOnIssues, resp.GetIssues())
 	}
 
 	printControlStatus(resp)
-	return nil
+	return failOnBlockingIssues("control status", cfg.failOnIssues, resp.GetIssues())
 }
 
 func printRuntimeCapabilities(resp *arbiterv1.GetRuntimeCapabilitiesResponse) {
@@ -1439,6 +1442,27 @@ func printStatusIssues(issues []*arbiterv1.StatusIssue) {
 		}
 		fmt.Println(line)
 	}
+}
+
+func failOnBlockingIssues(subject string, enabled bool, issues []*arbiterv1.StatusIssue) error {
+	if !enabled {
+		return nil
+	}
+	count := blockingIssueCount(issues)
+	if count == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s has %d blocking issue(s)", strings.TrimSpace(subject), count)
+}
+
+func blockingIssueCount(issues []*arbiterv1.StatusIssue) int {
+	count := 0
+	for _, item := range issues {
+		if item != nil && item.GetBlocking() {
+			count++
+		}
+	}
+	return count
 }
 
 func printControlTransport(label string, control *arbiterv1.ControlListenerTransport) {

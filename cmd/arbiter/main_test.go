@@ -52,6 +52,38 @@ func TestFormatCLIErrorPrefixesGenericErrors(t *testing.T) {
 	}
 }
 
+func TestParseRemoteInspectConfigSupportsFailOnIssues(t *testing.T) {
+	cfg := parseRemoteInspectConfig([]string{
+		"grpcs://arbiter.internal:7443",
+		"--json",
+		"--fail-on-issues",
+		"--token", "secret",
+		"--ca-file", "/tmp/ca.pem",
+		"--server-name", "arbiter.internal",
+	})
+	if cfg.target != "grpcs://arbiter.internal:7443" || !cfg.jsonOut || !cfg.failOnIssues || cfg.token != "secret" || cfg.caFile != "/tmp/ca.pem" || cfg.serverName != "arbiter.internal" {
+		t.Fatalf("unexpected remote inspect config: %+v", cfg)
+	}
+}
+
+func TestFailOnBlockingIssuesCountsBlockingOnly(t *testing.T) {
+	issues := []*arbiterv1.StatusIssue{
+		{Severity: "warning", Code: "upstream_error"},
+		{Severity: "error", Code: "audit_unhealthy", Blocking: true},
+		{Severity: "error", Code: "bundle_stale", Blocking: true},
+	}
+	if got := blockingIssueCount(issues); got != 2 {
+		t.Fatalf("blockingIssueCount() = %d, want 2", got)
+	}
+	if err := failOnBlockingIssues("control status", false, issues); err != nil {
+		t.Fatalf("failOnBlockingIssues disabled: %v", err)
+	}
+	err := failOnBlockingIssues("control status", true, issues)
+	if err == nil || !strings.Contains(err.Error(), "2 blocking issue") {
+		t.Fatalf("unexpected failOnBlockingIssues error: %v", err)
+	}
+}
+
 func TestRunRejectsRemovedEmitCommand(t *testing.T) {
 	err := run([]string{"emit", "bundle.arb"})
 	if err == nil {

@@ -22,6 +22,7 @@
 - **Persistence health, not just persistence config** — the hosted control-plane `bundles` and `overrides` sections now report whether file-backed state is currently healthy, plus write/error counters and the last successful or failed persistence write timestamps, so operators can see when durable state is configured but not actually sticking.
 - **Readiness follows durability health** — hosted control `/readyz` now uses the same readiness judgment as the `readiness` section, so configured bundle persistence, override persistence, or audit recording failures take the control plane out of readiness instead of leaving probes green.
 - **Canonical issue lists** — runtime, agent, and hosted control status now all expose an explicit `issues` surface with shared `severity`, `scope`, `subject`, `code`, `message`, and `blocking` fields, so operators and SDKs can inspect concrete failures and insecure transport posture without reconstructing them from mixed booleans and free-form reasons.
+- **CLI issue gating** — `arbiter runtime-status`, `arbiter agent-status`, and `arbiter control-status` now accept `--fail-on-issues`, so automation can fail fast on blocking status issues without scraping terminal output.
 
 ### SDKs
 
