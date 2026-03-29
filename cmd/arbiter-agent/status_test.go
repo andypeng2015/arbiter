@@ -92,6 +92,10 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 	if transport == nil {
 		t.Fatal("expected transport payload")
 	}
+	syncStatus, _ := payload["sync"].(map[string]any)
+	if syncStatus == nil {
+		t.Fatal("expected sync payload")
+	}
 	control, _ := transport["control"].(map[string]any)
 	if control == nil || control["address"] != "127.0.0.1:7081" {
 		t.Fatalf("unexpected control transport: %+v", control)
@@ -99,6 +103,9 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 	upstream, _ := transport["upstream"].(map[string]any)
 	if upstream == nil || upstream["target"] != "arbiter.internal:7443" {
 		t.Fatalf("unexpected upstream transport: %+v", upstream)
+	}
+	if syncStatus["primary_name"] != "checkout" {
+		t.Fatalf("unexpected sync primary name: %+v", syncStatus)
 	}
 	bundles, _ := payload["bundles"].([]any)
 	if len(bundles) == 0 {
@@ -123,6 +130,12 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 		if _, ok := payload[key]; !ok {
 			t.Fatalf("expected top-level status field %q", key)
 		}
+		if _, ok := syncStatus[key]; !ok {
+			t.Fatalf("expected sync status field %q in %+v", key, syncStatus)
+		}
+	}
+	if syncBundles, _ := syncStatus["bundles"].([]any); len(syncBundles) != len(bundles) {
+		t.Fatalf("expected sync bundles to mirror top-level bundles, got %d vs %d", len(syncBundles), len(bundles))
 	}
 	for _, key := range []string{
 		"bundle_watch_connected",
@@ -141,6 +154,49 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 	cancel()
 	if err := <-runErr; err != context.Canceled && err != nil {
 		t.Fatalf("Run: %v", err)
+	}
+}
+
+func TestNewAgentStatusPayloadExposesCanonicalSections(t *testing.T) {
+	status := dataplane.AgentStatus{
+		Ready:                   true,
+		PrimaryName:             "checkout",
+		TargetCount:             2,
+		ReadyCount:              1,
+		BundleErrorsTotal:       3,
+		OverrideErrorsTotal:     1,
+		BundleReconnectsTotal:   4,
+		OverrideReconnectsTotal: 2,
+		LastUpstreamError:       "upstream unavailable",
+		LastUpstreamErrorAt:     time.Unix(1710000000, 0).UTC(),
+		Bundles: []dataplane.BundleSyncStatus{{
+			Name:                 "checkout",
+			BundleID:             "bundle-1",
+			BundleWatchConnected: true,
+		}},
+	}
+
+	payload := newAgentStatusPayload(status, "", readinessPolicy{maxStaleness: 30 * time.Second}, agentTransportStatus{
+		Control:  newAgentControlTransport("127.0.0.1:7081", nil, nil),
+		Upstream: newAgentUpstreamTransport("arbiter.internal:7443", true, true, "arbiter.internal"),
+	})
+
+	if !payload.Readiness.Ready || payload.Readiness.MaxStalenessMs != 30000 {
+		t.Fatalf("unexpected readiness: %+v", payload.Readiness)
+	}
+	if payload.Transport.Upstream.Target != "arbiter.internal:7443" || payload.Transport.Control.Address != "127.0.0.1:7081" {
+		t.Fatalf("unexpected transport: %+v", payload.Transport)
+	}
+	if payload.Sync.PrimaryName != "checkout" || payload.Sync.BundleErrorsTotal != 3 {
+		t.Fatalf("unexpected sync section: %+v", payload.Sync)
+	}
+	if payload.PrimaryName != "checkout" || payload.BundleErrorsTotal != 3 {
+		t.Fatalf("unexpected legacy payload fields: %+v", payload)
+	}
+
+	status.Bundles[0].Name = "mutated"
+	if payload.Sync.Bundles[0].Name != "checkout" || payload.Bundles[0].Name != "checkout" {
+		t.Fatalf("payload should snapshot bundle sync state, got sync=%+v legacy=%+v", payload.Sync.Bundles, payload.Bundles)
 	}
 }
 

@@ -2,7 +2,9 @@ package main
 
 import (
 	"crypto/tls"
+	"time"
 
+	"github.com/odvcencio/arbiter/dataplane"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 )
 
@@ -34,6 +36,17 @@ type agentReadinessStatus struct {
 	MaxStalenessMs int64  `json:"max_staleness_ms"`
 	TargetCount    int    `json:"target_count"`
 	ReadyCount     int    `json:"ready_count"`
+}
+
+type agentSyncStatus struct {
+	PrimaryName             string                       `json:"primary_name,omitempty"`
+	BundleErrorsTotal       int64                        `json:"bundle_errors_total"`
+	OverrideErrorsTotal     int64                        `json:"override_errors_total"`
+	BundleReconnectsTotal   int64                        `json:"bundle_reconnects_total"`
+	OverrideReconnectsTotal int64                        `json:"override_reconnects_total"`
+	LastUpstreamError       string                       `json:"last_upstream_error,omitempty"`
+	LastUpstreamErrorAt     time.Time                    `json:"last_upstream_error_at,omitempty"`
+	Bundles                 []dataplane.BundleSyncStatus `json:"bundles,omitempty"`
 }
 
 func newAgentControlTransport(address string, tokens []string, tlsConfig *tls.Config) agentControlTransport {

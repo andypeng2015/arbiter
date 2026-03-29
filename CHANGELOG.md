@@ -15,6 +15,7 @@
 - **Inspectable runtime posture** — `/status` and `RuntimeService.GetRuntimeCapabilities` now expose the runtime control surface's effective auth/TLS/public-listener posture and the bound capability-plugin connection's target/auth/TLS/server-name posture, so operators can inspect the real runtime shape instead of reconstructing it from flags.
 - **Inspectable agent posture** — `arbiter-agent /status` now exposes local control-listener posture, upstream transport posture, readiness policy/reason, and per-bundle bundle/override watch connectivity alongside the existing sync counters.
 - **Agent transport hardening parity** — `arbiter-agent` now supports the same local bearer-token and TLS/mTLS hardening shape as `arbiter-runtime` on its local gRPC surface, so the reported control posture is backed by real configuration instead of placeholders.
+- **Canonical operator surfaces** — `arbiter-runtime /status`, `arbiter-agent /status`, and `arbiter runtime-capabilities` now use the same small inspection vocabulary and section order instead of mixing flat counters, ad hoc headings, and transport-specific nouns.
 
 ### SDKs
 

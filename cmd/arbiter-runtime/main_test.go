@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"strings"
 	"testing"
+	"time"
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/capability"
@@ -27,21 +28,18 @@ func TestCapabilityStatus(t *testing.T) {
 			Owner:       workflow.CapabilityOwnerPlugin,
 			Description: "python worker",
 		}},
-	})
+	}, nil)
 
-	sources := status["sources"].([]map[string]any)
-	if len(sources) != 1 || sources[0]["scheme"] != "kafka" || sources[0]["owner"] != "plugin" {
-		t.Fatalf("unexpected sources: %+v", sources)
+	if len(status.Sources) != 1 || status.Sources[0].Scheme != "kafka" || status.Sources[0].Owner != "plugin" {
+		t.Fatalf("unexpected sources: %+v", status.Sources)
 	}
 
-	sinks := status["sinks"].([]map[string]any)
-	if len(sinks) != 1 || sinks[0]["kind"] != "discord" || sinks[0]["owner"] != "host" {
-		t.Fatalf("unexpected sinks: %+v", sinks)
+	if len(status.Sinks) != 1 || status.Sinks[0].Kind != "discord" || status.Sinks[0].Owner != "host" {
+		t.Fatalf("unexpected sinks: %+v", status.Sinks)
 	}
 
-	workers := status["workers"].([]map[string]any)
-	if len(workers) != 1 || workers[0]["kind"] != "python" || workers[0]["owner"] != "plugin" {
-		t.Fatalf("unexpected workers: %+v", workers)
+	if len(status.Workers) != 1 || status.Workers[0].Kind != "python" || status.Workers[0].Owner != "plugin" {
+		t.Fatalf("unexpected workers: %+v", status.Workers)
 	}
 }
 
@@ -68,8 +66,81 @@ func TestCapabilityPluginsStatus(t *testing.T) {
 	if len(status) != 1 {
 		t.Fatalf("status len = %d, want 1", len(status))
 	}
-	if status[0]["name"] != "ops-plugin" || status[0]["version"] != "1.2.3" {
+	if status[0].Name != "ops-plugin" || status[0].Version != "1.2.3" {
 		t.Fatalf("unexpected plugin status: %+v", status[0])
+	}
+}
+
+func TestRuntimeStatusPayloadExposesCanonicalSections(t *testing.T) {
+	lastTick := time.Unix(1710000000, 0).UTC()
+	lastResult := workflow.TickResult{
+		Sources: map[string]workflow.SourceSnapshot{
+			"prices": {
+				Alias:     "prices",
+				Target:    "kafka://prices",
+				Available: true,
+			},
+		},
+		Sinks: map[string]workflow.SinkSnapshot{
+			"ops": {
+				Alias:     "ops",
+				Kind:      "slack",
+				Target:    "slack://ops",
+				Available: true,
+			},
+		},
+		Delivered: 3,
+		Enqueued:  2,
+		Retried:   1,
+	}
+	payload := newRuntimeStatusPayload(
+		false,
+		7,
+		2,
+		lastTick,
+		lastResult,
+		workflow.CapabilitySurface{
+			Sources: []workflow.SourceCapability{{
+				Scheme: "kafka",
+				Owner:  workflow.CapabilityOwnerPlugin,
+			}},
+			Sinks: []workflow.HandlerCapability{{
+				Kind:  "slack",
+				Owner: workflow.CapabilityOwnerHost,
+			}},
+			Workers: []workflow.HandlerCapability{{
+				Kind:  "python",
+				Owner: workflow.CapabilityOwnerPlugin,
+			}},
+		},
+		&capability.Manifest{Name: "ops-plugin", Version: "1.2.3"},
+		runtimeControlTransport{Enabled: true, Address: "127.0.0.1:7081"},
+		runtimeCapabilityTransport{Configured: true, Target: "plugin.internal:7443"},
+	)
+
+	if payload.Readiness.Ready || payload.Readiness.Reason != "first tick incomplete" {
+		t.Fatalf("unexpected readiness: %+v", payload.Readiness)
+	}
+	if payload.Transport.Control.Address != "127.0.0.1:7081" || payload.Transport.Capability.Target != "plugin.internal:7443" {
+		t.Fatalf("unexpected transport: %+v", payload.Transport)
+	}
+	if len(payload.Capabilities.Plugins) != 1 || payload.Capabilities.Plugins[0].Name != "ops-plugin" {
+		t.Fatalf("unexpected capability plugins: %+v", payload.Capabilities.Plugins)
+	}
+	if payload.Activity.Delivery.Delivered != 3 || payload.Delivered != 3 {
+		t.Fatalf("unexpected delivery counters: activity=%+v legacy delivered=%d", payload.Activity.Delivery, payload.Delivered)
+	}
+	if payload.Activity.SourceStatus["prices"].Target != "kafka://prices" || payload.Sources["prices"].Target != "kafka://prices" {
+		t.Fatalf("unexpected source status: activity=%+v legacy=%+v", payload.Activity.SourceStatus, payload.Sources)
+	}
+	if payload.Activity.SinkStatus["ops"].Kind != "slack" || payload.Sinks["ops"].Kind != "slack" {
+		t.Fatalf("unexpected sink status: activity=%+v legacy=%+v", payload.Activity.SinkStatus, payload.Sinks)
+	}
+
+	lastResult.Sources["prices"] = workflow.SourceSnapshot{Alias: "mutated"}
+	lastResult.Sinks["ops"] = workflow.SinkSnapshot{Alias: "mutated"}
+	if payload.Activity.SourceStatus["prices"].Alias != "prices" || payload.Activity.SinkStatus["ops"].Alias != "ops" {
+		t.Fatalf("payload should snapshot source/sink status, got sources=%+v sinks=%+v", payload.Activity.SourceStatus, payload.Activity.SinkStatus)
 	}
 }
 

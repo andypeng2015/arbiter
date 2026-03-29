@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/odvcencio/arbiter"
+	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 )
 
@@ -226,6 +227,67 @@ test "shipping applies" {
 	})
 	if !strings.Contains(out, "1 passed, 0 failed") {
 		t.Fatalf("expected passing test summary, got %s", out)
+	}
+}
+
+func TestPrintRuntimeCapabilitiesUsesCanonicalSections(t *testing.T) {
+	out := captureStdout(t, func() {
+		printRuntimeCapabilities(&arbiterv1.GetRuntimeCapabilitiesResponse{
+			ControlTransport: &arbiterv1.RuntimeControlTransport{
+				Enabled:          true,
+				Address:          "127.0.0.1:7081",
+				AuthEnabled:      true,
+				TlsEnabled:       true,
+				MutualTlsEnabled: true,
+			},
+			CapabilityTransport: &arbiterv1.RuntimeCapabilityTransport{
+				Configured:  true,
+				Target:      "plugin.internal:7443",
+				AuthEnabled: true,
+				TlsEnabled:  true,
+				ServerName:  "plugin.internal",
+			},
+			Plugins: []*arbiterv1.RuntimePluginInfo{{
+				Name:    "ops-plugin",
+				Version: "1.2.3",
+			}},
+			Sources: []*arbiterv1.RuntimeSourceCapability{{
+				Scheme:      "kafka",
+				Owner:       arbiterv1.CapabilityOwner_CAPABILITY_OWNER_PLUGIN,
+				Description: "stream facts",
+			}},
+			Sinks: []*arbiterv1.RuntimeHandlerCapability{{
+				Kind:        "slack",
+				Owner:       arbiterv1.CapabilityOwner_CAPABILITY_OWNER_HOST,
+				Description: "deliver alerts",
+			}},
+			Workers: []*arbiterv1.RuntimeHandlerCapability{{
+				Kind:        "python",
+				Owner:       arbiterv1.CapabilityOwner_CAPABILITY_OWNER_PLUGIN,
+				Description: "run typed jobs",
+			}},
+		})
+	})
+
+	for _, fragment := range []string{
+		"runtime surface",
+		"transport:",
+		"  control:",
+		"  capability:",
+		"capabilities:",
+		"  plugins:",
+		"  sources:",
+		"  sinks:",
+		"  workers:",
+		"plugin.internal:7443",
+		"ops-plugin (1.2.3)",
+		"kafka [plugin]",
+		"slack [host]",
+		"python [plugin]",
+	} {
+		if !strings.Contains(out, fragment) {
+			t.Fatalf("expected runtime capability output to contain %q, got %s", fragment, out)
+		}
 	}
 }
 

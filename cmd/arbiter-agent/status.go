@@ -14,9 +14,21 @@ type readinessPolicy struct {
 }
 
 type agentStatusPayload struct {
-	dataplane.AgentStatus
-	Transport agentTransportStatus `json:"transport"`
 	Readiness agentReadinessStatus `json:"readiness"`
+	Transport agentTransportStatus `json:"transport"`
+	Sync      agentSyncStatus      `json:"sync"`
+
+	Ready                   bool                         `json:"ready"`
+	PrimaryName             string                       `json:"primary_name,omitempty"`
+	TargetCount             int                          `json:"target_count"`
+	ReadyCount              int                          `json:"ready_count"`
+	BundleErrorsTotal       int64                        `json:"bundle_errors_total"`
+	OverrideErrorsTotal     int64                        `json:"override_errors_total"`
+	BundleReconnectsTotal   int64                        `json:"bundle_reconnects_total"`
+	OverrideReconnectsTotal int64                        `json:"override_reconnects_total"`
+	LastUpstreamError       string                       `json:"last_upstream_error,omitempty"`
+	LastUpstreamErrorAt     time.Time                    `json:"last_upstream_error_at,omitempty"`
+	Bundles                 []dataplane.BundleSyncStatus `json:"bundles,omitempty"`
 }
 
 func newStatusHandler(syncer *dataplane.Agent, policy readinessPolicy, transport agentTransportStatus) http.Handler {
@@ -42,19 +54,43 @@ func newStatusHandler(syncer *dataplane.Agent, policy readinessPolicy, transport
 		status, reason := readinessStatus(syncer, policy)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(agentStatusPayload{
-			AgentStatus: status,
-			Transport:   transport,
-			Readiness: agentReadinessStatus{
-				Ready:          reason == "",
-				Reason:         reason,
-				MaxStalenessMs: policy.maxStaleness.Milliseconds(),
-				TargetCount:    status.TargetCount,
-				ReadyCount:     status.ReadyCount,
-			},
-		})
+		_ = json.NewEncoder(w).Encode(newAgentStatusPayload(status, reason, policy, transport))
 	})
 	return mux
+}
+
+func newAgentStatusPayload(status dataplane.AgentStatus, reason string, policy readinessPolicy, transport agentTransportStatus) agentStatusPayload {
+	return agentStatusPayload{
+		Readiness: agentReadinessStatus{
+			Ready:          reason == "",
+			Reason:         reason,
+			MaxStalenessMs: policy.maxStaleness.Milliseconds(),
+			TargetCount:    status.TargetCount,
+			ReadyCount:     status.ReadyCount,
+		},
+		Transport: transport,
+		Sync: agentSyncStatus{
+			PrimaryName:             status.PrimaryName,
+			BundleErrorsTotal:       status.BundleErrorsTotal,
+			OverrideErrorsTotal:     status.OverrideErrorsTotal,
+			BundleReconnectsTotal:   status.BundleReconnectsTotal,
+			OverrideReconnectsTotal: status.OverrideReconnectsTotal,
+			LastUpstreamError:       status.LastUpstreamError,
+			LastUpstreamErrorAt:     status.LastUpstreamErrorAt,
+			Bundles:                 append([]dataplane.BundleSyncStatus(nil), status.Bundles...),
+		},
+		Ready:                   status.Ready,
+		PrimaryName:             status.PrimaryName,
+		TargetCount:             status.TargetCount,
+		ReadyCount:              status.ReadyCount,
+		BundleErrorsTotal:       status.BundleErrorsTotal,
+		OverrideErrorsTotal:     status.OverrideErrorsTotal,
+		BundleReconnectsTotal:   status.BundleReconnectsTotal,
+		OverrideReconnectsTotal: status.OverrideReconnectsTotal,
+		LastUpstreamError:       status.LastUpstreamError,
+		LastUpstreamErrorAt:     status.LastUpstreamErrorAt,
+		Bundles:                 append([]dataplane.BundleSyncStatus(nil), status.Bundles...),
+	}
 }
 
 func readinessStatus(syncer *dataplane.Agent, policy readinessPolicy) (dataplane.AgentStatus, string) {

@@ -481,71 +481,21 @@ func (rt *runtime) handleReadyz(w http.ResponseWriter, _ *http.Request) {
 
 func (rt *runtime) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	rt.mu.RLock()
-	status := map[string]any{
-		"ready":              rt.ready,
-		"ticks":              rt.tickCount,
-		"errors":             rt.errors,
-		"last_tick":          rt.lastTick,
-		"sources":            rt.lastResult.Sources,
-		"sinks":              rt.lastResult.Sinks,
-		"delivered":          rt.lastResult.Delivered,
-		"enqueued":           rt.lastResult.Enqueued,
-		"retried":            rt.lastResult.Retried,
-		"capabilities":       capabilityStatus(rt.runner.Capabilities()),
-		"capability_plugins": capabilityPluginsStatus(rt.caps),
-		"transport": map[string]any{
-			"control":    rt.controlTransport,
-			"capability": rt.capabilityTransport,
-		},
-	}
+	status := newRuntimeStatusPayload(
+		rt.ready,
+		rt.tickCount,
+		rt.errors,
+		rt.lastTick,
+		rt.lastResult,
+		rt.runner.Capabilities(),
+		rt.caps,
+		rt.controlTransport,
+		rt.capabilityTransport,
+	)
 	rt.mu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(status)
-}
-
-func capabilityStatus(surface workflow.CapabilitySurface) map[string]any {
-	sources := make([]map[string]any, 0, len(surface.Sources))
-	for _, item := range surface.Sources {
-		sources = append(sources, map[string]any{
-			"scheme":      item.Scheme,
-			"owner":       string(item.Owner),
-			"description": item.Description,
-		})
-	}
-
-	sinks := make([]map[string]any, 0, len(surface.Sinks))
-	for _, item := range surface.Sinks {
-		sinks = append(sinks, map[string]any{
-			"kind":        item.Kind,
-			"owner":       string(item.Owner),
-			"description": item.Description,
-		})
-	}
-
-	workers := make([]map[string]any, 0, len(surface.Workers))
-	for _, item := range surface.Workers {
-		workers = append(workers, map[string]any{
-			"kind":        item.Kind,
-			"owner":       string(item.Owner),
-			"description": item.Description,
-		})
-	}
-
-	return map[string]any{
-		"sources": sources,
-		"sinks":   sinks,
-		"workers": workers,
-	}
-}
-
-func capabilityPluginsStatus(manifest *capability.Manifest) []map[string]any {
-	if manifest == nil {
-		return nil
-	}
-	return []map[string]any{{
-		"name":    manifest.Name,
-		"version": manifest.Version,
-	}}
 }
 
 // --- Default Handlers ---

@@ -74,7 +74,7 @@ Apply the same rule to `arbiter-runtime`: protect `--grpc` with `--auth-token` /
 
 If `arbiter-runtime` talks to a remote capability plugin, make that transport explicit too: prefer `grpcs://...` plus `--capability-token`, `--capability-ca-file`, and `--capability-server-name` over ambient network trust.
 
-Do not treat that posture as hidden configuration. Check `/status` or `RuntimeService.GetRuntimeCapabilities` and verify the runtime is actually reporting the auth/TLS/public-listener and capability-transport shape you intended.
+Do not treat that posture as hidden configuration. Check `/status` or `RuntimeService.GetRuntimeCapabilities` and verify the runtime is actually reporting the `readiness`, `transport`, `capabilities`, and `activity` shape you intended, including auth/TLS/public-listener and capability-transport posture.
 
 ## Container defaults
 
@@ -104,7 +104,7 @@ Two patterns are credible in production:
 
 The agent path is the better story when you want local low-latency eval without turning the engine into a shared multi-tenant service.
 
-Treat the agent with the same discipline as the runtime: inspect `/status` and verify the local listener posture, upstream auth/TLS posture, readiness reason, and bundle/override watch connectivity instead of assuming the sidecar is healthy because the process is up.
+Treat the agent with the same discipline as the runtime: inspect `/status` and verify the `readiness`, `transport`, and `sync` sections, including local listener posture, upstream auth/TLS posture, readiness reason, and bundle/override watch connectivity, instead of assuming the sidecar is healthy because the process is up.
 
 If the agent's local gRPC surface is reachable beyond localhost, harden it the same way: `--auth-token` / `--auth-token-file`, plus `--tls-cert`, `--tls-key`, and optionally `--tls-client-ca`.
 

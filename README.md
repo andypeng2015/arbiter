@@ -589,7 +589,7 @@ arbiter-agent --upstream https://arbiter.internal:443 --upstream-token "$ARBITER
 
 `arbiter replay` answers “what would happen now?” by reading audited `kind: "rules"` JSONL events, re-evaluating the recorded contexts, and reporting outcome drift. Use `--request-id` to focus on one audited decision or `--limit` to cap the batch.
 
-`arbiter-agent` is the localhost data-plane form factor. It bootstraps one or many active bundles from the upstream control plane with `GetBundle`, keeps `WatchBundles(active_only=true)` streams open, syncs runtime overrides from `GetOverrides` plus `WatchOverrides`, and serves the normal Arbiter gRPC API from its own in-memory registry and override store. Its `/status` surface now reports the same kind of inspectable posture as the runtime: local control-listener posture, upstream transport posture, readiness policy/reason, and per-bundle watch connectivity instead of only raw counters.
+`arbiter-agent` is the localhost data-plane form factor. It bootstraps one or many active bundles from the upstream control plane with `GetBundle`, keeps `WatchBundles(active_only=true)` streams open, syncs runtime overrides from `GetOverrides` plus `WatchOverrides`, and serves the normal Arbiter gRPC API from its own in-memory registry and override store. Its `/status` surface now follows the same inspection pattern as the runtime: `readiness`, `transport`, and `sync` sections up front, then the legacy flat counters and bundle snapshots behind them for compatibility.
 
 Repeat `--bundle-name` to keep multiple bundles hot, or set `ARBITER_BUNDLE_NAMES=checkout,pricing`. The legacy single-value `ARBITER_BUNDLE_NAME` env var still works.
 
@@ -599,7 +599,7 @@ Use `--upstream-token`, `--upstream-ca-file`, `--upstream-server-name`, or `--up
 
 Use `--auth-token`, `--auth-token-file`, `--tls-cert`, `--tls-key`, and optional `--tls-client-ca` when the agent's local gRPC surface leaves localhost or crosses a trust boundary.
 
-`arbiter runtime-capabilities` accepts `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure runtime control, or `--plaintext` to force insecure transport against a bare target. The response now includes both the runtime control surface posture (`auth`, `tls`, `mtls`, `public_listener`) and the bound capability-plugin transport posture (`target`, `auth`, `tls`, `server_name`) when one is configured.
+`arbiter runtime-capabilities` accepts `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure runtime control, or `--plaintext` to force insecure transport against a bare target. The response and default text renderer now both use the same inspection order: `transport` first, then `capabilities`, with control-surface posture (`auth`, `tls`, `mtls`, `public_listener`) and capability-plugin posture (`target`, `auth`, `tls`, `server_name`) rendered with the same nouns the runtime reports over HTTP and gRPC.
 
 ### Self-Hosted Profile
 
@@ -611,7 +611,7 @@ It also exposes local health and status on the HTTP listener:
 
 - `GET /healthz` for process liveness
 - `GET /readyz` for sync readiness, optionally gated by the configured freshness threshold
-- `GET /status` for JSON introspection of synced bundles, checksums, bundle/override freshness, reconnect/error counters, watch connectivity, readiness policy/reason, local control-listener auth/TLS posture, upstream transport posture, and the last upstream failure when one is present
+- `GET /status` for JSON introspection of synced bundles, checksums, bundle/override freshness, reconnect/error counters, watch connectivity, and a canonical `readiness -> transport -> sync` section layout up front
 
 When `include` is involved, file-backed commands report diagnostics against the original source file:
 
@@ -1154,7 +1154,7 @@ It handles the full lifecycle:
 - **Delivery retry** — outcomes route to registered handlers with durable retry journal
 - **Bounded parallelism** — independent sources and handler targets can run concurrently inside one tick without changing per-target ordering
 - **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
-- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON: ticks, sources, sinks, delivery stats, unified capability surface, connected plugin metadata, control-surface auth/TLS posture, capability-plugin transport posture)
+- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON sections: `readiness`, `transport`, `capabilities`, `activity`, plus legacy flat mirrors for compatibility)
 - **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` exposes the same unified capability surface plus transport posture over gRPC for SDKs and CLI clients
 
 Runtime transport is now opinionated instead of ad hoc:

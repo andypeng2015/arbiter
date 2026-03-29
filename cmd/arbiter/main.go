@@ -973,60 +973,84 @@ func runtimeCapabilitiesCmd(cfg runtimeCapabilitiesConfig) error {
 		return nil
 	}
 
-	fmt.Println("runtime capabilities")
+	printRuntimeCapabilities(resp)
+	return nil
+}
+
+func printRuntimeCapabilities(resp *arbiterv1.GetRuntimeCapabilitiesResponse) {
+	fmt.Println("runtime surface")
+	fmt.Println("transport:")
 	if control := resp.GetControlTransport(); control != nil {
-		fmt.Println("control transport:")
+		fmt.Println("  control:")
 		if control.GetEnabled() {
-			fmt.Printf("  - %s\n", control.GetAddress())
-			fmt.Printf("    auth=%t tls=%t mtls=%t public=%t\n", control.GetAuthEnabled(), control.GetTlsEnabled(), control.GetMutualTlsEnabled(), control.GetPublicListener())
+			fmt.Printf("    - %s\n", control.GetAddress())
+			fmt.Printf("      auth=%t tls=%t mtls=%t public=%t\n", control.GetAuthEnabled(), control.GetTlsEnabled(), control.GetMutualTlsEnabled(), control.GetPublicListener())
 		} else {
-			fmt.Println("  - disabled")
+			fmt.Println("    - disabled")
 		}
 	}
 	if capabilityTransport := resp.GetCapabilityTransport(); capabilityTransport != nil {
-		fmt.Println("capability transport:")
+		fmt.Println("  capability:")
 		if capabilityTransport.GetConfigured() {
-			fmt.Printf("  - %s\n", capabilityTransport.GetTarget())
-			fmt.Printf("    auth=%t tls=%t\n", capabilityTransport.GetAuthEnabled(), capabilityTransport.GetTlsEnabled())
+			fmt.Printf("    - %s\n", capabilityTransport.GetTarget())
+			fmt.Printf("      auth=%t tls=%t\n", capabilityTransport.GetAuthEnabled(), capabilityTransport.GetTlsEnabled())
 			if serverName := strings.TrimSpace(capabilityTransport.GetServerName()); serverName != "" {
-				fmt.Printf("    server_name=%s\n", serverName)
+				fmt.Printf("      server_name=%s\n", serverName)
 			}
 		} else {
-			fmt.Println("  - not configured")
+			fmt.Println("    - not configured")
 		}
 	}
-	if len(resp.GetPlugins()) > 0 {
-		fmt.Println("plugins:")
+
+	fmt.Println("capabilities:")
+	fmt.Println("  plugins:")
+	if len(resp.GetPlugins()) == 0 {
+		fmt.Println("    - none")
+	} else {
 		for _, plugin := range resp.GetPlugins() {
 			name := plugin.GetName()
 			if version := strings.TrimSpace(plugin.GetVersion()); version != "" {
 				name += " (" + version + ")"
 			}
-			fmt.Printf("  - %s\n", name)
+			fmt.Printf("    - %s\n", name)
 		}
 	}
-	fmt.Println("sources:")
-	for _, item := range resp.GetSources() {
-		fmt.Printf("  - %s [%s]\n", item.GetScheme(), capabilityOwnerLabel(item.GetOwner()))
-		if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
-			fmt.Printf("    %s\n", desc)
+
+	fmt.Println("  sources:")
+	if len(resp.GetSources()) == 0 {
+		fmt.Println("    - none")
+	} else {
+		for _, item := range resp.GetSources() {
+			fmt.Printf("    - %s [%s]\n", item.GetScheme(), capabilityOwnerLabel(item.GetOwner()))
+			if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
+				fmt.Printf("      %s\n", desc)
+			}
 		}
 	}
-	fmt.Println("sinks:")
-	for _, item := range resp.GetSinks() {
-		fmt.Printf("  - %s [%s]\n", item.GetKind(), capabilityOwnerLabel(item.GetOwner()))
-		if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
-			fmt.Printf("    %s\n", desc)
+
+	fmt.Println("  sinks:")
+	if len(resp.GetSinks()) == 0 {
+		fmt.Println("    - none")
+	} else {
+		for _, item := range resp.GetSinks() {
+			fmt.Printf("    - %s [%s]\n", item.GetKind(), capabilityOwnerLabel(item.GetOwner()))
+			if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
+				fmt.Printf("      %s\n", desc)
+			}
 		}
 	}
-	fmt.Println("workers:")
-	for _, item := range resp.GetWorkers() {
-		fmt.Printf("  - %s [%s]\n", item.GetKind(), capabilityOwnerLabel(item.GetOwner()))
-		if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
-			fmt.Printf("    %s\n", desc)
+
+	fmt.Println("  workers:")
+	if len(resp.GetWorkers()) == 0 {
+		fmt.Println("    - none")
+	} else {
+		for _, item := range resp.GetWorkers() {
+			fmt.Printf("    - %s [%s]\n", item.GetKind(), capabilityOwnerLabel(item.GetOwner()))
+			if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
+				fmt.Printf("      %s\n", desc)
+			}
 		}
 	}
-	return nil
 }
 
 func capabilityOwnerLabel(owner arbiterv1.CapabilityOwner) string {
