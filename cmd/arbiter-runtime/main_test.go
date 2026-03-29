@@ -205,6 +205,72 @@ func TestProtoRuntimeCapabilities(t *testing.T) {
 	}
 }
 
+func TestProtoRuntimeStatus(t *testing.T) {
+	payload := newRuntimeStatusPayload(
+		true,
+		9,
+		2,
+		time.Unix(1710000000, 0).UTC(),
+		workflow.TickResult{
+			Sources: map[string]workflow.SourceSnapshot{
+				"kafka://prices": {
+					Target:              "kafka://prices",
+					Alias:               "prices",
+					Available:           true,
+					FactCount:           4,
+					ConsecutiveFailures: 1,
+				},
+			},
+			Sinks: map[string]workflow.SinkSnapshot{
+				"ops": {
+					Key:                 "ops",
+					Alias:               "ops",
+					Kind:                "slack",
+					Target:              "slack://ops",
+					Available:           true,
+					Pending:             2,
+					Ambiguous:           1,
+					ConsecutiveFailures: 3,
+				},
+			},
+			Delivered: 5,
+			Enqueued:  3,
+			Retried:   1,
+		},
+		workflow.CapabilitySurface{
+			Sources: []workflow.SourceCapability{{Scheme: "kafka", Owner: workflow.CapabilityOwnerPlugin}},
+			Sinks:   []workflow.HandlerCapability{{Kind: "slack", Owner: workflow.CapabilityOwnerHost}},
+			Workers: []workflow.HandlerCapability{{Kind: "python", Owner: workflow.CapabilityOwnerPlugin}},
+		},
+		&capability.Manifest{Name: "ops-plugin", Version: "1.2.3"},
+		runtimeControlTransport{Enabled: true, Address: "127.0.0.1:7081", AuthEnabled: true},
+		runtimeCapabilityTransport{Configured: true, Target: "plugin.internal:7443", TLSEnabled: true},
+	)
+
+	resp := protoRuntimeStatus(payload)
+	if !resp.GetReadiness().GetReady() || resp.GetReadiness().GetReason() != "" {
+		t.Fatalf("unexpected readiness: %+v", resp.GetReadiness())
+	}
+	if resp.GetTransport().GetControl().GetAddress() != "127.0.0.1:7081" {
+		t.Fatalf("unexpected control transport: %+v", resp.GetTransport().GetControl())
+	}
+	if resp.GetTransport().GetCapability().GetTarget() != "plugin.internal:7443" {
+		t.Fatalf("unexpected capability transport: %+v", resp.GetTransport().GetCapability())
+	}
+	if len(resp.GetCapabilities().GetPlugins()) != 1 || resp.GetCapabilities().GetPlugins()[0].GetName() != "ops-plugin" {
+		t.Fatalf("unexpected capabilities: %+v", resp.GetCapabilities())
+	}
+	if resp.GetActivity().GetTicks() != 9 || resp.GetActivity().GetDelivery().GetDelivered() != 5 {
+		t.Fatalf("unexpected activity counters: %+v", resp.GetActivity())
+	}
+	if len(resp.GetActivity().GetSourceStatus()) != 1 || resp.GetActivity().GetSourceStatus()[0].GetTarget() != "kafka://prices" {
+		t.Fatalf("unexpected source status: %+v", resp.GetActivity().GetSourceStatus())
+	}
+	if len(resp.GetActivity().GetSinkStatus()) != 1 || resp.GetActivity().GetSinkStatus()[0].GetKey() != "ops" {
+		t.Fatalf("unexpected sink status: %+v", resp.GetActivity().GetSinkStatus())
+	}
+}
+
 func TestDialCapabilityRuntimeRejectsConflictingTransportHints(t *testing.T) {
 	_, _, _, _, err := dialCapabilityRuntime(capabilityDialConfig{
 		target:        "grpcs://plugin.internal:7443",

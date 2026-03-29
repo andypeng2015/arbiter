@@ -1,4 +1,4 @@
-from .client import ArbiterClient, RuntimeClient
+from .client import AgentClient, ArbiterClient, RuntimeClient
 from .capability import CapabilityServer
 
-__all__ = ["ArbiterClient", "CapabilityServer", "RuntimeClient"]
+__all__ = ["AgentClient", "ArbiterClient", "CapabilityServer", "RuntimeClient"]

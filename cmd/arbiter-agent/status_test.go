@@ -200,6 +200,53 @@ func TestNewAgentStatusPayloadExposesCanonicalSections(t *testing.T) {
 	}
 }
 
+func TestProtoAgentStatus(t *testing.T) {
+	payload := newAgentStatusPayload(dataplane.AgentStatus{
+		Ready:                   true,
+		PrimaryName:             "checkout",
+		TargetCount:             2,
+		ReadyCount:              1,
+		BundleErrorsTotal:       3,
+		OverrideErrorsTotal:     1,
+		BundleReconnectsTotal:   4,
+		OverrideReconnectsTotal: 2,
+		LastUpstreamError:       "upstream unavailable",
+		LastUpstreamErrorAt:     time.Unix(1710000000, 0).UTC(),
+		Bundles: []dataplane.BundleSyncStatus{{
+			Name:                   "checkout",
+			BundleID:               "bundle-1",
+			Checksum:               "abc123",
+			BundleWatchConnected:   true,
+			OverrideConfigured:     true,
+			OverrideWatchConnected: true,
+		}},
+	}, "", readinessPolicy{maxStaleness: 30 * time.Second}, agentTransportStatus{
+		Control:  newAgentControlTransport("127.0.0.1:7081", nil, nil),
+		Upstream: newAgentUpstreamTransport("arbiter.internal:7443", true, true, "arbiter.internal"),
+	})
+
+	resp := protoAgentStatus(payload)
+	if !resp.GetReadiness().GetReady() || resp.GetReadiness().GetMaxStalenessMs() != 30000 {
+		t.Fatalf("unexpected readiness: %+v", resp.GetReadiness())
+	}
+	if resp.GetTransport().GetControl().GetAddress() != "127.0.0.1:7081" {
+		t.Fatalf("unexpected control transport: %+v", resp.GetTransport().GetControl())
+	}
+	if resp.GetTransport().GetUpstream().GetTarget() != "arbiter.internal:7443" {
+		t.Fatalf("unexpected upstream transport: %+v", resp.GetTransport().GetUpstream())
+	}
+	if resp.GetSync().GetPrimaryName() != "checkout" || resp.GetSync().GetBundleErrorsTotal() != 3 {
+		t.Fatalf("unexpected sync payload: %+v", resp.GetSync())
+	}
+	if len(resp.GetSync().GetBundles()) != 1 {
+		t.Fatalf("unexpected bundle sync payload: %+v", resp.GetSync().GetBundles())
+	}
+	bundle := resp.GetSync().GetBundles()[0]
+	if bundle.GetBundleId() != "bundle-1" || bundle.GetChecksum() != "abc123" {
+		t.Fatalf("unexpected bundle sync payload: %+v", bundle)
+	}
+}
+
 func TestStatusHandlerReadinessThresholdMarksStaleSyncUnready(t *testing.T) {
 	cp := newStatusTestControlPlane(dataplane.Bundle{
 		Name:   "checkout",

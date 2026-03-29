@@ -521,9 +521,37 @@ class RuntimeClient {
   getRuntimeCapabilities(metadata = undefined) {
     return unary(this.client, "GetRuntimeCapabilities", {}, this._createMetadata, this._retry, metadata);
   }
+
+  getRuntimeStatus(metadata = undefined) {
+    return unary(this.client, "GetRuntimeStatus", {}, this._createMetadata, this._retry, metadata);
+  }
+}
+
+class AgentClient {
+  constructor(target, credentialsOrOptions = undefined, maybeOptions = undefined) {
+    const { credentials: explicitCredentials, options } = normalizeClientArgs(target, credentialsOrOptions, maybeOptions);
+    const { target: normalizedTarget, credentials } = resolveCredentials(target, explicitCredentials, options);
+    const channelOptions = { ...(options.channelOptions || {}) };
+    if (options.serverNameOverride) {
+      channelOptions["grpc.ssl_target_name_override"] = options.serverNameOverride;
+      channelOptions["grpc.default_authority"] = options.serverNameOverride;
+    }
+    this._createMetadata = createMetadataFactory(options);
+    this._retry = normalizeRetryOptions(options.retry);
+    this.client = new proto.AgentService(normalizedTarget, credentials, channelOptions);
+  }
+
+  close() {
+    this.client.close();
+  }
+
+  getAgentStatus(metadata = undefined) {
+    return unary(this.client, "GetAgentStatus", {}, this._createMetadata, this._retry, metadata);
+  }
 }
 
 module.exports = {
+  AgentClient,
   ArbiterClient,
   CapabilityServer,
   RuntimeClient,

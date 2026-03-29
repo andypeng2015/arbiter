@@ -34,6 +34,11 @@ service ArbiterService {
 
 service RuntimeService {
   rpc GetRuntimeCapabilities(GetRuntimeCapabilitiesRequest) returns (GetRuntimeCapabilitiesResponse);
+  rpc GetRuntimeStatus(GetRuntimeStatusRequest) returns (GetRuntimeStatusResponse);
+}
+
+service AgentService {
+  rpc GetAgentStatus(GetAgentStatusRequest) returns (GetAgentStatusResponse);
 }
 
 message PublishBundleRequest {
@@ -158,6 +163,10 @@ enum CapabilityOwner {
 
 message GetRuntimeCapabilitiesRequest {}
 
+message GetRuntimeStatusRequest {}
+
+message GetAgentStatusRequest {}
+
 message RuntimeSourceCapability {
   string scheme = 1;
   CapabilityOwner owner = 2;
@@ -199,6 +208,141 @@ message GetRuntimeCapabilitiesResponse {
   repeated RuntimePluginInfo plugins = 4;
   RuntimeControlTransport control_transport = 5;
   RuntimeCapabilityTransport capability_transport = 6;
+}
+
+message RuntimeTransportStatus {
+  RuntimeControlTransport control = 1;
+  RuntimeCapabilityTransport capability = 2;
+}
+
+message RuntimeCapabilitiesStatus {
+  repeated RuntimePluginInfo plugins = 1;
+  repeated RuntimeSourceCapability sources = 2;
+  repeated RuntimeHandlerCapability sinks = 3;
+  repeated RuntimeHandlerCapability workers = 4;
+}
+
+message RuntimeReadinessStatus {
+  bool ready = 1;
+  string reason = 2;
+}
+
+message RuntimeDeliveryStatus {
+  uint64 delivered = 1;
+  uint64 enqueued = 2;
+  uint64 retried = 3;
+}
+
+message RuntimeSourceStatus {
+  string target = 1;
+  string alias = 2;
+  bool available = 3;
+  uint32 fact_count = 4;
+  uint32 consecutive_failures = 5;
+  string last_error = 6;
+  google.protobuf.Timestamp last_attempt_at = 7;
+  google.protobuf.Timestamp last_success_at = 8;
+  google.protobuf.Timestamp next_retry_at = 9;
+}
+
+message RuntimeSinkStatus {
+  string key = 1;
+  string alias = 2;
+  string kind = 3;
+  string target = 4;
+  bool available = 5;
+  uint32 pending = 6;
+  uint32 ambiguous = 7;
+  uint32 consecutive_failures = 8;
+  string last_error = 9;
+  google.protobuf.Timestamp last_attempt_at = 10;
+  google.protobuf.Timestamp last_success_at = 11;
+  google.protobuf.Timestamp next_retry_at = 12;
+}
+
+message RuntimeActivityStatus {
+  uint64 ticks = 1;
+  uint64 errors = 2;
+  google.protobuf.Timestamp last_tick = 3;
+  RuntimeDeliveryStatus delivery = 4;
+  repeated RuntimeSourceStatus source_status = 5;
+  repeated RuntimeSinkStatus sink_status = 6;
+}
+
+message GetRuntimeStatusResponse {
+  RuntimeReadinessStatus readiness = 1;
+  RuntimeTransportStatus transport = 2;
+  RuntimeCapabilitiesStatus capabilities = 3;
+  RuntimeActivityStatus activity = 4;
+}
+
+message AgentControlTransport {
+  bool enabled = 1;
+  string address = 2;
+  bool public_listener = 3;
+  bool auth_enabled = 4;
+  bool tls_enabled = 5;
+  bool mutual_tls_enabled = 6;
+}
+
+message AgentUpstreamTransport {
+  bool configured = 1;
+  string target = 2;
+  bool auth_enabled = 3;
+  bool tls_enabled = 4;
+  string server_name = 5;
+}
+
+message AgentTransportStatus {
+  AgentControlTransport control = 1;
+  AgentUpstreamTransport upstream = 2;
+}
+
+message AgentReadinessStatus {
+  bool ready = 1;
+  string reason = 2;
+  int64 max_staleness_ms = 3;
+  uint32 target_count = 4;
+  uint32 ready_count = 5;
+}
+
+message AgentBundleSyncStatus {
+  string name = 1;
+  string bundle_id = 2;
+  string checksum = 3;
+  google.protobuf.Timestamp loaded_at = 4;
+  google.protobuf.Timestamp bundle_synced_at = 5;
+  google.protobuf.Timestamp override_synced_at = 6;
+  int64 staleness_ms = 7;
+  int64 override_staleness_ms = 8;
+  bool bundle_watch_connected = 9;
+  bool override_configured = 10;
+  bool override_watch_connected = 11;
+  int64 bundle_errors_total = 12;
+  int64 override_errors_total = 13;
+  int64 bundle_reconnects = 14;
+  int64 override_reconnects = 15;
+  string last_bundle_error = 16;
+  google.protobuf.Timestamp last_bundle_error_at = 17;
+  string last_override_error = 18;
+  google.protobuf.Timestamp last_override_error_at = 19;
+}
+
+message AgentSyncStatus {
+  string primary_name = 1;
+  int64 bundle_errors_total = 2;
+  int64 override_errors_total = 3;
+  int64 bundle_reconnects_total = 4;
+  int64 override_reconnects_total = 5;
+  string last_upstream_error = 6;
+  google.protobuf.Timestamp last_upstream_error_at = 7;
+  repeated AgentBundleSyncStatus bundles = 8;
+}
+
+message GetAgentStatusResponse {
+  AgentReadinessStatus readiness = 1;
+  AgentTransportStatus transport = 2;
+  AgentSyncStatus sync = 3;
 }
 
 message BundleOverrides {

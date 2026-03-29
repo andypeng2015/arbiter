@@ -16,10 +16,12 @@
 - **Inspectable agent posture** — `arbiter-agent /status` now exposes local control-listener posture, upstream transport posture, readiness policy/reason, and per-bundle bundle/override watch connectivity alongside the existing sync counters.
 - **Agent transport hardening parity** — `arbiter-agent` now supports the same local bearer-token and TLS/mTLS hardening shape as `arbiter-runtime` on its local gRPC surface, so the reported control posture is backed by real configuration instead of placeholders.
 - **Canonical operator surfaces** — `arbiter-runtime /status`, `arbiter-agent /status`, and `arbiter runtime-capabilities` now use the same small inspection vocabulary and section order instead of mixing flat counters, ad hoc headings, and transport-specific nouns.
+- **Status over gRPC** — the canonical operator surfaces now travel over RPC too: `RuntimeService.GetRuntimeStatus` exposes `readiness -> transport -> capabilities -> activity`, `AgentService.GetAgentStatus` exposes `readiness -> transport -> sync`, and the CLI now ships `arbiter runtime-status` plus `arbiter agent-status`.
 
 ### SDKs
 
 - **SDK surface parity** — the shipped Node, Python, and Rust clients now track the current gRPC control-plane surface instead of lagging behind it. Strategy evaluation, strategy-candidate override mutation, structured `TraceStep` fields, and explicit `kill_switch_state` now flow through the vendored SDK contracts as well.
+- **Runtime and agent status clients** — the shipped Node, Python, and Rust wrappers now expose runtime-status and agent-status RPCs alongside runtime-capability introspection, so embedders do not need to scrape HTTP `/status`.
 - **Capability-service mirrors** — the Node, Python, and Rust SDK trees now mirror the runtime capability proto as well, so embedders can implement source/sink/worker plugins in those languages instead of being limited to Go interfaces.
 - **Capability server helpers** — Node and Python now ship `CapabilityServer` helpers, and Rust ships `CapabilityPlugin` plus handler traits, so SDK authors can register source/sink/worker behavior without hand-writing raw gRPC service plumbing.
 

@@ -889,6 +889,7 @@ var ArbiterService_ServiceDesc = grpc.ServiceDesc{
 
 const (
 	RuntimeService_GetRuntimeCapabilities_FullMethodName = "/arbiter.v1.RuntimeService/GetRuntimeCapabilities"
+	RuntimeService_GetRuntimeStatus_FullMethodName       = "/arbiter.v1.RuntimeService/GetRuntimeStatus"
 )
 
 // RuntimeServiceClient is the client API for RuntimeService service.
@@ -896,6 +897,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type RuntimeServiceClient interface {
 	GetRuntimeCapabilities(ctx context.Context, in *GetRuntimeCapabilitiesRequest, opts ...grpc.CallOption) (*GetRuntimeCapabilitiesResponse, error)
+	GetRuntimeStatus(ctx context.Context, in *GetRuntimeStatusRequest, opts ...grpc.CallOption) (*GetRuntimeStatusResponse, error)
 }
 
 type runtimeServiceClient struct {
@@ -916,11 +918,22 @@ func (c *runtimeServiceClient) GetRuntimeCapabilities(ctx context.Context, in *G
 	return out, nil
 }
 
+func (c *runtimeServiceClient) GetRuntimeStatus(ctx context.Context, in *GetRuntimeStatusRequest, opts ...grpc.CallOption) (*GetRuntimeStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRuntimeStatusResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_GetRuntimeStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RuntimeServiceServer is the server API for RuntimeService service.
 // All implementations must embed UnimplementedRuntimeServiceServer
 // for forward compatibility.
 type RuntimeServiceServer interface {
 	GetRuntimeCapabilities(context.Context, *GetRuntimeCapabilitiesRequest) (*GetRuntimeCapabilitiesResponse, error)
+	GetRuntimeStatus(context.Context, *GetRuntimeStatusRequest) (*GetRuntimeStatusResponse, error)
 	mustEmbedUnimplementedRuntimeServiceServer()
 }
 
@@ -933,6 +946,9 @@ type UnimplementedRuntimeServiceServer struct{}
 
 func (UnimplementedRuntimeServiceServer) GetRuntimeCapabilities(context.Context, *GetRuntimeCapabilitiesRequest) (*GetRuntimeCapabilitiesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetRuntimeCapabilities not implemented")
+}
+func (UnimplementedRuntimeServiceServer) GetRuntimeStatus(context.Context, *GetRuntimeStatusRequest) (*GetRuntimeStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRuntimeStatus not implemented")
 }
 func (UnimplementedRuntimeServiceServer) mustEmbedUnimplementedRuntimeServiceServer() {}
 func (UnimplementedRuntimeServiceServer) testEmbeddedByValue()                        {}
@@ -973,6 +989,24 @@ func _RuntimeService_GetRuntimeCapabilities_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RuntimeService_GetRuntimeStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRuntimeStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).GetRuntimeStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_GetRuntimeStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).GetRuntimeStatus(ctx, req.(*GetRuntimeStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RuntimeService_ServiceDesc is the grpc.ServiceDesc for RuntimeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -983,6 +1017,112 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetRuntimeCapabilities",
 			Handler:    _RuntimeService_GetRuntimeCapabilities_Handler,
+		},
+		{
+			MethodName: "GetRuntimeStatus",
+			Handler:    _RuntimeService_GetRuntimeStatus_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "arbiter/v1/service.proto",
+}
+
+const (
+	AgentService_GetAgentStatus_FullMethodName = "/arbiter.v1.AgentService/GetAgentStatus"
+)
+
+// AgentServiceClient is the client API for AgentService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type AgentServiceClient interface {
+	GetAgentStatus(ctx context.Context, in *GetAgentStatusRequest, opts ...grpc.CallOption) (*GetAgentStatusResponse, error)
+}
+
+type agentServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAgentServiceClient(cc grpc.ClientConnInterface) AgentServiceClient {
+	return &agentServiceClient{cc}
+}
+
+func (c *agentServiceClient) GetAgentStatus(ctx context.Context, in *GetAgentStatusRequest, opts ...grpc.CallOption) (*GetAgentStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAgentStatusResponse)
+	err := c.cc.Invoke(ctx, AgentService_GetAgentStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AgentServiceServer is the server API for AgentService service.
+// All implementations must embed UnimplementedAgentServiceServer
+// for forward compatibility.
+type AgentServiceServer interface {
+	GetAgentStatus(context.Context, *GetAgentStatusRequest) (*GetAgentStatusResponse, error)
+	mustEmbedUnimplementedAgentServiceServer()
+}
+
+// UnimplementedAgentServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAgentServiceServer struct{}
+
+func (UnimplementedAgentServiceServer) GetAgentStatus(context.Context, *GetAgentStatusRequest) (*GetAgentStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAgentStatus not implemented")
+}
+func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
+func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
+
+// UnsafeAgentServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AgentServiceServer will
+// result in compilation errors.
+type UnsafeAgentServiceServer interface {
+	mustEmbedUnimplementedAgentServiceServer()
+}
+
+func RegisterAgentServiceServer(s grpc.ServiceRegistrar, srv AgentServiceServer) {
+	// If the following call pancis, it indicates UnimplementedAgentServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&AgentService_ServiceDesc, srv)
+}
+
+func _AgentService_GetAgentStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAgentStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).GetAgentStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_GetAgentStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).GetAgentStatus(ctx, req.(*GetAgentStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AgentService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "arbiter.v1.AgentService",
+	HandlerType: (*AgentServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetAgentStatus",
+			Handler:    _AgentService_GetAgentStatus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

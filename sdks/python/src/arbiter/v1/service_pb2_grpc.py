@@ -971,12 +971,23 @@ class RuntimeServiceStub(object):
                 request_serializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeCapabilitiesRequest.SerializeToString,
                 response_deserializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeCapabilitiesResponse.FromString,
                 _registered_method=True)
+        self.GetRuntimeStatus = channel.unary_unary(
+                '/arbiter.v1.RuntimeService/GetRuntimeStatus',
+                request_serializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusRequest.SerializeToString,
+                response_deserializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusResponse.FromString,
+                _registered_method=True)
 
 
 class RuntimeServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetRuntimeCapabilities(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetRuntimeStatus(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -989,6 +1000,11 @@ def add_RuntimeServiceServicer_to_server(servicer, server):
                     servicer.GetRuntimeCapabilities,
                     request_deserializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeCapabilitiesRequest.FromString,
                     response_serializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeCapabilitiesResponse.SerializeToString,
+            ),
+            'GetRuntimeStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetRuntimeStatus,
+                    request_deserializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusRequest.FromString,
+                    response_serializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1018,6 +1034,105 @@ class RuntimeService(object):
             '/arbiter.v1.RuntimeService/GetRuntimeCapabilities',
             arbiter_dot_v1_dot_service__pb2.GetRuntimeCapabilitiesRequest.SerializeToString,
             arbiter_dot_v1_dot_service__pb2.GetRuntimeCapabilitiesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetRuntimeStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/arbiter.v1.RuntimeService/GetRuntimeStatus',
+            arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusRequest.SerializeToString,
+            arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
+class AgentServiceStub(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.GetAgentStatus = channel.unary_unary(
+                '/arbiter.v1.AgentService/GetAgentStatus',
+                request_serializer=arbiter_dot_v1_dot_service__pb2.GetAgentStatusRequest.SerializeToString,
+                response_deserializer=arbiter_dot_v1_dot_service__pb2.GetAgentStatusResponse.FromString,
+                _registered_method=True)
+
+
+class AgentServiceServicer(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def GetAgentStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_AgentServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'GetAgentStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAgentStatus,
+                    request_deserializer=arbiter_dot_v1_dot_service__pb2.GetAgentStatusRequest.FromString,
+                    response_serializer=arbiter_dot_v1_dot_service__pb2.GetAgentStatusResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'arbiter.v1.AgentService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('arbiter.v1.AgentService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class AgentService(object):
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def GetAgentStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/arbiter.v1.AgentService/GetAgentStatus',
+            arbiter_dot_v1_dot_service__pb2.GetAgentStatusRequest.SerializeToString,
+            arbiter_dot_v1_dot_service__pb2.GetAgentStatusResponse.FromString,
             options,
             channel_credentials,
             insecure,

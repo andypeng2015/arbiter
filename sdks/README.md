@@ -19,6 +19,8 @@ All three target the same control-plane surface:
 - expert session lifecycle
 - runtime override mutation, including strategy-candidate governance
 - runtime capability introspection through `RuntimeService.GetRuntimeCapabilities`
+- runtime status introspection through `RuntimeService.GetRuntimeStatus`
+- agent sync-status introspection through `AgentService.GetAgentStatus`
 
 They also ship the capability-service contract so Node, Python, and Rust hosts
 can implement remote source loaders, sink handlers, and worker runtimes for the
@@ -29,10 +31,13 @@ generated types:
 
 - Node exports `CapabilityServer`
 - Node exports `RuntimeClient`
+- Node exports `AgentClient`
 - Python exports `CapabilityServer`
 - Python exports `RuntimeClient`
+- Python exports `AgentClient`
 - Rust exports `CapabilityPlugin` plus `SourceHandler` / `SinkHandler` / `WorkerHandler`
 - Rust exports `RuntimeClient`
+- Rust exports `AgentClient`
 
 Java is still pending. There is no JDK/Maven toolchain in this environment, so
 it was not added as an unverified skeleton.

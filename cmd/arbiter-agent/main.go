@@ -126,6 +126,11 @@ func main() {
 		overrideCP = dataplane.NewFileOverrideControlPlane(*overridesFile)
 	}
 	syncer := dataplane.New(upstreamCP, overrideCP)
+	statusPolicy := readinessPolicy{maxStaleness: *readyMaxStaleness}
+	statusTransport := agentTransportStatus{
+		Control:  controlTransport,
+		Upstream: upstreamTransport,
+	}
 
 	localListener, err := net.Listen("tcp", *listenAddr)
 	if err != nil {
@@ -160,6 +165,7 @@ func main() {
 
 	localServer := grpc.NewServer(serverOptions...)
 	arbiterv1.RegisterArbiterServiceServer(localServer, grpcserver.NewServer(syncer.Registry(), syncer.Overrides(), audit.NopSink{}))
+	arbiterv1.RegisterAgentServiceServer(localServer, newAgentRPCServer(syncer, statusPolicy, statusTransport))
 	go func() {
 		if controlTransport.PublicListener && !controlTransport.AuthEnabled && !controlTransport.TLSEnabled {
 			log.Printf("arbiter-agent: local gRPC listener is public without TLS or auth addr=%s", *listenAddr)
@@ -181,11 +187,8 @@ func main() {
 	var statusServer *http.Server
 	if *statusAddr != "" {
 		statusServer = &http.Server{
-			Addr: *statusAddr,
-			Handler: newStatusHandler(syncer, readinessPolicy{maxStaleness: *readyMaxStaleness}, agentTransportStatus{
-				Control:  controlTransport,
-				Upstream: upstreamTransport,
-			}),
+			Addr:              *statusAddr,
+			Handler:           newStatusHandler(syncer, statusPolicy, statusTransport),
 			ReadHeaderTimeout: 5 * time.Second,
 		}
 		go func() {

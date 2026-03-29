@@ -15,6 +15,8 @@
 //	arbiter bundle --verify <file.arbb> --pub <public-key.pem> — verify a signed bundle
 //	arbiter import <file.json> [-o output.arb] — decompile Arishem JSON to .arb
 //	arbiter runtime-capabilities <target> [--json] — inspect one runtime's gRPC capability surface
+//	arbiter runtime-status <target> [--json] — inspect one runtime's status surface over gRPC
+//	arbiter agent-status <target> [--json] — inspect one agent's status surface over gRPC
 //	arbiter serve [--grpc :8081] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
 
@@ -28,6 +30,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -50,10 +53,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
-	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, serve"
+	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, runtime-status, agent-status, serve"
 	rootUsage   = "Usage: arbiter <command> <file>\nCommands: " + commandList
 )
 
@@ -75,6 +79,8 @@ var commandHandlers = map[string]func([]string) error{
 	"explore":              runExplore,
 	"import":               runImport,
 	"runtime-capabilities": runRuntimeCapabilities,
+	"runtime-status":       runRuntimeStatus,
+	"agent-status":         runAgentStatus,
 	"serve":                runServe,
 }
 
@@ -284,31 +290,22 @@ func runRuntimeCapabilities(args []string) error {
 	if len(args) < 1 {
 		return usageError("Usage: arbiter runtime-capabilities <target> [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
-	cfg := runtimeCapabilitiesConfig{target: args[0]}
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
-		case "--json":
-			cfg.jsonOut = true
-		case "--token":
-			if i+1 < len(args) {
-				cfg.token = args[i+1]
-				i++
-			}
-		case "--ca-file":
-			if i+1 < len(args) {
-				cfg.caFile = args[i+1]
-				i++
-			}
-		case "--server-name":
-			if i+1 < len(args) {
-				cfg.serverName = args[i+1]
-				i++
-			}
-		case "--plaintext":
-			cfg.forceInsecure = true
-		}
-	}
+	cfg := parseRemoteInspectConfig(args)
 	return runtimeCapabilitiesCmd(cfg)
+}
+
+func runRuntimeStatus(args []string) error {
+	if len(args) < 1 {
+		return usageError("Usage: arbiter runtime-status <target> [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+	}
+	return runtimeStatusCmd(parseRemoteInspectConfig(args))
+}
+
+func runAgentStatus(args []string) error {
+	if len(args) < 1 {
+		return usageError("Usage: arbiter agent-status <target> [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+	}
+	return agentStatusCmd(parseRemoteInspectConfig(args))
 }
 
 func runExplore(args []string) error {
@@ -341,13 +338,41 @@ type serveConfig struct {
 	ephemeral          bool
 }
 
-type runtimeCapabilitiesConfig struct {
+type remoteInspectConfig struct {
 	target        string
 	token         string
 	caFile        string
 	serverName    string
 	forceInsecure bool
 	jsonOut       bool
+}
+
+func parseRemoteInspectConfig(args []string) remoteInspectConfig {
+	cfg := remoteInspectConfig{target: args[0]}
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			cfg.jsonOut = true
+		case "--token":
+			if i+1 < len(args) {
+				cfg.token = args[i+1]
+				i++
+			}
+		case "--ca-file":
+			if i+1 < len(args) {
+				cfg.caFile = args[i+1]
+				i++
+			}
+		case "--server-name":
+			if i+1 < len(args) {
+				cfg.serverName = args[i+1]
+				i++
+			}
+		case "--plaintext":
+			cfg.forceInsecure = true
+		}
+	}
+	return cfg
 }
 
 func runServe(args []string) error {
@@ -944,7 +969,7 @@ func serveCmd(cfg serveConfig) error {
 	return grpcSrv.Serve(lis)
 }
 
-func runtimeCapabilitiesCmd(cfg runtimeCapabilitiesConfig) error {
+func runtimeCapabilitiesCmd(cfg remoteInspectConfig) error {
 	conn, _, err := grpcutil.Dial(grpcutil.DialConfig{
 		Target:        cfg.target,
 		Token:         cfg.token,
@@ -977,80 +1002,334 @@ func runtimeCapabilitiesCmd(cfg runtimeCapabilitiesConfig) error {
 	return nil
 }
 
+func runtimeStatusCmd(cfg remoteInspectConfig) error {
+	conn, _, err := grpcutil.Dial(grpcutil.DialConfig{
+		Target:        cfg.target,
+		Token:         cfg.token,
+		CAFile:        cfg.caFile,
+		ServerName:    cfg.serverName,
+		ForceInsecure: cfg.forceInsecure,
+	})
+	if err != nil {
+		return fmt.Errorf("connect runtime %s: %w", strings.TrimSpace(cfg.target), err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := arbiterv1.NewRuntimeServiceClient(conn).GetRuntimeStatus(ctx, &arbiterv1.GetRuntimeStatusRequest{})
+	if err != nil {
+		return fmt.Errorf("get runtime status: %w", err)
+	}
+	if cfg.jsonOut {
+		data, err := protojson.MarshalOptions{Indent: "  "}.Marshal(resp)
+		if err != nil {
+			return fmt.Errorf("marshal runtime status: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	printRuntimeStatus(resp)
+	return nil
+}
+
+func agentStatusCmd(cfg remoteInspectConfig) error {
+	conn, _, err := grpcutil.Dial(grpcutil.DialConfig{
+		Target:        cfg.target,
+		Token:         cfg.token,
+		CAFile:        cfg.caFile,
+		ServerName:    cfg.serverName,
+		ForceInsecure: cfg.forceInsecure,
+	})
+	if err != nil {
+		return fmt.Errorf("connect agent %s: %w", strings.TrimSpace(cfg.target), err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := arbiterv1.NewAgentServiceClient(conn).GetAgentStatus(ctx, &arbiterv1.GetAgentStatusRequest{})
+	if err != nil {
+		return fmt.Errorf("get agent status: %w", err)
+	}
+	if cfg.jsonOut {
+		data, err := protojson.MarshalOptions{Indent: "  "}.Marshal(resp)
+		if err != nil {
+			return fmt.Errorf("marshal agent status: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	printAgentStatus(resp)
+	return nil
+}
+
 func printRuntimeCapabilities(resp *arbiterv1.GetRuntimeCapabilitiesResponse) {
 	fmt.Println("runtime surface")
 	fmt.Println("transport:")
 	if control := resp.GetControlTransport(); control != nil {
-		fmt.Println("  control:")
-		if control.GetEnabled() {
-			fmt.Printf("    - %s\n", control.GetAddress())
-			fmt.Printf("      auth=%t tls=%t mtls=%t public=%t\n", control.GetAuthEnabled(), control.GetTlsEnabled(), control.GetMutualTlsEnabled(), control.GetPublicListener())
-		} else {
-			fmt.Println("    - disabled")
-		}
+		printRuntimeControlTransport("  control:", control)
 	}
 	if capabilityTransport := resp.GetCapabilityTransport(); capabilityTransport != nil {
-		fmt.Println("  capability:")
-		if capabilityTransport.GetConfigured() {
-			fmt.Printf("    - %s\n", capabilityTransport.GetTarget())
-			fmt.Printf("      auth=%t tls=%t\n", capabilityTransport.GetAuthEnabled(), capabilityTransport.GetTlsEnabled())
-			if serverName := strings.TrimSpace(capabilityTransport.GetServerName()); serverName != "" {
-				fmt.Printf("      server_name=%s\n", serverName)
-			}
-		} else {
-			fmt.Println("    - not configured")
-		}
+		printRuntimeCapabilityTransport("  capability:", capabilityTransport)
 	}
 
 	fmt.Println("capabilities:")
-	fmt.Println("  plugins:")
-	if len(resp.GetPlugins()) == 0 {
-		fmt.Println("    - none")
-	} else {
-		for _, plugin := range resp.GetPlugins() {
-			name := plugin.GetName()
-			if version := strings.TrimSpace(plugin.GetVersion()); version != "" {
-				name += " (" + version + ")"
-			}
-			fmt.Printf("    - %s\n", name)
+	printRuntimePlugins("  plugins:", resp.GetPlugins())
+	printRuntimeSources("  sources:", resp.GetSources())
+	printRuntimeHandlers("  sinks:", resp.GetSinks())
+	printRuntimeHandlers("  workers:", resp.GetWorkers())
+}
+
+func printRuntimeStatus(resp *arbiterv1.GetRuntimeStatusResponse) {
+	fmt.Println("runtime status")
+	fmt.Println("readiness:")
+	if readiness := resp.GetReadiness(); readiness != nil {
+		fmt.Printf("  ready=%t\n", readiness.GetReady())
+		if reason := strings.TrimSpace(readiness.GetReason()); reason != "" {
+			fmt.Printf("  reason=%s\n", reason)
 		}
 	}
 
-	fmt.Println("  sources:")
-	if len(resp.GetSources()) == 0 {
-		fmt.Println("    - none")
-	} else {
-		for _, item := range resp.GetSources() {
-			fmt.Printf("    - %s [%s]\n", item.GetScheme(), capabilityOwnerLabel(item.GetOwner()))
-			if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
-				fmt.Printf("      %s\n", desc)
-			}
-		}
+	if transport := resp.GetTransport(); transport != nil {
+		fmt.Println("transport:")
+		printRuntimeControlTransport("  control:", transport.GetControl())
+		printRuntimeCapabilityTransport("  capability:", transport.GetCapability())
 	}
 
-	fmt.Println("  sinks:")
-	if len(resp.GetSinks()) == 0 {
-		fmt.Println("    - none")
-	} else {
-		for _, item := range resp.GetSinks() {
-			fmt.Printf("    - %s [%s]\n", item.GetKind(), capabilityOwnerLabel(item.GetOwner()))
-			if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
-				fmt.Printf("      %s\n", desc)
-			}
-		}
+	if capabilities := resp.GetCapabilities(); capabilities != nil {
+		fmt.Println("capabilities:")
+		printRuntimePlugins("  plugins:", capabilities.GetPlugins())
+		printRuntimeSources("  sources:", capabilities.GetSources())
+		printRuntimeHandlers("  sinks:", capabilities.GetSinks())
+		printRuntimeHandlers("  workers:", capabilities.GetWorkers())
 	}
 
-	fmt.Println("  workers:")
-	if len(resp.GetWorkers()) == 0 {
-		fmt.Println("    - none")
-	} else {
-		for _, item := range resp.GetWorkers() {
-			fmt.Printf("    - %s [%s]\n", item.GetKind(), capabilityOwnerLabel(item.GetOwner()))
-			if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
-				fmt.Printf("      %s\n", desc)
+	if activity := resp.GetActivity(); activity != nil {
+		fmt.Println("activity:")
+		fmt.Printf("  ticks=%d errors=%d\n", activity.GetTicks(), activity.GetErrors())
+		if lastTick := formatProtoTimestamp(activity.GetLastTick()); lastTick != "" {
+			fmt.Printf("  last_tick=%s\n", lastTick)
+		}
+		if delivery := activity.GetDelivery(); delivery != nil {
+			fmt.Printf("  delivery: delivered=%d enqueued=%d retried=%d\n", delivery.GetDelivered(), delivery.GetEnqueued(), delivery.GetRetried())
+		}
+		fmt.Println("  source_status:")
+		if len(activity.GetSourceStatus()) == 0 {
+			fmt.Println("    - none")
+		} else {
+			for _, item := range activity.GetSourceStatus() {
+				fmt.Printf("    - %s alias=%s available=%t facts=%d failures=%d\n", item.GetTarget(), item.GetAlias(), item.GetAvailable(), item.GetFactCount(), item.GetConsecutiveFailures())
+				if lastError := strings.TrimSpace(item.GetLastError()); lastError != "" {
+					fmt.Printf("      last_error=%s\n", lastError)
+				}
+				printTimestamps("      ", map[string]*timestamppb.Timestamp{
+					"last_attempt_at": item.GetLastAttemptAt(),
+					"last_success_at": item.GetLastSuccessAt(),
+					"next_retry_at":   item.GetNextRetryAt(),
+				})
+			}
+		}
+		fmt.Println("  sink_status:")
+		if len(activity.GetSinkStatus()) == 0 {
+			fmt.Println("    - none")
+		} else {
+			for _, item := range activity.GetSinkStatus() {
+				fmt.Printf("    - %s kind=%s target=%s available=%t pending=%d ambiguous=%d failures=%d\n", item.GetKey(), item.GetKind(), item.GetTarget(), item.GetAvailable(), item.GetPending(), item.GetAmbiguous(), item.GetConsecutiveFailures())
+				if lastError := strings.TrimSpace(item.GetLastError()); lastError != "" {
+					fmt.Printf("      last_error=%s\n", lastError)
+				}
+				printTimestamps("      ", map[string]*timestamppb.Timestamp{
+					"last_attempt_at": item.GetLastAttemptAt(),
+					"last_success_at": item.GetLastSuccessAt(),
+					"next_retry_at":   item.GetNextRetryAt(),
+				})
 			}
 		}
 	}
+}
+
+func printAgentStatus(resp *arbiterv1.GetAgentStatusResponse) {
+	fmt.Println("agent status")
+	fmt.Println("readiness:")
+	if readiness := resp.GetReadiness(); readiness != nil {
+		fmt.Printf("  ready=%t\n", readiness.GetReady())
+		if reason := strings.TrimSpace(readiness.GetReason()); reason != "" {
+			fmt.Printf("  reason=%s\n", reason)
+		}
+		fmt.Printf("  targets=%d/%d max_staleness_ms=%d\n", readiness.GetReadyCount(), readiness.GetTargetCount(), readiness.GetMaxStalenessMs())
+	}
+
+	if transport := resp.GetTransport(); transport != nil {
+		fmt.Println("transport:")
+		printAgentControlTransport("  control:", transport.GetControl())
+		printAgentUpstreamTransport("  upstream:", transport.GetUpstream())
+	}
+
+	if sync := resp.GetSync(); sync != nil {
+		fmt.Println("sync:")
+		if primary := strings.TrimSpace(sync.GetPrimaryName()); primary != "" {
+			fmt.Printf("  primary_name=%s\n", primary)
+		}
+		fmt.Printf("  errors: bundle=%d override=%d\n", sync.GetBundleErrorsTotal(), sync.GetOverrideErrorsTotal())
+		fmt.Printf("  reconnects: bundle=%d override=%d\n", sync.GetBundleReconnectsTotal(), sync.GetOverrideReconnectsTotal())
+		if lastError := strings.TrimSpace(sync.GetLastUpstreamError()); lastError != "" {
+			fmt.Printf("  last_upstream_error=%s\n", lastError)
+		}
+		if ts := formatProtoTimestamp(sync.GetLastUpstreamErrorAt()); ts != "" {
+			fmt.Printf("  last_upstream_error_at=%s\n", ts)
+		}
+		fmt.Println("  bundles:")
+		if len(sync.GetBundles()) == 0 {
+			fmt.Println("    - none")
+		} else {
+			for _, item := range sync.GetBundles() {
+				fmt.Printf("    - %s bundle_id=%s bundle_watch=%t override_configured=%t override_watch=%t\n", item.GetName(), item.GetBundleId(), item.GetBundleWatchConnected(), item.GetOverrideConfigured(), item.GetOverrideWatchConnected())
+				if checksum := strings.TrimSpace(item.GetChecksum()); checksum != "" {
+					fmt.Printf("      checksum=%s\n", checksum)
+				}
+				fmt.Printf("      staleness_ms=%d override_staleness_ms=%d bundle_errors=%d override_errors=%d bundle_reconnects=%d override_reconnects=%d\n", item.GetStalenessMs(), item.GetOverrideStalenessMs(), item.GetBundleErrorsTotal(), item.GetOverrideErrorsTotal(), item.GetBundleReconnects(), item.GetOverrideReconnects())
+				if lastBundleError := strings.TrimSpace(item.GetLastBundleError()); lastBundleError != "" {
+					fmt.Printf("      last_bundle_error=%s\n", lastBundleError)
+				}
+				if lastOverrideError := strings.TrimSpace(item.GetLastOverrideError()); lastOverrideError != "" {
+					fmt.Printf("      last_override_error=%s\n", lastOverrideError)
+				}
+				printTimestamps("      ", map[string]*timestamppb.Timestamp{
+					"loaded_at":              item.GetLoadedAt(),
+					"bundle_synced_at":       item.GetBundleSyncedAt(),
+					"override_synced_at":     item.GetOverrideSyncedAt(),
+					"last_bundle_error_at":   item.GetLastBundleErrorAt(),
+					"last_override_error_at": item.GetLastOverrideErrorAt(),
+				})
+			}
+		}
+	}
+}
+
+func printRuntimeControlTransport(label string, control *arbiterv1.RuntimeControlTransport) {
+	if control == nil {
+		return
+	}
+	fmt.Println(label)
+	if control.GetEnabled() {
+		fmt.Printf("    - %s\n", control.GetAddress())
+		fmt.Printf("      auth=%t tls=%t mtls=%t public=%t\n", control.GetAuthEnabled(), control.GetTlsEnabled(), control.GetMutualTlsEnabled(), control.GetPublicListener())
+		return
+	}
+	fmt.Println("    - disabled")
+}
+
+func printRuntimeCapabilityTransport(label string, capabilityTransport *arbiterv1.RuntimeCapabilityTransport) {
+	if capabilityTransport == nil {
+		return
+	}
+	fmt.Println(label)
+	if capabilityTransport.GetConfigured() {
+		fmt.Printf("    - %s\n", capabilityTransport.GetTarget())
+		fmt.Printf("      auth=%t tls=%t\n", capabilityTransport.GetAuthEnabled(), capabilityTransport.GetTlsEnabled())
+		if serverName := strings.TrimSpace(capabilityTransport.GetServerName()); serverName != "" {
+			fmt.Printf("      server_name=%s\n", serverName)
+		}
+		return
+	}
+	fmt.Println("    - not configured")
+}
+
+func printRuntimePlugins(label string, plugins []*arbiterv1.RuntimePluginInfo) {
+	fmt.Println(label)
+	if len(plugins) == 0 {
+		fmt.Println("    - none")
+		return
+	}
+	for _, plugin := range plugins {
+		name := plugin.GetName()
+		if version := strings.TrimSpace(plugin.GetVersion()); version != "" {
+			name += " (" + version + ")"
+		}
+		fmt.Printf("    - %s\n", name)
+	}
+}
+
+func printRuntimeSources(label string, sources []*arbiterv1.RuntimeSourceCapability) {
+	fmt.Println(label)
+	if len(sources) == 0 {
+		fmt.Println("    - none")
+		return
+	}
+	for _, item := range sources {
+		fmt.Printf("    - %s [%s]\n", item.GetScheme(), capabilityOwnerLabel(item.GetOwner()))
+		if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
+			fmt.Printf("      %s\n", desc)
+		}
+	}
+}
+
+func printRuntimeHandlers(label string, handlers []*arbiterv1.RuntimeHandlerCapability) {
+	fmt.Println(label)
+	if len(handlers) == 0 {
+		fmt.Println("    - none")
+		return
+	}
+	for _, item := range handlers {
+		fmt.Printf("    - %s [%s]\n", item.GetKind(), capabilityOwnerLabel(item.GetOwner()))
+		if desc := strings.TrimSpace(item.GetDescription()); desc != "" {
+			fmt.Printf("      %s\n", desc)
+		}
+	}
+}
+
+func printAgentControlTransport(label string, control *arbiterv1.AgentControlTransport) {
+	if control == nil {
+		return
+	}
+	fmt.Println(label)
+	if control.GetEnabled() {
+		fmt.Printf("    - %s\n", control.GetAddress())
+		fmt.Printf("      auth=%t tls=%t mtls=%t public=%t\n", control.GetAuthEnabled(), control.GetTlsEnabled(), control.GetMutualTlsEnabled(), control.GetPublicListener())
+		return
+	}
+	fmt.Println("    - disabled")
+}
+
+func printAgentUpstreamTransport(label string, upstream *arbiterv1.AgentUpstreamTransport) {
+	if upstream == nil {
+		return
+	}
+	fmt.Println(label)
+	if upstream.GetConfigured() {
+		fmt.Printf("    - %s\n", upstream.GetTarget())
+		fmt.Printf("      auth=%t tls=%t\n", upstream.GetAuthEnabled(), upstream.GetTlsEnabled())
+		if serverName := strings.TrimSpace(upstream.GetServerName()); serverName != "" {
+			fmt.Printf("      server_name=%s\n", serverName)
+		}
+		return
+	}
+	fmt.Println("    - not configured")
+}
+
+func printTimestamps(prefix string, fields map[string]*timestamppb.Timestamp) {
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if formatted := formatProtoTimestamp(fields[key]); formatted != "" {
+			fmt.Printf("%s%s=%s\n", prefix, key, formatted)
+		}
+	}
+}
+
+func formatProtoTimestamp(value *timestamppb.Timestamp) string {
+	if value == nil {
+		return ""
+	}
+	return value.AsTime().UTC().Format(time.RFC3339)
 }
 
 func capabilityOwnerLabel(owner arbiterv1.CapabilityOwner) string {

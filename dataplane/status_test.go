@@ -32,7 +32,14 @@ func TestAgentStatusReportsReadyBundleAndFreshness(t *testing.T) {
 		t.Fatal("timed out waiting for readiness")
 	}
 
-	status := syncer.Status()
+	status := waitForAgentStatus(t, syncer, func(status AgentStatus) bool {
+		return status.Ready &&
+			status.PrimaryName == "checkout" &&
+			status.TargetCount == 1 &&
+			status.ReadyCount == 1 &&
+			len(status.Bundles) == 1 &&
+			status.Bundles[0].BundleWatchConnected
+	}, agentTestTimeout)
 	if !status.Ready {
 		t.Fatal("expected ready status")
 	}

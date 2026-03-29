@@ -423,3 +423,88 @@ class RuntimeClient:
             self.stub.GetRuntimeCapabilities,
             service_pb2.GetRuntimeCapabilitiesRequest(),
         )
+
+    def get_runtime_status(self) -> service_pb2.GetRuntimeStatusResponse:
+        return self._invoke(
+            self.stub.GetRuntimeStatus,
+            service_pb2.GetRuntimeStatusRequest(),
+        )
+
+
+class AgentClient:
+    def __init__(
+        self,
+        target: str,
+        *,
+        channel: grpc.Channel | None = None,
+        options: Sequence[tuple[str, Any]] = (),
+        token: str | None = None,
+        metadata: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None,
+        secure: bool | None = None,
+        root_certificates: bytes | None = None,
+        private_key: bytes | None = None,
+        certificate_chain: bytes | None = None,
+        server_name_override: str | None = None,
+        retry_attempts: int = 3,
+        initial_backoff: float = 0.1,
+        max_backoff: float = 1.0,
+        backoff_multiplier: float = 2.0,
+        retryable_status_codes: Sequence[grpc.StatusCode] = _DEFAULT_RETRYABLE_CODES,
+    ) -> None:
+        self._metadata = _normalize_metadata(metadata, token)
+        self._retry_attempts = max(1, retry_attempts)
+        self._initial_backoff = max(0.0, initial_backoff)
+        self._max_backoff = max(self._initial_backoff, max_backoff)
+        self._backoff_multiplier = max(1.0, backoff_multiplier)
+        self._retryable_status_codes = tuple(retryable_status_codes)
+        if channel is None:
+            secure = secure if secure is not None else bool(
+                root_certificates or private_key or certificate_chain or server_name_override
+            )
+            normalized_target, use_tls = _normalize_target(target, secure)
+            channel_options = list(options)
+            if server_name_override:
+                channel_options.append(("grpc.ssl_target_name_override", server_name_override))
+                channel_options.append(("grpc.default_authority", server_name_override))
+            if use_tls:
+                credentials = grpc.ssl_channel_credentials(
+                    root_certificates=root_certificates,
+                    private_key=private_key,
+                    certificate_chain=certificate_chain,
+                )
+                self._channel = grpc.secure_channel(normalized_target, credentials, options=tuple(channel_options))
+            else:
+                self._channel = grpc.insecure_channel(normalized_target, options=tuple(channel_options))
+        else:
+            self._channel = channel
+        self._owns_channel = channel is None
+        self.stub = service_pb2_grpc.AgentServiceStub(self._channel)
+
+    def close(self) -> None:
+        if self._owns_channel:
+            self._channel.close()
+
+    def __enter__(self) -> "AgentClient":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def _invoke(self, rpc: Any, request: Any) -> Any:
+        backoff = self._initial_backoff
+        for attempt in range(1, self._retry_attempts + 1):
+            try:
+                return rpc(request, metadata=self._metadata or None)
+            except grpc.RpcError as exc:
+                if attempt >= self._retry_attempts or exc.code() not in self._retryable_status_codes:
+                    raise
+                if backoff > 0:
+                    time.sleep(backoff)
+                backoff = min(self._max_backoff, backoff * self._backoff_multiplier)
+        raise RuntimeError("exhausted retries")
+
+    def get_agent_status(self) -> service_pb2.GetAgentStatusResponse:
+        return self._invoke(
+            self.stub.GetAgentStatus,
+            service_pb2.GetAgentStatusRequest(),
+        )

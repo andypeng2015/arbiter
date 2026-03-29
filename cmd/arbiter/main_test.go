@@ -291,6 +291,138 @@ func TestPrintRuntimeCapabilitiesUsesCanonicalSections(t *testing.T) {
 	}
 }
 
+func TestPrintRuntimeStatusUsesCanonicalSections(t *testing.T) {
+	out := captureStdout(t, func() {
+		printRuntimeStatus(&arbiterv1.GetRuntimeStatusResponse{
+			Readiness: &arbiterv1.RuntimeReadinessStatus{
+				Ready:  false,
+				Reason: "first tick incomplete",
+			},
+			Transport: &arbiterv1.RuntimeTransportStatus{
+				Control: &arbiterv1.RuntimeControlTransport{
+					Enabled:          true,
+					Address:          "127.0.0.1:7081",
+					AuthEnabled:      true,
+					TlsEnabled:       true,
+					MutualTlsEnabled: true,
+				},
+				Capability: &arbiterv1.RuntimeCapabilityTransport{
+					Configured:  true,
+					Target:      "plugin.internal:7443",
+					AuthEnabled: true,
+					TlsEnabled:  true,
+				},
+			},
+			Capabilities: &arbiterv1.RuntimeCapabilitiesStatus{
+				Plugins: []*arbiterv1.RuntimePluginInfo{{Name: "ops-plugin", Version: "1.2.3"}},
+				Sources: []*arbiterv1.RuntimeSourceCapability{{Scheme: "kafka", Owner: arbiterv1.CapabilityOwner_CAPABILITY_OWNER_PLUGIN}},
+				Sinks:   []*arbiterv1.RuntimeHandlerCapability{{Kind: "slack", Owner: arbiterv1.CapabilityOwner_CAPABILITY_OWNER_HOST}},
+				Workers: []*arbiterv1.RuntimeHandlerCapability{{Kind: "python", Owner: arbiterv1.CapabilityOwner_CAPABILITY_OWNER_PLUGIN}},
+			},
+			Activity: &arbiterv1.RuntimeActivityStatus{
+				Ticks:    7,
+				Errors:   2,
+				Delivery: &arbiterv1.RuntimeDeliveryStatus{Delivered: 3, Enqueued: 2, Retried: 1},
+				SourceStatus: []*arbiterv1.RuntimeSourceStatus{{
+					Target:    "kafka://prices",
+					Alias:     "prices",
+					Available: true,
+					FactCount: 4,
+				}},
+				SinkStatus: []*arbiterv1.RuntimeSinkStatus{{
+					Key:       "ops",
+					Kind:      "slack",
+					Target:    "slack://ops",
+					Available: true,
+				}},
+			},
+		})
+	})
+
+	for _, fragment := range []string{
+		"runtime status",
+		"readiness:",
+		"reason=first tick incomplete",
+		"transport:",
+		"capabilities:",
+		"activity:",
+		"delivery: delivered=3 enqueued=2 retried=1",
+		"source_status:",
+		"kafka://prices alias=prices available=true facts=4 failures=0",
+		"sink_status:",
+		"ops kind=slack target=slack://ops available=true pending=0 ambiguous=0 failures=0",
+	} {
+		if !strings.Contains(out, fragment) {
+			t.Fatalf("expected runtime status output to contain %q, got %s", fragment, out)
+		}
+	}
+}
+
+func TestPrintAgentStatusUsesCanonicalSections(t *testing.T) {
+	out := captureStdout(t, func() {
+		printAgentStatus(&arbiterv1.GetAgentStatusResponse{
+			Readiness: &arbiterv1.AgentReadinessStatus{
+				Ready:          true,
+				MaxStalenessMs: 30000,
+				TargetCount:    2,
+				ReadyCount:     1,
+			},
+			Transport: &arbiterv1.AgentTransportStatus{
+				Control: &arbiterv1.AgentControlTransport{
+					Enabled: true,
+					Address: "127.0.0.1:7081",
+				},
+				Upstream: &arbiterv1.AgentUpstreamTransport{
+					Configured:  true,
+					Target:      "arbiter.internal:7443",
+					AuthEnabled: true,
+					TlsEnabled:  true,
+				},
+			},
+			Sync: &arbiterv1.AgentSyncStatus{
+				PrimaryName:             "checkout",
+				BundleErrorsTotal:       3,
+				OverrideErrorsTotal:     1,
+				BundleReconnectsTotal:   4,
+				OverrideReconnectsTotal: 2,
+				LastUpstreamError:       "upstream unavailable",
+				Bundles: []*arbiterv1.AgentBundleSyncStatus{{
+					Name:                   "checkout",
+					BundleId:               "bundle-1",
+					Checksum:               "abc123",
+					BundleWatchConnected:   true,
+					OverrideConfigured:     true,
+					OverrideWatchConnected: true,
+					StalenessMs:            5,
+					OverrideStalenessMs:    7,
+					BundleErrorsTotal:      3,
+					OverrideErrorsTotal:    1,
+					BundleReconnects:       4,
+					OverrideReconnects:     2,
+				}},
+			},
+		})
+	})
+
+	for _, fragment := range []string{
+		"agent status",
+		"readiness:",
+		"targets=1/2 max_staleness_ms=30000",
+		"transport:",
+		"arbiter.internal:7443",
+		"sync:",
+		"primary_name=checkout",
+		"errors: bundle=3 override=1",
+		"bundles:",
+		"checkout bundle_id=bundle-1 bundle_watch=true override_configured=true override_watch=true",
+		"checksum=abc123",
+	} {
+		if !strings.Contains(out, fragment) {
+			t.Fatalf("expected agent status output to contain %q, got %s", fragment, out)
+		}
+	}
+}
+
 func writeCLIFile(t *testing.T, dir, name, contents string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

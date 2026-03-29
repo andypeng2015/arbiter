@@ -589,6 +589,8 @@ arbiter replay candidate.arb --audit decisions.jsonl --request-id req-42
 arbiter check rules.arb            # validate without emitting
 arbiter expert tax.arb --envelope '{...}' [--facts '[...]']
 arbiter runtime-capabilities grpcs://runtime.internal:7443 --token "$ARBITER_RUNTIME_TOKEN" --ca-file /etc/arbiter/runtime-ca.pem --json
+arbiter runtime-status grpcs://runtime.internal:7443 --token "$ARBITER_RUNTIME_TOKEN" --ca-file /etc/arbiter/runtime-ca.pem
+arbiter agent-status grpcs://127.0.0.1:7081 --token "$ARBITER_AGENT_TOKEN"
 arbiter serve --grpc 127.0.0.1:8081 --auth-token "$ARBITER_TOKEN" --max-recv-bytes 4194304 --data-dir ./state
 arbiter-agent --upstream https://arbiter.internal:443 --upstream-token "$ARBITER_TOKEN" --bundle-name checkout --grpc 127.0.0.1:7081 --status 127.0.0.1:7082
 ```
@@ -597,7 +599,7 @@ arbiter-agent --upstream https://arbiter.internal:443 --upstream-token "$ARBITER
 
 `arbiter replay` answers “what would happen now?” by reading audited `kind: "rules"` JSONL events, re-evaluating the recorded contexts, and reporting outcome drift. Use `--request-id` to focus on one audited decision or `--limit` to cap the batch.
 
-`arbiter-agent` is the localhost data-plane form factor. It bootstraps one or many active bundles from the upstream control plane with `GetBundle`, keeps `WatchBundles(active_only=true)` streams open, syncs runtime overrides from `GetOverrides` plus `WatchOverrides`, and serves the normal Arbiter gRPC API from its own in-memory registry and override store. Its `/status` surface now follows the same inspection pattern as the runtime: `readiness`, `transport`, and `sync` sections up front, then the legacy flat counters and bundle snapshots behind them for compatibility.
+`arbiter-agent` is the localhost data-plane form factor. It bootstraps one or many active bundles from the upstream control plane with `GetBundle`, keeps `WatchBundles(active_only=true)` streams open, syncs runtime overrides from `GetOverrides` plus `WatchOverrides`, and serves the normal Arbiter gRPC API from its own in-memory registry and override store. Its `/status` surface now follows the same inspection pattern as the runtime: `readiness`, `transport`, and `sync` sections up front, then the legacy flat counters and bundle snapshots behind them for compatibility. The same canonical shape is available over gRPC through `AgentService.GetAgentStatus`.
 
 Repeat `--bundle-name` to keep multiple bundles hot, or set `ARBITER_BUNDLE_NAMES=checkout,pricing`. The legacy single-value `ARBITER_BUNDLE_NAME` env var still works.
 
@@ -607,7 +609,7 @@ Use `--upstream-token`, `--upstream-ca-file`, `--upstream-server-name`, or `--up
 
 Use `--auth-token`, `--auth-token-file`, `--tls-cert`, `--tls-key`, and optional `--tls-client-ca` when the agent's local gRPC surface leaves localhost or crosses a trust boundary.
 
-`arbiter runtime-capabilities` accepts `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure runtime control, or `--plaintext` to force insecure transport against a bare target. The response and default text renderer now both use the same inspection order: `transport` first, then `capabilities`, with control-surface posture (`auth`, `tls`, `mtls`, `public_listener`) and capability-plugin posture (`target`, `auth`, `tls`, `server_name`) rendered with the same nouns the runtime reports over HTTP and gRPC.
+`arbiter runtime-capabilities`, `arbiter runtime-status`, and `arbiter agent-status` accept `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure control-surface access, or `--plaintext` to force insecure transport against a bare target. The runtime inspection commands now split cleanly: `runtime-capabilities` reports transport plus capability algebra, `runtime-status` reports `readiness -> transport -> capabilities -> activity`, and `agent-status` reports `readiness -> transport -> sync`.
 
 ### Self-Hosted Profile
 
@@ -1163,7 +1165,8 @@ It handles the full lifecycle:
 - **Bounded parallelism** — independent sources and handler targets can run concurrently inside one tick without changing per-target ordering
 - **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
 - **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON sections: `readiness`, `transport`, `capabilities`, `activity`, plus legacy flat mirrors for compatibility)
-- **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` exposes the same unified capability surface plus transport posture over gRPC for SDKs and CLI clients
+- **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` and `RuntimeService.GetRuntimeStatus` expose the runtime's canonical capability and status surfaces over gRPC for SDKs and CLI clients
+- **Agent control RPC** — optional `AgentService.GetAgentStatus` exposes the agent's canonical `readiness -> transport -> sync` surface over the same local gRPC listener
 
 Runtime transport is now opinionated instead of ad hoc:
 
