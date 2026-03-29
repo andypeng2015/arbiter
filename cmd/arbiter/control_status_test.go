@@ -73,6 +73,7 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 		controlListenerTransport{Enabled: true, Address: "127.0.0.1:8081", AuthEnabled: true, TLSEnabled: true},
 		"/tmp/bundles.json",
 		"/tmp/overrides.json",
+		"/tmp/decisions.jsonl",
 	)
 
 	if !payload.Readiness.Ready || payload.Readiness.Reason != "" {
@@ -98,6 +99,9 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 	}
 	if len(payload.Sessions.Bundles) != 1 || payload.Sessions.Bundles[0].Name != "checkout" || payload.Sessions.Bundles[0].Active != 1 {
 		t.Fatalf("unexpected session bundles: %+v", payload.Sessions.Bundles)
+	}
+	if !payload.Audit.Configured || payload.Audit.Kind != "jsonl" || !payload.Audit.Durable || payload.Audit.File != "/tmp/decisions.jsonl" {
+		t.Fatalf("unexpected audit status: %+v", payload.Audit)
 	}
 }
 
@@ -159,6 +163,12 @@ func TestProtoControlStatus(t *testing.T) {
 				Active:   1,
 			}},
 		},
+		Audit: controlAuditStatus{
+			Configured: true,
+			Kind:       "jsonl",
+			Durable:    true,
+			File:       "/tmp/decisions.jsonl",
+		},
 	}
 
 	resp := protoControlStatus(payload)
@@ -185,6 +195,9 @@ func TestProtoControlStatus(t *testing.T) {
 	}
 	if item := resp.GetSessions().GetBundles()[0]; item.GetName() != "checkout" || item.GetActive() != 1 {
 		t.Fatalf("unexpected session bundle: %+v", item)
+	}
+	if !resp.GetAudit().GetConfigured() || resp.GetAudit().GetKind() != "jsonl" || !resp.GetAudit().GetDurable() || resp.GetAudit().GetFile() != "/tmp/decisions.jsonl" {
+		t.Fatalf("unexpected audit payload: %+v", resp.GetAudit())
 	}
 	if got := resp.GetTransport().GetControl().GetMutualTlsEnabled(); !got {
 		t.Fatalf("expected mutual TLS to survive proto conversion, got %+v", resp.GetTransport().GetControl())

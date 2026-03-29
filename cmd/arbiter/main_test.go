@@ -479,6 +479,12 @@ func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
 					Active:   1,
 				}},
 			},
+			Audit: &arbiterv1.ControlAuditStatus{
+				Configured: true,
+				Kind:       "jsonl",
+				Durable:    true,
+				File:       "/tmp/decisions.jsonl",
+			},
 		})
 	})
 
@@ -496,6 +502,9 @@ func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
 		"/tmp/overrides.json",
 		"sessions:",
 		"active=1 ttl_ms=1800000 max_count=100 max_per_owner=5",
+		"audit:",
+		"configured=true kind=jsonl durable=true",
+		"/tmp/decisions.jsonl",
 	} {
 		if !strings.Contains(out, fragment) {
 			t.Fatalf("expected control status output to contain %q, got %s", fragment, out)

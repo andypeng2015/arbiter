@@ -423,12 +423,20 @@ message ControlSessionsStatus {
   repeated ControlSessionBundleStatus bundles = 5;
 }
 
+message ControlAuditStatus {
+  bool configured = 1;
+  string kind = 2;
+  bool durable = 3;
+  string file = 4;
+}
+
 message GetControlStatusResponse {
   ControlReadinessStatus readiness = 1;
   ControlTransportStatus transport = 2;
   ControlBundlesStatus bundles = 3;
   ControlOverridesStatus overrides = 4;
   ControlSessionsStatus sessions = 5;
+  ControlAuditStatus audit = 6;
 }
 
 message BundleOverrides {

@@ -935,6 +935,7 @@ func serveCmd(cfg serveConfig) error {
 		transport:     controlTransport,
 		bundleFile:    bundleFile,
 		overridesFile: overridesFile,
+		auditFile:     cfg.auditFile,
 	}
 
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
@@ -1363,6 +1364,14 @@ func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
 				}
 				fmt.Printf("    - %s bundle_id=%s active=%d\n", label, item.GetBundleId(), item.GetActive())
 			}
+		}
+	}
+
+	if audit := resp.GetAudit(); audit != nil {
+		fmt.Println("audit:")
+		fmt.Printf("  configured=%t kind=%s durable=%t\n", audit.GetConfigured(), audit.GetKind(), audit.GetDurable())
+		if file := strings.TrimSpace(audit.GetFile()); file != "" {
+			fmt.Printf("  file=%s\n", file)
 		}
 	}
 }

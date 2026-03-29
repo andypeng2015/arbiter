@@ -543,7 +543,7 @@ Bundles are published once and evaluated many times. Each bundle compiles rules,
 - `--session-ttl`, `--session-max`, and `--session-max-per-owner` to constrain expert-session state
 - `--data-dir` or explicit `--bundle-file` / `--overrides-file` for file-backed persistence, or `--ephemeral` for memory-only mode
 
-The hosted control plane now exposes the same kind of operator surface as the runtime and agent. `ControlService.GetControlStatus` and HTTP `/status` report `readiness -> transport -> bundles -> overrides -> sessions`, including listener auth/TLS posture, persisted bundle/override files, active bundle versions, and live expert-session occupancy.
+The hosted control plane now exposes the same kind of operator surface as the runtime and agent. `ControlService.GetControlStatus` and HTTP `/status` report `readiness -> transport -> bundles -> overrides -> sessions -> audit`, including listener auth/TLS posture, persisted bundle/override files, active bundle versions, live expert-session occupancy, and whether decision recording is durable or discarded.
 
 ### Audit
 
@@ -616,7 +616,7 @@ Use `--upstream-token`, `--upstream-ca-file`, `--upstream-server-name`, or `--up
 
 Use `--auth-token`, `--auth-token-file`, `--tls-cert`, `--tls-key`, and optional `--tls-client-ca` when the agent's local gRPC surface leaves localhost or crosses a trust boundary.
 
-`arbiter runtime-capabilities`, `arbiter runtime-status`, `arbiter agent-status`, and `arbiter control-status` accept `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure control-surface access, or `--plaintext` to force insecure transport against a bare target. The inspection commands now split cleanly: `runtime-capabilities` reports transport plus capability algebra, `runtime-status` reports `readiness -> transport -> capabilities -> activity`, `agent-status` reports `readiness -> transport -> sync`, and `control-status` reports `readiness -> transport -> bundles -> overrides -> sessions`.
+`arbiter runtime-capabilities`, `arbiter runtime-status`, `arbiter agent-status`, and `arbiter control-status` accept `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure control-surface access, or `--plaintext` to force insecure transport against a bare target. The inspection commands now split cleanly: `runtime-capabilities` reports transport plus capability algebra, `runtime-status` reports `readiness -> transport -> capabilities -> activity`, `agent-status` reports `readiness -> transport -> sync`, and `control-status` reports `readiness -> transport -> bundles -> overrides -> sessions -> audit`.
 
 ### Self-Hosted Profile
 
@@ -1174,7 +1174,7 @@ It handles the full lifecycle:
 - **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON sections: `readiness`, `transport`, `capabilities`, `activity`, plus legacy flat mirrors for compatibility)
 - **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` and `RuntimeService.GetRuntimeStatus` expose the runtime's canonical capability and status surfaces over gRPC for SDKs and CLI clients
 - **Agent control RPC** — optional `AgentService.GetAgentStatus` exposes the agent's canonical `readiness -> transport -> sync` surface over the same local gRPC listener
-- **Hosted control RPC** — `ControlService.GetControlStatus` exposes the hosted control plane's canonical `readiness -> transport -> bundles -> overrides -> sessions` surface over the same gRPC listener as bundle lifecycle and evaluation APIs
+- **Hosted control RPC** — `ControlService.GetControlStatus` exposes the hosted control plane's canonical `readiness -> transport -> bundles -> overrides -> sessions -> audit` surface over the same gRPC listener as bundle lifecycle and evaluation APIs
 
 Runtime transport is now opinionated instead of ad hoc:
 
