@@ -7,6 +7,7 @@ import (
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/capability"
+	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/workflow"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -67,6 +68,7 @@ func protoRuntimeStatus(payload runtimeStatusPayload) *arbiterv1.GetRuntimeStatu
 			Ready:  payload.Readiness.Ready,
 			Reason: payload.Readiness.Reason,
 		},
+		Issues:       statusview.ProtoIssues(payload.Issues),
 		Transport:    protoRuntimeTransportStatus(payload.Transport.Control, payload.Transport.Capability),
 		Capabilities: protoRuntimeCapabilitiesStatus(payload.Capabilities),
 		Activity: &arbiterv1.RuntimeActivityStatus{

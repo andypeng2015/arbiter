@@ -121,6 +121,9 @@ func TestRuntimeStatusPayloadExposesCanonicalSections(t *testing.T) {
 	if payload.Readiness.Ready || payload.Readiness.Reason != "first tick incomplete" {
 		t.Fatalf("unexpected readiness: %+v", payload.Readiness)
 	}
+	if len(payload.Issues) != 1 || payload.Issues[0].Code != "first_tick_incomplete" || !payload.Issues[0].Blocking {
+		t.Fatalf("unexpected issues: %+v", payload.Issues)
+	}
 	if payload.Transport.Control.Address != "127.0.0.1:7081" || payload.Transport.Capability.Target != "plugin.internal:7443" {
 		t.Fatalf("unexpected transport: %+v", payload.Transport)
 	}
@@ -256,6 +259,12 @@ func TestProtoRuntimeStatus(t *testing.T) {
 	}
 	if resp.GetTransport().GetCapability().GetTarget() != "plugin.internal:7443" {
 		t.Fatalf("unexpected capability transport: %+v", resp.GetTransport().GetCapability())
+	}
+	if len(resp.GetIssues()) != 3 {
+		t.Fatalf("unexpected runtime issues: %+v", resp.GetIssues())
+	}
+	if resp.GetIssues()[0].GetCode() != "source_failures" || resp.GetIssues()[1].GetCode() != "sink_failures" || resp.GetIssues()[2].GetCode() != "sink_ambiguous" {
+		t.Fatalf("unexpected runtime issue codes: %+v", resp.GetIssues())
 	}
 	if len(resp.GetCapabilities().GetPlugins()) != 1 || resp.GetCapabilities().GetPlugins()[0].GetName() != "ops-plugin" {
 		t.Fatalf("unexpected capabilities: %+v", resp.GetCapabilities())

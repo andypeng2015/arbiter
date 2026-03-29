@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/odvcencio/arbiter/dataplane"
+	"github.com/odvcencio/arbiter/internal/statusview"
 )
 
 type readinessPolicy struct {
@@ -15,6 +18,7 @@ type readinessPolicy struct {
 
 type agentStatusPayload struct {
 	Readiness agentReadinessStatus `json:"readiness"`
+	Issues    []statusview.Issue   `json:"issues"`
 	Transport agentTransportStatus `json:"transport"`
 	Sync      agentSyncStatus      `json:"sync"`
 
@@ -68,6 +72,7 @@ func newAgentStatusPayload(status dataplane.AgentStatus, reason string, policy r
 			TargetCount:    status.TargetCount,
 			ReadyCount:     status.ReadyCount,
 		},
+		Issues:    agentIssues(status, reason, policy),
 		Transport: transport,
 		Sync: agentSyncStatus{
 			PrimaryName:             status.PrimaryName,
@@ -91,6 +96,84 @@ func newAgentStatusPayload(status dataplane.AgentStatus, reason string, policy r
 		LastUpstreamErrorAt:     status.LastUpstreamErrorAt,
 		Bundles:                 append([]dataplane.BundleSyncStatus(nil), status.Bundles...),
 	}
+}
+
+func agentIssues(status dataplane.AgentStatus, reason string, policy readinessPolicy) []statusview.Issue {
+	issues := make([]statusview.Issue, 0)
+	if trimmed := strings.TrimSpace(reason); trimmed != "" {
+		issues = append(issues, statusview.Error("readiness", "agent", agentReadinessCode(trimmed), trimmed, true))
+	}
+	if trimmed := strings.TrimSpace(status.LastUpstreamError); trimmed != "" {
+		issues = append(issues, statusview.Warning("upstream", "control-plane", "upstream_error", trimmed))
+	}
+
+	limitMs := policy.maxStaleness.Milliseconds()
+	items := append([]dataplane.BundleSyncStatus(nil), status.Bundles...)
+	sort.Slice(items, func(i, j int) bool {
+		left := agentIssueSubject(items[i])
+		right := agentIssueSubject(items[j])
+		if left == right {
+			return items[i].BundleID < items[j].BundleID
+		}
+		return left < right
+	})
+	for _, item := range items {
+		subject := agentIssueSubject(item)
+		if limitMs > 0 {
+			switch {
+			case item.BundleSyncedAt.IsZero():
+				issues = append(issues, statusview.Error("sync", subject, "bundle_never_synced", "bundle has never synced", true))
+			case item.StalenessMs > limitMs:
+				issues = append(issues, statusview.Error("sync", subject, "bundle_stale", fmt.Sprintf("bundle stale (%dms > %dms)", item.StalenessMs, limitMs), true))
+			}
+			if item.OverrideConfigured && !item.OverrideSyncedAt.IsZero() && item.OverrideStalenessMs > limitMs {
+				issues = append(issues, statusview.Error("sync", subject, "override_stale", fmt.Sprintf("overrides stale (%dms > %dms)", item.OverrideStalenessMs, limitMs), true))
+			}
+		}
+		if !item.BundleWatchConnected {
+			issues = append(issues, statusview.Warning("sync", subject, "bundle_watch_disconnected", "bundle watch disconnected"))
+		}
+		if item.OverrideConfigured && !item.OverrideWatchConnected {
+			issues = append(issues, statusview.Warning("sync", subject, "override_watch_disconnected", "override watch disconnected"))
+		}
+		if trimmed := strings.TrimSpace(item.LastBundleError); trimmed != "" {
+			issues = append(issues, statusview.Warning("sync", subject, "bundle_sync_error", trimmed))
+		}
+		if trimmed := strings.TrimSpace(item.LastOverrideError); trimmed != "" {
+			issues = append(issues, statusview.Warning("sync", subject, "override_sync_error", trimmed))
+		}
+	}
+	return issues
+}
+
+func agentReadinessCode(reason string) string {
+	switch strings.TrimSpace(reason) {
+	case "status unavailable":
+		return "status_unavailable"
+	case "initial sync incomplete":
+		return "initial_sync_incomplete"
+	default:
+		if strings.Contains(reason, " has never synced") {
+			return "bundle_never_synced"
+		}
+		if strings.Contains(reason, " overrides stale ") {
+			return "override_stale"
+		}
+		if strings.Contains(reason, " stale ") {
+			return "bundle_stale"
+		}
+		return "not_ready"
+	}
+}
+
+func agentIssueSubject(item dataplane.BundleSyncStatus) string {
+	if value := strings.TrimSpace(item.Name); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(item.BundleID); value != "" {
+		return value
+	}
+	return "unknown"
 }
 
 func readinessStatus(syncer *dataplane.Agent, policy readinessPolicy) (dataplane.AgentStatus, string) {

@@ -543,7 +543,7 @@ Bundles are published once and evaluated many times. Each bundle compiles rules,
 - `--session-ttl`, `--session-max`, and `--session-max-per-owner` to constrain expert-session state
 - `--data-dir` or explicit `--bundle-file` / `--overrides-file` for file-backed persistence, or `--ephemeral` for memory-only mode
 
-The hosted control plane now exposes the same kind of operator surface as the runtime and agent. `ControlService.GetControlStatus` and HTTP `/status` report `readiness -> transport -> bundles -> overrides -> sessions -> audit`, including listener auth/TLS posture, whether bundle and override persistence are actually healthy, active bundle versions, live expert-session occupancy, and whether decision recording is durable, healthy, and currently succeeding. HTTP `/readyz` now follows that same readiness model instead of reporting green while configured durable surfaces are failing.
+The hosted control plane now exposes the same kind of operator surface as the runtime and agent. `ControlService.GetControlStatus` and HTTP `/status` report `readiness -> issues -> transport -> bundles -> overrides -> sessions -> audit`, including listener auth/TLS posture, whether bundle and override persistence are actually healthy, active bundle versions, live expert-session occupancy, and whether decision recording is durable, healthy, and currently succeeding. HTTP `/readyz` now follows that same readiness model instead of reporting green while configured durable surfaces are failing.
 
 ### Audit
 
@@ -606,7 +606,7 @@ arbiter-agent --upstream https://arbiter.internal:443 --upstream-token "$ARBITER
 
 `arbiter replay` answers “what would happen now?” by reading audited `kind: "rules"` JSONL events, re-evaluating the recorded contexts, and reporting outcome drift. Use `--request-id` to focus on one audited decision or `--limit` to cap the batch.
 
-`arbiter-agent` is the localhost data-plane form factor. It bootstraps one or many active bundles from the upstream control plane with `GetBundle`, keeps `WatchBundles(active_only=true)` streams open, syncs runtime overrides from `GetOverrides` plus `WatchOverrides`, and serves the normal Arbiter gRPC API from its own in-memory registry and override store. Its `/status` surface now follows the same inspection pattern as the runtime: `readiness`, `transport`, and `sync` sections up front, then the legacy flat counters and bundle snapshots behind them for compatibility. The same canonical shape is available over gRPC through `AgentService.GetAgentStatus`.
+`arbiter-agent` is the localhost data-plane form factor. It bootstraps one or many active bundles from the upstream control plane with `GetBundle`, keeps `WatchBundles(active_only=true)` streams open, syncs runtime overrides from `GetOverrides` plus `WatchOverrides`, and serves the normal Arbiter gRPC API from its own in-memory registry and override store. Its `/status` surface now follows the same inspection pattern as the runtime: `readiness`, `issues`, `transport`, and `sync` sections up front, then the legacy flat counters and bundle snapshots behind them for compatibility. The same canonical shape is available over gRPC through `AgentService.GetAgentStatus`.
 
 Repeat `--bundle-name` to keep multiple bundles hot, or set `ARBITER_BUNDLE_NAMES=checkout,pricing`. The legacy single-value `ARBITER_BUNDLE_NAME` env var still works.
 
@@ -616,7 +616,7 @@ Use `--upstream-token`, `--upstream-ca-file`, `--upstream-server-name`, or `--up
 
 Use `--auth-token`, `--auth-token-file`, `--tls-cert`, `--tls-key`, and optional `--tls-client-ca` when the agent's local gRPC surface leaves localhost or crosses a trust boundary.
 
-`arbiter runtime-capabilities`, `arbiter runtime-status`, `arbiter agent-status`, and `arbiter control-status` accept `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure control-surface access, or `--plaintext` to force insecure transport against a bare target. The inspection commands now split cleanly: `runtime-capabilities` reports transport plus capability algebra, `runtime-status` reports `readiness -> transport -> capabilities -> activity`, `agent-status` reports `readiness -> transport -> sync`, and `control-status` reports `readiness -> transport -> bundles -> overrides -> sessions -> audit`, including bundle/override persistence health plus audit write/error counters and the last successful or failed persistence or audit write times.
+`arbiter runtime-capabilities`, `arbiter runtime-status`, `arbiter agent-status`, and `arbiter control-status` accept `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure control-surface access, or `--plaintext` to force insecure transport against a bare target. The inspection commands now split cleanly: `runtime-capabilities` reports transport plus capability algebra, `runtime-status` reports `readiness -> issues -> transport -> capabilities -> activity`, `agent-status` reports `readiness -> issues -> transport -> sync`, and `control-status` reports `readiness -> issues -> transport -> bundles -> overrides -> sessions -> audit`, with a canonical issue list for concrete failures alongside bundle/override persistence health plus audit write/error counters and the last successful or failed persistence or audit write times.
 
 ### Self-Hosted Profile
 
@@ -628,7 +628,7 @@ It also exposes local health and status on the HTTP listener:
 
 - `GET /healthz` for process liveness
 - `GET /readyz` for sync readiness, optionally gated by the configured freshness threshold
-- `GET /status` for JSON introspection of synced bundles, checksums, bundle/override freshness, reconnect/error counters, watch connectivity, and a canonical `readiness -> transport -> sync` section layout up front
+- `GET /status` for JSON introspection of synced bundles, checksums, bundle/override freshness, reconnect/error counters, watch connectivity, and a canonical `readiness -> issues -> transport -> sync` section layout up front
 
 When `include` is involved, file-backed commands report diagnostics against the original source file:
 
@@ -1171,10 +1171,10 @@ It handles the full lifecycle:
 - **Delivery retry** — outcomes route to registered handlers with durable retry journal
 - **Bounded parallelism** — independent sources and handler targets can run concurrently inside one tick without changing per-target ordering
 - **Chain propagation** — outcomes from upstream arbiters become facts in downstream arbiters
-- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON sections: `readiness`, `transport`, `capabilities`, `activity`, plus legacy flat mirrors for compatibility)
-- **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` and `RuntimeService.GetRuntimeStatus` expose the runtime's canonical capability and status surfaces over gRPC for SDKs and CLI clients
-- **Agent control RPC** — optional `AgentService.GetAgentStatus` exposes the agent's canonical `readiness -> transport -> sync` surface over the same local gRPC listener
-- **Hosted control RPC** — `ControlService.GetControlStatus` exposes the hosted control plane's canonical `readiness -> transport -> bundles -> overrides -> sessions -> audit` surface over the same gRPC listener as bundle lifecycle and evaluation APIs, including live bundle/override persistence health plus audit health and last-error state. The paired HTTP `/readyz` now degrades when those configured durable surfaces are unhealthy.
+- **Health endpoints** — `/healthz` (liveness), `/readyz` (first tick completed), `/status` (JSON sections: `readiness`, `issues`, `transport`, `capabilities`, `activity`, plus legacy flat mirrors for compatibility)
+- **Runtime control RPC** — optional `RuntimeService.GetRuntimeCapabilities` and `RuntimeService.GetRuntimeStatus` expose the runtime's canonical capability surface plus its `readiness -> issues -> transport -> capabilities -> activity` status surface over gRPC for SDKs and CLI clients
+- **Agent control RPC** — optional `AgentService.GetAgentStatus` exposes the agent's canonical `readiness -> issues -> transport -> sync` surface over the same local gRPC listener
+- **Hosted control RPC** — `ControlService.GetControlStatus` exposes the hosted control plane's canonical `readiness -> issues -> transport -> bundles -> overrides -> sessions -> audit` surface over the same gRPC listener as bundle lifecycle and evaluation APIs, including live bundle/override persistence health plus audit health and last-error state. The paired HTTP `/readyz` now degrades when those configured durable surfaces are unhealthy.
 
 Runtime transport is now opinionated instead of ad hoc:
 

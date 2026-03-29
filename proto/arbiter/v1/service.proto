@@ -275,11 +275,21 @@ message RuntimeActivityStatus {
   repeated RuntimeSinkStatus sink_status = 6;
 }
 
+message StatusIssue {
+  string severity = 1;
+  string scope = 2;
+  string subject = 3;
+  string code = 4;
+  string message = 5;
+  bool blocking = 6;
+}
+
 message GetRuntimeStatusResponse {
   RuntimeReadinessStatus readiness = 1;
   RuntimeTransportStatus transport = 2;
   RuntimeCapabilitiesStatus capabilities = 3;
   RuntimeActivityStatus activity = 4;
+  repeated StatusIssue issues = 5;
 }
 
 message AgentControlTransport {
@@ -349,6 +359,7 @@ message GetAgentStatusResponse {
   AgentReadinessStatus readiness = 1;
   AgentTransportStatus transport = 2;
   AgentSyncStatus sync = 3;
+  repeated StatusIssue issues = 4;
 }
 
 message ControlListenerTransport {
@@ -455,6 +466,7 @@ message GetControlStatusResponse {
   ControlOverridesStatus overrides = 4;
   ControlSessionsStatus sessions = 5;
   ControlAuditStatus audit = 6;
+  repeated StatusIssue issues = 7;
 }
 
 message BundleOverrides {

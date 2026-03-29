@@ -2,9 +2,13 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/odvcencio/arbiter/capability"
+	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/workflow"
 )
 
@@ -76,6 +80,7 @@ type runtimeActivityStatus struct {
 
 type runtimeStatusPayload struct {
 	Readiness    runtimeReadinessStatus    `json:"readiness"`
+	Issues       []statusview.Issue        `json:"issues"`
 	Transport    runtimeTransportStatus    `json:"transport"`
 	Capabilities runtimeCapabilitiesStatus `json:"capabilities"`
 	Activity     runtimeActivityStatus     `json:"activity"`
@@ -134,11 +139,13 @@ func newRuntimeStatusPayload(
 	caps := capabilityStatus(surface, manifest)
 	sources := cloneSourceStatus(lastResult.Sources)
 	sinks := cloneSinkStatus(lastResult.Sinks)
+	issues := runtimeIssues(ready, reason, lastResult)
 	return runtimeStatusPayload{
 		Readiness: runtimeReadinessStatus{
 			Ready:  ready,
 			Reason: reason,
 		},
+		Issues: issues,
 		Transport: runtimeTransportStatus{
 			Control:    control,
 			Capability: capabilityTransport,
@@ -167,6 +174,77 @@ func newRuntimeStatusPayload(
 		Retried:           lastResult.Retried,
 		CapabilityPlugins: caps.Plugins,
 	}
+}
+
+func runtimeIssues(ready bool, reason string, lastResult workflow.TickResult) []statusview.Issue {
+	issues := make([]statusview.Issue, 0)
+	if !ready && strings.TrimSpace(reason) != "" {
+		issues = append(issues, statusview.Error("readiness", "runtime", "first_tick_incomplete", strings.TrimSpace(reason), true))
+	}
+
+	sourceKeys := make([]string, 0, len(lastResult.Sources))
+	for key := range lastResult.Sources {
+		sourceKeys = append(sourceKeys, key)
+	}
+	sort.Strings(sourceKeys)
+	for _, key := range sourceKeys {
+		item := lastResult.Sources[key]
+		subject := runtimeIssueSubject(item.Alias, item.Target, key)
+		switch {
+		case !item.Available:
+			issues = append(issues, statusview.Error("source", subject, "source_unavailable", runtimeIssueMessage("source unavailable", item.LastError), false))
+		case item.ConsecutiveFailures > 0:
+			issues = append(issues, statusview.Warning("source", subject, "source_failures", runtimeFailureMessage(item.ConsecutiveFailures, "consecutive source failures", item.LastError)))
+		}
+	}
+
+	sinkKeys := make([]string, 0, len(lastResult.Sinks))
+	for key := range lastResult.Sinks {
+		sinkKeys = append(sinkKeys, key)
+	}
+	sort.Strings(sinkKeys)
+	for _, key := range sinkKeys {
+		item := lastResult.Sinks[key]
+		subject := runtimeIssueSubject(item.Alias, item.Key, key)
+		if !item.Available {
+			issues = append(issues, statusview.Error("sink", subject, "sink_unavailable", runtimeIssueMessage("sink unavailable", item.LastError), false))
+		} else if item.ConsecutiveFailures > 0 {
+			issues = append(issues, statusview.Warning("sink", subject, "sink_failures", runtimeFailureMessage(item.ConsecutiveFailures, "consecutive sink failures", item.LastError)))
+		}
+		if item.Ambiguous > 0 {
+			issues = append(issues, statusview.Warning("sink", subject, "sink_ambiguous", fmt.Sprintf("%d ambiguous deliveries", item.Ambiguous)))
+		}
+	}
+
+	return issues
+}
+
+func runtimeIssueSubject(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return "unknown"
+}
+
+func runtimeIssueMessage(base string, detail string) string {
+	base = strings.TrimSpace(base)
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return base
+	}
+	return base + ": " + detail
+}
+
+func runtimeFailureMessage(count int, noun string, detail string) string {
+	message := fmt.Sprintf("%d %s", count, strings.TrimSpace(noun))
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return message
+	}
+	return message + ": " + detail
 }
 
 func capabilityStatus(surface workflow.CapabilitySurface, manifest *capability.Manifest) runtimeCapabilitiesStatus {

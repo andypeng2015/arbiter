@@ -1189,6 +1189,7 @@ func printRuntimeStatus(resp *arbiterv1.GetRuntimeStatusResponse) {
 			fmt.Printf("  reason=%s\n", reason)
 		}
 	}
+	printStatusIssues(resp.GetIssues())
 
 	if transport := resp.GetTransport(); transport != nil {
 		fmt.Println("transport:")
@@ -1258,6 +1259,7 @@ func printAgentStatus(resp *arbiterv1.GetAgentStatusResponse) {
 		}
 		fmt.Printf("  targets=%d/%d max_staleness_ms=%d\n", readiness.GetReadyCount(), readiness.GetTargetCount(), readiness.GetMaxStalenessMs())
 	}
+	printStatusIssues(resp.GetIssues())
 
 	if transport := resp.GetTransport(); transport != nil {
 		fmt.Println("transport:")
@@ -1315,6 +1317,7 @@ func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
 			fmt.Printf("  reason=%s\n", reason)
 		}
 	}
+	printStatusIssues(resp.GetIssues())
 
 	if transport := resp.GetTransport(); transport != nil {
 		fmt.Println("transport:")
@@ -1411,6 +1414,30 @@ func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
 		if ts := formatProtoTimestamp(audit.GetLastErrorAt()); ts != "" {
 			fmt.Printf("  last_error_at=%s\n", ts)
 		}
+	}
+}
+
+func printStatusIssues(issues []*arbiterv1.StatusIssue) {
+	fmt.Println("issues:")
+	if len(issues) == 0 {
+		fmt.Println("  - none")
+		return
+	}
+	for _, item := range issues {
+		if item == nil {
+			continue
+		}
+		line := fmt.Sprintf("  - severity=%s blocking=%t scope=%s", item.GetSeverity(), item.GetBlocking(), item.GetScope())
+		if subject := strings.TrimSpace(item.GetSubject()); subject != "" {
+			line += fmt.Sprintf(" subject=%s", subject)
+		}
+		if code := strings.TrimSpace(item.GetCode()); code != "" {
+			line += fmt.Sprintf(" code=%s", code)
+		}
+		if message := strings.TrimSpace(item.GetMessage()); message != "" {
+			line += fmt.Sprintf(" message=%s", message)
+		}
+		fmt.Println(line)
 	}
 }
 

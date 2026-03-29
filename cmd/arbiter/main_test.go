@@ -298,6 +298,14 @@ func TestPrintRuntimeStatusUsesCanonicalSections(t *testing.T) {
 				Ready:  false,
 				Reason: "first tick incomplete",
 			},
+			Issues: []*arbiterv1.StatusIssue{{
+				Severity: "error",
+				Scope:    "readiness",
+				Subject:  "runtime",
+				Code:     "first_tick_incomplete",
+				Message:  "first tick incomplete",
+				Blocking: true,
+			}},
 			Transport: &arbiterv1.RuntimeTransportStatus{
 				Control: &arbiterv1.RuntimeControlTransport{
 					Enabled:          true,
@@ -343,6 +351,8 @@ func TestPrintRuntimeStatusUsesCanonicalSections(t *testing.T) {
 		"runtime status",
 		"readiness:",
 		"reason=first tick incomplete",
+		"issues:",
+		"severity=error blocking=true scope=readiness subject=runtime code=first_tick_incomplete message=first tick incomplete",
 		"transport:",
 		"capabilities:",
 		"activity:",
@@ -367,6 +377,13 @@ func TestPrintAgentStatusUsesCanonicalSections(t *testing.T) {
 				TargetCount:    2,
 				ReadyCount:     1,
 			},
+			Issues: []*arbiterv1.StatusIssue{{
+				Severity: "warning",
+				Scope:    "upstream",
+				Subject:  "control-plane",
+				Code:     "upstream_error",
+				Message:  "upstream unavailable",
+			}},
 			Transport: &arbiterv1.AgentTransportStatus{
 				Control: &arbiterv1.AgentControlTransport{
 					Enabled: true,
@@ -408,6 +425,8 @@ func TestPrintAgentStatusUsesCanonicalSections(t *testing.T) {
 		"agent status",
 		"readiness:",
 		"targets=1/2 max_staleness_ms=30000",
+		"issues:",
+		"severity=warning blocking=false scope=upstream subject=control-plane code=upstream_error message=upstream unavailable",
 		"transport:",
 		"arbiter.internal:7443",
 		"sync:",
@@ -427,8 +446,17 @@ func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
 	out := captureStdout(t, func() {
 		printControlStatus(&arbiterv1.GetControlStatusResponse{
 			Readiness: &arbiterv1.ControlReadinessStatus{
-				Ready: true,
+				Ready:  false,
+				Reason: "audit unhealthy",
 			},
+			Issues: []*arbiterv1.StatusIssue{{
+				Severity: "error",
+				Scope:    "audit",
+				Subject:  "/tmp/decisions.jsonl",
+				Code:     "audit_unhealthy",
+				Message:  "audit unhealthy: disk full",
+				Blocking: true,
+			}},
 			Transport: &arbiterv1.ControlTransportStatus{
 				Control: &arbiterv1.ControlListenerTransport{
 					Enabled:          true,
@@ -503,6 +531,9 @@ func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
 	for _, fragment := range []string{
 		"control status",
 		"readiness:",
+		"reason=audit unhealthy",
+		"issues:",
+		"severity=error blocking=true scope=audit subject=/tmp/decisions.jsonl code=audit_unhealthy message=audit unhealthy: disk full",
 		"transport:",
 		"127.0.0.1:8081",
 		"bundles:",

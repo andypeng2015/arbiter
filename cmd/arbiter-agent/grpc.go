@@ -6,6 +6,7 @@ import (
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/dataplane"
+	"github.com/odvcencio/arbiter/internal/statusview"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -41,6 +42,7 @@ func protoAgentStatus(payload agentStatusPayload) *arbiterv1.GetAgentStatusRespo
 			TargetCount:    uint32(payload.Readiness.TargetCount),
 			ReadyCount:     uint32(payload.Readiness.ReadyCount),
 		},
+		Issues: statusview.ProtoIssues(payload.Issues),
 		Transport: &arbiterv1.AgentTransportStatus{
 			Control: &arbiterv1.AgentControlTransport{
 				Enabled:          payload.Transport.Control.Enabled,

@@ -5,11 +5,13 @@ import (
 	"crypto/tls"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/grpcserver"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
+	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/overrides"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -113,6 +115,7 @@ type controlAuditStatus struct {
 
 type controlStatusPayload struct {
 	Readiness controlReadinessStatus `json:"readiness"`
+	Issues    []statusview.Issue     `json:"issues"`
 	Transport controlTransportStatus `json:"transport"`
 	Bundles   controlBundlesStatus   `json:"bundles"`
 	Overrides controlOverridesStatus `json:"overrides"`
@@ -161,8 +164,10 @@ func newControlStatusPayload(
 	overrideStatus := controlOverridesPayload(registry, store, overridesFile)
 	sessionStatus := controlSessionsPayload(registry, sessions)
 	auditStatus := controlAuditPayload(audit)
+	issues := controlIssues(registry != nil && store != nil && sessions != nil, bundles, overrideStatus, auditStatus)
 	return controlStatusPayload{
 		Readiness: controlReadinessPayload(registry != nil && store != nil && sessions != nil, bundles, overrideStatus, auditStatus),
+		Issues:    issues,
 		Transport: controlTransportStatus{Control: transport},
 		Bundles:   bundles,
 		Overrides: overrideStatus,
@@ -197,6 +202,42 @@ func controlReadinessPayload(available bool, bundles controlBundlesStatus, overr
 		}
 	}
 	return controlReadinessStatus{Ready: true}
+}
+
+func controlIssues(available bool, bundles controlBundlesStatus, overrides controlOverridesStatus, audit controlAuditStatus) []statusview.Issue {
+	issues := make([]statusview.Issue, 0)
+	if !available {
+		return append(issues, statusview.Error("readiness", "control", "status_unavailable", "status unavailable", true))
+	}
+	if bundles.Persisted && !bundles.Healthy {
+		issues = append(issues, statusview.Error("bundles", controlIssueSubject(bundles.File, "bundles"), "bundle_persistence_unhealthy", controlIssueMessage("bundle persistence unhealthy", bundles.LastError), true))
+	}
+	if overrides.Persisted && !overrides.Healthy {
+		issues = append(issues, statusview.Error("overrides", controlIssueSubject(overrides.File, "overrides"), "override_persistence_unhealthy", controlIssueMessage("override persistence unhealthy", overrides.LastError), true))
+	}
+	if audit.Configured && !audit.Healthy {
+		issues = append(issues, statusview.Error("audit", controlIssueSubject(audit.File, audit.Kind, "audit"), "audit_unhealthy", controlIssueMessage("audit unhealthy", audit.LastError), true))
+	}
+	return issues
+}
+
+func controlIssueSubject(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return "unknown"
+}
+
+func controlIssueMessage(base string, detail string) string {
+	base = strings.TrimSpace(base)
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return base
+	}
+	return base + ": " + detail
 }
 
 func controlAuditPayload(audit *controlAuditTracker) controlAuditStatus {
@@ -423,6 +464,7 @@ func protoControlStatus(payload controlStatusPayload) *arbiterv1.GetControlStatu
 			Ready:  payload.Readiness.Ready,
 			Reason: payload.Readiness.Reason,
 		},
+		Issues: statusview.ProtoIssues(payload.Issues),
 		Transport: &arbiterv1.ControlTransportStatus{
 			Control: &arbiterv1.ControlListenerTransport{
 				Enabled:          payload.Transport.Control.Enabled,

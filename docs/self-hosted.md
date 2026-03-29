@@ -74,7 +74,7 @@ Apply the same rule to `arbiter-runtime`: protect `--grpc` with `--auth-token` /
 
 If `arbiter-runtime` talks to a remote capability plugin, make that transport explicit too: prefer `grpcs://...` plus `--capability-token`, `--capability-ca-file`, and `--capability-server-name` over ambient network trust.
 
-Do not treat that posture as hidden configuration. Check `/status`, `RuntimeService.GetRuntimeCapabilities`, or `RuntimeService.GetRuntimeStatus` and verify the runtime is actually reporting the `readiness`, `transport`, `capabilities`, and `activity` shape you intended, including auth/TLS/public-listener and capability-transport posture.
+Do not treat that posture as hidden configuration. Check `/status`, `RuntimeService.GetRuntimeCapabilities`, or `RuntimeService.GetRuntimeStatus` and verify the runtime is actually reporting the `readiness`, `issues`, `transport`, `capabilities`, and `activity` shape you intended, including auth/TLS/public-listener and capability-transport posture.
 
 ## Container defaults
 
@@ -95,7 +95,7 @@ docker run --rm \
 
 Add auth and TLS before exposing it beyond a private network.
 
-Treat the hosted control plane with the same discipline: inspect `/status` or `ControlService.GetControlStatus` and verify the `readiness`, `transport`, `bundles`, `overrides`, `sessions`, and `audit` sections, including whether bundle and override persistence are healthy, active bundle versions, live expert-session occupancy, listener auth/TLS posture, and whether decision recording is durable, healthy, and currently succeeding. `/readyz` now follows that same readiness judgment, so a configured-but-failing durable surface will take the control plane out of readiness.
+Treat the hosted control plane with the same discipline: inspect `/status` or `ControlService.GetControlStatus` and verify the `readiness`, `issues`, `transport`, `bundles`, `overrides`, `sessions`, and `audit` sections, including whether bundle and override persistence are healthy, active bundle versions, live expert-session occupancy, listener auth/TLS posture, and whether decision recording is durable, healthy, and currently succeeding. `/readyz` now follows that same readiness judgment, so a configured-but-failing durable surface will take the control plane out of readiness.
 
 ## Edge and agent patterns
 
@@ -106,7 +106,7 @@ Two patterns are credible in production:
 
 The agent path is the better story when you want local low-latency eval without turning the engine into a shared multi-tenant service.
 
-Treat the agent with the same discipline as the runtime: inspect `/status` or `AgentService.GetAgentStatus` and verify the `readiness`, `transport`, and `sync` sections, including local listener posture, upstream auth/TLS posture, readiness reason, and bundle/override watch connectivity, instead of assuming the sidecar is healthy because the process is up.
+Treat the agent with the same discipline as the runtime: inspect `/status` or `AgentService.GetAgentStatus` and verify the `readiness`, `issues`, `transport`, and `sync` sections, including local listener posture, upstream auth/TLS posture, readiness reason, and bundle/override watch connectivity, instead of assuming the sidecar is healthy because the process is up.
 
 If the agent's local gRPC surface is reachable beyond localhost, harden it the same way: `--auth-token` / `--auth-token-file`, plus `--tls-cert`, `--tls-key`, and optionally `--tls-client-ca`.
 

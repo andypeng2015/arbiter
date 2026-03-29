@@ -10,6 +10,7 @@ import (
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/expert"
 	"github.com/odvcencio/arbiter/grpcserver"
+	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/overrides"
 )
 
@@ -115,6 +116,9 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 	if !payload.Audit.Configured || payload.Audit.Kind != "jsonl" || !payload.Audit.Durable || payload.Audit.File != "/tmp/decisions.jsonl" || !payload.Audit.Healthy {
 		t.Fatalf("unexpected audit status: %+v", payload.Audit)
 	}
+	if len(payload.Issues) != 0 {
+		t.Fatalf("expected no issues for healthy control payload, got %+v", payload.Issues)
+	}
 }
 
 func TestControlReadinessPayloadTracksDurabilityHealth(t *testing.T) {
@@ -178,9 +182,29 @@ func TestControlReadinessPayloadTracksDurabilityHealth(t *testing.T) {
 	}
 }
 
+func TestControlIssuesExposeDurabilityProblems(t *testing.T) {
+	issues := controlIssues(true,
+		controlBundlesStatus{Persisted: true, Healthy: false, File: "/tmp/bundles.json", LastError: "read-only file system"},
+		controlOverridesStatus{Persisted: true, Healthy: false, File: "/tmp/overrides.json", LastError: "disk full"},
+		controlAuditStatus{Configured: true, Kind: "jsonl", File: "/tmp/decisions.jsonl", Healthy: false, LastError: "permission denied"},
+	)
+	if len(issues) != 3 {
+		t.Fatalf("expected 3 issues, got %+v", issues)
+	}
+	if issues[0].Code != "bundle_persistence_unhealthy" || issues[1].Code != "override_persistence_unhealthy" || issues[2].Code != "audit_unhealthy" {
+		t.Fatalf("unexpected issue codes: %+v", issues)
+	}
+	if !issues[0].Blocking || !issues[1].Blocking || !issues[2].Blocking {
+		t.Fatalf("expected blocking durability issues, got %+v", issues)
+	}
+}
+
 func TestProtoControlStatus(t *testing.T) {
 	payload := controlStatusPayload{
 		Readiness: controlReadinessStatus{Ready: true},
+		Issues: []statusview.Issue{
+			statusview.Error("audit", "/tmp/decisions.jsonl", "audit_unhealthy", "audit unhealthy: disk full", true),
+		},
 		Transport: controlTransportStatus{
 			Control: controlListenerTransport{
 				Enabled:          true,
@@ -265,6 +289,9 @@ func TestProtoControlStatus(t *testing.T) {
 	resp := protoControlStatus(payload)
 	if !resp.GetReadiness().GetReady() {
 		t.Fatalf("unexpected readiness: %+v", resp.GetReadiness())
+	}
+	if len(resp.GetIssues()) != 1 || resp.GetIssues()[0].GetCode() != "audit_unhealthy" || !resp.GetIssues()[0].GetBlocking() {
+		t.Fatalf("unexpected control issues payload: %+v", resp.GetIssues())
 	}
 	if resp.GetTransport().GetControl().GetAddress() != "127.0.0.1:8081" || !resp.GetTransport().GetControl().GetTlsEnabled() {
 		t.Fatalf("unexpected transport: %+v", resp.GetTransport())

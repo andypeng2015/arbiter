@@ -85,6 +85,9 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 	if readiness == nil {
 		t.Fatal("expected readiness payload")
 	}
+	if _, ok := payload["issues"]; !ok {
+		t.Fatal("expected issues payload")
+	}
 	if ready, _ := readiness["ready"].(bool); !ready {
 		t.Fatalf("expected readiness payload to be ready, got %+v", readiness)
 	}
@@ -172,6 +175,7 @@ func TestNewAgentStatusPayloadExposesCanonicalSections(t *testing.T) {
 		Bundles: []dataplane.BundleSyncStatus{{
 			Name:                 "checkout",
 			BundleID:             "bundle-1",
+			BundleSyncedAt:       time.Unix(1710000030, 0).UTC(),
 			BundleWatchConnected: true,
 		}},
 	}
@@ -183,6 +187,9 @@ func TestNewAgentStatusPayloadExposesCanonicalSections(t *testing.T) {
 
 	if !payload.Readiness.Ready || payload.Readiness.MaxStalenessMs != 30000 {
 		t.Fatalf("unexpected readiness: %+v", payload.Readiness)
+	}
+	if len(payload.Issues) != 1 || payload.Issues[0].Code != "upstream_error" || payload.Issues[0].Blocking {
+		t.Fatalf("unexpected issues: %+v", payload.Issues)
 	}
 	if payload.Transport.Upstream.Target != "arbiter.internal:7443" || payload.Transport.Control.Address != "127.0.0.1:7081" {
 		t.Fatalf("unexpected transport: %+v", payload.Transport)
@@ -216,6 +223,7 @@ func TestProtoAgentStatus(t *testing.T) {
 			Name:                   "checkout",
 			BundleID:               "bundle-1",
 			Checksum:               "abc123",
+			BundleSyncedAt:         time.Unix(1710000030, 0).UTC(),
 			BundleWatchConnected:   true,
 			OverrideConfigured:     true,
 			OverrideWatchConnected: true,
@@ -235,6 +243,9 @@ func TestProtoAgentStatus(t *testing.T) {
 	if resp.GetTransport().GetUpstream().GetTarget() != "arbiter.internal:7443" {
 		t.Fatalf("unexpected upstream transport: %+v", resp.GetTransport().GetUpstream())
 	}
+	if len(resp.GetIssues()) != 1 || resp.GetIssues()[0].GetCode() != "upstream_error" {
+		t.Fatalf("unexpected issue payload: %+v", resp.GetIssues())
+	}
 	if resp.GetSync().GetPrimaryName() != "checkout" || resp.GetSync().GetBundleErrorsTotal() != 3 {
 		t.Fatalf("unexpected sync payload: %+v", resp.GetSync())
 	}
@@ -244,6 +255,31 @@ func TestProtoAgentStatus(t *testing.T) {
 	bundle := resp.GetSync().GetBundles()[0]
 	if bundle.GetBundleId() != "bundle-1" || bundle.GetChecksum() != "abc123" {
 		t.Fatalf("unexpected bundle sync payload: %+v", bundle)
+	}
+}
+
+func TestAgentIssuesExposeBlockingAndWarningProblems(t *testing.T) {
+	status := dataplane.AgentStatus{
+		Ready:             false,
+		LastUpstreamError: "upstream unavailable",
+		Bundles: []dataplane.BundleSyncStatus{{
+			Name:                   "checkout",
+			BundleSyncedAt:         time.Unix(1710000000, 0).UTC(),
+			StalenessMs:            2500,
+			BundleWatchConnected:   false,
+			OverrideConfigured:     true,
+			OverrideWatchConnected: false,
+			LastBundleError:        "bundle stream closed",
+			LastOverrideError:      "override stream closed",
+		}},
+	}
+
+	issues := agentIssues(status, "bundle checkout stale (2500ms > 1000ms)", readinessPolicy{maxStaleness: time.Second})
+	if len(issues) < 5 {
+		t.Fatalf("expected multiple surfaced issues, got %+v", issues)
+	}
+	if issues[0].Code != "bundle_stale" || !issues[0].Blocking {
+		t.Fatalf("expected first blocking readiness issue, got %+v", issues[0])
 	}
 }
 
