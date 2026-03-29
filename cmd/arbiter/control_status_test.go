@@ -184,6 +184,7 @@ func TestControlReadinessPayloadTracksDurabilityHealth(t *testing.T) {
 
 func TestControlIssuesExposeDurabilityProblems(t *testing.T) {
 	issues := controlIssues(true,
+		controlListenerTransport{},
 		controlBundlesStatus{Persisted: true, Healthy: false, File: "/tmp/bundles.json", LastError: "read-only file system"},
 		controlOverridesStatus{Persisted: true, Healthy: false, File: "/tmp/overrides.json", LastError: "disk full"},
 		controlAuditStatus{Configured: true, Kind: "jsonl", File: "/tmp/decisions.jsonl", Healthy: false, LastError: "permission denied"},
@@ -196,6 +197,18 @@ func TestControlIssuesExposeDurabilityProblems(t *testing.T) {
 	}
 	if !issues[0].Blocking || !issues[1].Blocking || !issues[2].Blocking {
 		t.Fatalf("expected blocking durability issues, got %+v", issues)
+	}
+}
+
+func TestControlIssuesExposeTransportWarnings(t *testing.T) {
+	issues := controlIssues(true,
+		controlListenerTransport{Enabled: true, Address: "0.0.0.0:8081", PublicListener: true},
+		controlBundlesStatus{},
+		controlOverridesStatus{},
+		controlAuditStatus{},
+	)
+	if len(issues) != 1 || issues[0].Code != "public_control_insecure" || issues[0].Blocking {
+		t.Fatalf("unexpected transport issues: %+v", issues)
 	}
 }
 

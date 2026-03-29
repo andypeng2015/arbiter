@@ -164,7 +164,7 @@ func newControlStatusPayload(
 	overrideStatus := controlOverridesPayload(registry, store, overridesFile)
 	sessionStatus := controlSessionsPayload(registry, sessions)
 	auditStatus := controlAuditPayload(audit)
-	issues := controlIssues(registry != nil && store != nil && sessions != nil, bundles, overrideStatus, auditStatus)
+	issues := controlIssues(registry != nil && store != nil && sessions != nil, transport, bundles, overrideStatus, auditStatus)
 	return controlStatusPayload{
 		Readiness: controlReadinessPayload(registry != nil && store != nil && sessions != nil, bundles, overrideStatus, auditStatus),
 		Issues:    issues,
@@ -204,10 +204,13 @@ func controlReadinessPayload(available bool, bundles controlBundlesStatus, overr
 	return controlReadinessStatus{Ready: true}
 }
 
-func controlIssues(available bool, bundles controlBundlesStatus, overrides controlOverridesStatus, audit controlAuditStatus) []statusview.Issue {
+func controlIssues(available bool, transport controlListenerTransport, bundles controlBundlesStatus, overrides controlOverridesStatus, audit controlAuditStatus) []statusview.Issue {
 	issues := make([]statusview.Issue, 0)
 	if !available {
 		return append(issues, statusview.Error("readiness", "control", "status_unavailable", "status unavailable", true))
+	}
+	if transport.PublicListener && !transport.TLSEnabled && !transport.AuthEnabled {
+		issues = append(issues, statusview.Warning("transport", controlIssueSubject(transport.Address, "control"), "public_control_insecure", "public control listener has no TLS or auth"))
 	}
 	if bundles.Persisted && !bundles.Healthy {
 		issues = append(issues, statusview.Error("bundles", controlIssueSubject(bundles.File, "bundles"), "bundle_persistence_unhealthy", controlIssueMessage("bundle persistence unhealthy", bundles.LastError), true))

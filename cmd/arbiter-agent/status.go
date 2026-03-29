@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/odvcencio/arbiter/dataplane"
+	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/internal/statusview"
 )
 
@@ -72,7 +73,7 @@ func newAgentStatusPayload(status dataplane.AgentStatus, reason string, policy r
 			TargetCount:    status.TargetCount,
 			ReadyCount:     status.ReadyCount,
 		},
-		Issues:    agentIssues(status, reason, policy),
+		Issues:    agentIssues(status, reason, policy, transport),
 		Transport: transport,
 		Sync: agentSyncStatus{
 			PrimaryName:             status.PrimaryName,
@@ -98,10 +99,16 @@ func newAgentStatusPayload(status dataplane.AgentStatus, reason string, policy r
 	}
 }
 
-func agentIssues(status dataplane.AgentStatus, reason string, policy readinessPolicy) []statusview.Issue {
+func agentIssues(status dataplane.AgentStatus, reason string, policy readinessPolicy, transport agentTransportStatus) []statusview.Issue {
 	issues := make([]statusview.Issue, 0)
 	if trimmed := strings.TrimSpace(reason); trimmed != "" {
 		issues = append(issues, statusview.Error("readiness", "agent", agentReadinessCode(trimmed), trimmed, true))
+	}
+	if transport.Control.PublicListener && !transport.Control.TLSEnabled && !transport.Control.AuthEnabled {
+		issues = append(issues, statusview.Warning("transport", agentTransportSubject(transport.Control.Address, "agent-control"), "public_control_insecure", "public control listener has no TLS or auth"))
+	}
+	if transport.Upstream.Configured && grpcutil.IsPublicListenAddr(transport.Upstream.Target) && !transport.Upstream.TLSEnabled && !transport.Upstream.AuthEnabled {
+		issues = append(issues, statusview.Warning("transport", agentTransportSubject(transport.Upstream.Target, "upstream"), "upstream_transport_insecure", "upstream transport has no TLS or auth"))
 	}
 	if trimmed := strings.TrimSpace(status.LastUpstreamError); trimmed != "" {
 		issues = append(issues, statusview.Warning("upstream", "control-plane", "upstream_error", trimmed))
@@ -172,6 +179,16 @@ func agentIssueSubject(item dataplane.BundleSyncStatus) string {
 	}
 	if value := strings.TrimSpace(item.BundleID); value != "" {
 		return value
+	}
+	return "unknown"
+}
+
+func agentTransportSubject(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
 	}
 	return "unknown"
 }

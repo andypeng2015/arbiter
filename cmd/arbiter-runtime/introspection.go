@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/odvcencio/arbiter/capability"
+	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/workflow"
 )
@@ -139,7 +140,7 @@ func newRuntimeStatusPayload(
 	caps := capabilityStatus(surface, manifest)
 	sources := cloneSourceStatus(lastResult.Sources)
 	sinks := cloneSinkStatus(lastResult.Sinks)
-	issues := runtimeIssues(ready, reason, lastResult)
+	issues := runtimeIssues(ready, reason, lastResult, control, capabilityTransport)
 	return runtimeStatusPayload{
 		Readiness: runtimeReadinessStatus{
 			Ready:  ready,
@@ -176,10 +177,16 @@ func newRuntimeStatusPayload(
 	}
 }
 
-func runtimeIssues(ready bool, reason string, lastResult workflow.TickResult) []statusview.Issue {
+func runtimeIssues(ready bool, reason string, lastResult workflow.TickResult, control runtimeControlTransport, capabilityTransport runtimeCapabilityTransport) []statusview.Issue {
 	issues := make([]statusview.Issue, 0)
 	if !ready && strings.TrimSpace(reason) != "" {
 		issues = append(issues, statusview.Error("readiness", "runtime", "first_tick_incomplete", strings.TrimSpace(reason), true))
+	}
+	if control.PublicListener && !control.TLSEnabled && !control.AuthEnabled {
+		issues = append(issues, statusview.Warning("transport", runtimeIssueSubject(control.Address, "runtime-control"), "public_control_insecure", "public control listener has no TLS or auth"))
+	}
+	if capabilityTransport.Configured && grpcutil.IsPublicListenAddr(capabilityTransport.Target) && !capabilityTransport.TLSEnabled && !capabilityTransport.AuthEnabled {
+		issues = append(issues, statusview.Warning("transport", runtimeIssueSubject(capabilityTransport.Target, "capability"), "capability_transport_insecure", "capability transport has no TLS or auth"))
 	}
 
 	sourceKeys := make([]string, 0, len(lastResult.Sources))

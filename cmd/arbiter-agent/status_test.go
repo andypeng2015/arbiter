@@ -274,12 +274,25 @@ func TestAgentIssuesExposeBlockingAndWarningProblems(t *testing.T) {
 		}},
 	}
 
-	issues := agentIssues(status, "bundle checkout stale (2500ms > 1000ms)", readinessPolicy{maxStaleness: time.Second})
+	issues := agentIssues(status, "bundle checkout stale (2500ms > 1000ms)", readinessPolicy{maxStaleness: time.Second}, agentTransportStatus{})
 	if len(issues) < 5 {
 		t.Fatalf("expected multiple surfaced issues, got %+v", issues)
 	}
 	if issues[0].Code != "bundle_stale" || !issues[0].Blocking {
 		t.Fatalf("expected first blocking readiness issue, got %+v", issues[0])
+	}
+}
+
+func TestAgentIssuesExposeTransportWarnings(t *testing.T) {
+	issues := agentIssues(dataplane.AgentStatus{}, "", readinessPolicy{}, agentTransportStatus{
+		Control:  newAgentControlTransport("0.0.0.0:7081", nil, nil),
+		Upstream: newAgentUpstreamTransport("arbiter.internal:7443", false, false, ""),
+	})
+	if len(issues) != 2 {
+		t.Fatalf("expected transport warnings, got %+v", issues)
+	}
+	if issues[0].Code != "public_control_insecure" || issues[1].Code != "upstream_transport_insecure" {
+		t.Fatalf("unexpected transport issue codes: %+v", issues)
 	}
 }
 

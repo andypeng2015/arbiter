@@ -115,7 +115,7 @@ func TestRuntimeStatusPayloadExposesCanonicalSections(t *testing.T) {
 		},
 		&capability.Manifest{Name: "ops-plugin", Version: "1.2.3"},
 		runtimeControlTransport{Enabled: true, Address: "127.0.0.1:7081"},
-		runtimeCapabilityTransport{Configured: true, Target: "plugin.internal:7443"},
+		runtimeCapabilityTransport{Configured: true, Target: "plugin.internal:7443", TLSEnabled: true},
 	)
 
 	if payload.Readiness.Ready || payload.Readiness.Reason != "first tick incomplete" {
@@ -277,6 +277,23 @@ func TestProtoRuntimeStatus(t *testing.T) {
 	}
 	if len(resp.GetActivity().GetSinkStatus()) != 1 || resp.GetActivity().GetSinkStatus()[0].GetKey() != "ops" {
 		t.Fatalf("unexpected sink status: %+v", resp.GetActivity().GetSinkStatus())
+	}
+}
+
+func TestRuntimeIssuesExposeTransportWarnings(t *testing.T) {
+	issues := runtimeIssues(false, "first tick incomplete", workflow.TickResult{}, runtimeControlTransport{
+		Enabled:        true,
+		Address:        "0.0.0.0:7081",
+		PublicListener: true,
+	}, runtimeCapabilityTransport{
+		Configured: true,
+		Target:     "plugin.internal:7443",
+	})
+	if len(issues) != 3 {
+		t.Fatalf("expected transport warnings plus readiness issue, got %+v", issues)
+	}
+	if issues[1].Code != "public_control_insecure" || issues[2].Code != "capability_transport_insecure" {
+		t.Fatalf("unexpected transport issue codes: %+v", issues)
 	}
 }
 
