@@ -39,6 +39,9 @@ func TestAgentStatusReportsReadyBundleAndFreshness(t *testing.T) {
 	if status.PrimaryName != "checkout" {
 		t.Fatalf("expected primary name checkout, got %q", status.PrimaryName)
 	}
+	if status.TargetCount != 1 || status.ReadyCount != 1 {
+		t.Fatalf("expected ready/target counts to be 1/1, got %+v", status)
+	}
 	if len(status.Bundles) == 0 {
 		t.Fatal("expected bundle status")
 	}
@@ -62,6 +65,15 @@ func TestAgentStatusReportsReadyBundleAndFreshness(t *testing.T) {
 	}
 	if status.Bundles[0].BundleReconnects != 0 || status.Bundles[0].OverrideReconnects != 0 {
 		t.Fatalf("unexpected per-bundle healthy reconnect counters: %+v", status.Bundles[0])
+	}
+	if !status.Bundles[0].BundleWatchConnected {
+		t.Fatalf("expected bundle watch to be connected, got %+v", status.Bundles[0])
+	}
+	if status.Bundles[0].OverrideConfigured {
+		t.Fatalf("expected overrides to be unconfigured, got %+v", status.Bundles[0])
+	}
+	if status.Bundles[0].OverrideWatchConnected {
+		t.Fatalf("expected override watch to be disconnected, got %+v", status.Bundles[0])
 	}
 	if status.LastUpstreamError != "" || !status.LastUpstreamErrorAt.IsZero() {
 		t.Fatalf("unexpected healthy last upstream error: %+v", status)
@@ -105,8 +117,13 @@ func TestAgentStatusTracksBootstrapFailuresAndReconnects(t *testing.T) {
 			status.OverrideErrorsTotal == 1 &&
 			status.BundleReconnectsTotal == 1 &&
 			status.OverrideReconnectsTotal == 1 &&
+			status.TargetCount == 1 &&
+			status.ReadyCount == 1 &&
 			status.LastUpstreamError != "" &&
 			!status.LastUpstreamErrorAt.IsZero() &&
+			bundleStatus.BundleWatchConnected &&
+			bundleStatus.OverrideConfigured &&
+			bundleStatus.OverrideWatchConnected &&
 			bundleStatus.BundleErrorsTotal == 2 &&
 			bundleStatus.OverrideErrorsTotal == 1 &&
 			bundleStatus.BundleReconnects == 1 &&

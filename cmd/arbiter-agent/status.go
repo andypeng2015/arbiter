@@ -13,7 +13,13 @@ type readinessPolicy struct {
 	maxStaleness time.Duration
 }
 
-func newStatusHandler(syncer *dataplane.Agent, policy readinessPolicy) http.Handler {
+type agentStatusPayload struct {
+	dataplane.AgentStatus
+	Transport agentTransportStatus `json:"transport"`
+	Readiness agentReadinessStatus `json:"readiness"`
+}
+
+func newStatusHandler(syncer *dataplane.Agent, policy readinessPolicy, transport agentTransportStatus) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -33,10 +39,20 @@ func newStatusHandler(syncer *dataplane.Agent, policy readinessPolicy) http.Hand
 			http.Error(w, "status unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		status := syncer.Status()
+		status, reason := readinessStatus(syncer, policy)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(status)
+		_ = json.NewEncoder(w).Encode(agentStatusPayload{
+			AgentStatus: status,
+			Transport:   transport,
+			Readiness: agentReadinessStatus{
+				Ready:          reason == "",
+				Reason:         reason,
+				MaxStalenessMs: policy.maxStaleness.Milliseconds(),
+				TargetCount:    status.TargetCount,
+				ReadyCount:     status.ReadyCount,
+			},
+		})
 	})
 	return mux
 }

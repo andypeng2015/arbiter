@@ -32,7 +32,10 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 		Source: []byte(statusTestInitialSource),
 	})
 	syncer := dataplane.New(cp)
-	handler := newStatusHandler(syncer, readinessPolicy{})
+	handler := newStatusHandler(syncer, readinessPolicy{}, agentTransportStatus{
+		Control:  newAgentControlTransport("127.0.0.1:7081"),
+		Upstream: newAgentUpstreamTransport("arbiter.internal:7443", true, true, "arbiter.internal"),
+	})
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/healthz", nil))
@@ -78,6 +81,25 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 	if ready, _ := payload["ready"].(bool); !ready {
 		t.Fatalf("expected ready status, got %v", payload["ready"])
 	}
+	readiness, _ := payload["readiness"].(map[string]any)
+	if readiness == nil {
+		t.Fatal("expected readiness payload")
+	}
+	if ready, _ := readiness["ready"].(bool); !ready {
+		t.Fatalf("expected readiness payload to be ready, got %+v", readiness)
+	}
+	transport, _ := payload["transport"].(map[string]any)
+	if transport == nil {
+		t.Fatal("expected transport payload")
+	}
+	control, _ := transport["control"].(map[string]any)
+	if control == nil || control["address"] != "127.0.0.1:7081" {
+		t.Fatalf("unexpected control transport: %+v", control)
+	}
+	upstream, _ := transport["upstream"].(map[string]any)
+	if upstream == nil || upstream["target"] != "arbiter.internal:7443" {
+		t.Fatalf("unexpected upstream transport: %+v", upstream)
+	}
 	bundles, _ := payload["bundles"].([]any)
 	if len(bundles) == 0 {
 		t.Fatal("expected bundle payload")
@@ -103,6 +125,9 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 		}
 	}
 	for _, key := range []string{
+		"bundle_watch_connected",
+		"override_configured",
+		"override_watch_connected",
 		"bundle_errors_total",
 		"override_errors_total",
 		"bundle_reconnects",
@@ -125,7 +150,10 @@ func TestStatusHandlerReadinessThresholdMarksStaleSyncUnready(t *testing.T) {
 		Source: []byte(statusTestInitialSource),
 	})
 	syncer := dataplane.New(cp)
-	handler := newStatusHandler(syncer, readinessPolicy{maxStaleness: time.Millisecond})
+	handler := newStatusHandler(syncer, readinessPolicy{maxStaleness: time.Millisecond}, agentTransportStatus{
+		Control:  newAgentControlTransport("127.0.0.1:7081"),
+		Upstream: newAgentUpstreamTransport("arbiter.internal:7443", true, true, "arbiter.internal"),
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

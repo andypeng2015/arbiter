@@ -59,3 +59,20 @@ func TestParseDurationEnv(t *testing.T) {
 		t.Fatalf("parseDurationEnv fallback = %v", got)
 	}
 }
+
+func TestDescribeUpstreamTransport(t *testing.T) {
+	transport, err := describeUpstreamTransport(upstreamDialConfig{
+		target:     "https://arbiter.internal:7443",
+		token:      "top-secret",
+		serverName: "arbiter.internal",
+	})
+	if err != nil {
+		t.Fatalf("describeUpstreamTransport: %v", err)
+	}
+	if !transport.Configured || transport.Target != "arbiter.internal:7443" {
+		t.Fatalf("unexpected upstream target: %+v", transport)
+	}
+	if !transport.AuthEnabled || !transport.TLSEnabled || transport.ServerName != "arbiter.internal" {
+		t.Fatalf("unexpected upstream transport posture: %+v", transport)
+	}
+}

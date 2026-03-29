@@ -589,7 +589,7 @@ arbiter-agent --upstream https://arbiter.internal:443 --upstream-token "$ARBITER
 
 `arbiter replay` answers “what would happen now?” by reading audited `kind: "rules"` JSONL events, re-evaluating the recorded contexts, and reporting outcome drift. Use `--request-id` to focus on one audited decision or `--limit` to cap the batch.
 
-`arbiter-agent` is the localhost data-plane form factor. It bootstraps one or many active bundles from the upstream control plane with `GetBundle`, keeps `WatchBundles(active_only=true)` streams open, syncs runtime overrides from `GetOverrides` plus `WatchOverrides`, and serves the normal Arbiter gRPC API from its own in-memory registry and override store.
+`arbiter-agent` is the localhost data-plane form factor. It bootstraps one or many active bundles from the upstream control plane with `GetBundle`, keeps `WatchBundles(active_only=true)` streams open, syncs runtime overrides from `GetOverrides` plus `WatchOverrides`, and serves the normal Arbiter gRPC API from its own in-memory registry and override store. Its `/status` surface now reports the same kind of inspectable posture as the runtime: local control-listener posture, upstream transport posture, readiness policy/reason, and per-bundle watch connectivity instead of only raw counters.
 
 Repeat `--bundle-name` to keep multiple bundles hot, or set `ARBITER_BUNDLE_NAMES=checkout,pricing`. The legacy single-value `ARBITER_BUNDLE_NAME` env var still works.
 
@@ -609,7 +609,7 @@ It also exposes local health and status on the HTTP listener:
 
 - `GET /healthz` for process liveness
 - `GET /readyz` for sync readiness, optionally gated by the configured freshness threshold
-- `GET /status` for JSON introspection of synced bundles, checksums, bundle/override freshness, reconnect/error counters, and the last upstream failure when one is present
+- `GET /status` for JSON introspection of synced bundles, checksums, bundle/override freshness, reconnect/error counters, watch connectivity, readiness policy/reason, local control-listener posture, upstream transport posture, and the last upstream failure when one is present
 
 When `include` is involved, file-backed commands report diagnostics against the original source file:
 

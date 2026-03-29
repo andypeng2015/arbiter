@@ -13,6 +13,7 @@
 - **Unified transport hardening** — `arbiter-runtime --grpc` now uses the same bearer-token and TLS/mTLS hardening model as `arbiter serve`, instead of exposing a separate plaintext-only control surface.
 - **Explicit plugin transport** — capability-plugin dialing now uses the same target grammar as the rest of Arbiter (`grpc://`, `grpcs://`, `http://`, `https://`, or bare `host:port`) plus explicit token, CA, server-name, and plaintext flags.
 - **Inspectable runtime posture** — `/status` and `RuntimeService.GetRuntimeCapabilities` now expose the runtime control surface's effective auth/TLS/public-listener posture and the bound capability-plugin connection's target/auth/TLS/server-name posture, so operators can inspect the real runtime shape instead of reconstructing it from flags.
+- **Inspectable agent posture** — `arbiter-agent /status` now exposes local control-listener posture, upstream transport posture, readiness policy/reason, and per-bundle bundle/override watch connectivity alongside the existing sync counters.
 
 ### SDKs
 

@@ -196,6 +196,8 @@ func (a *Agent) Status() AgentStatus {
 	return AgentStatus{
 		Ready:                   readyTarget > 0 && readySeen >= readyTarget,
 		PrimaryName:             primary,
+		TargetCount:             readyTarget,
+		ReadyCount:              readySeen,
 		BundleErrorsTotal:       bundleErrorsTotal,
 		OverrideErrorsTotal:     overrideErrorsTotal,
 		BundleReconnectsTotal:   bundleReconnectsTotal,
@@ -322,6 +324,7 @@ func (a *Agent) initTracking(targets []syncTarget) {
 		a.readyTarget++
 		status := a.statuses[name]
 		status.Name = name
+		status.OverrideConfigured = a.overrideCP != nil
 		a.statuses[name] = status
 	}
 }
@@ -371,10 +374,12 @@ func (a *Agent) watchBundleTarget(ctx context.Context, target syncTarget) error 
 			a.recordBundleReconnect(name)
 		}
 		connected = true
+		a.setBundleWatchConnected(name, true)
 		backoff = initialSyncBackoff
 
 		err = a.consumeBundleStream(ctx, name, stream)
 		_ = stream.Close()
+		a.setBundleWatchConnected(name, false)
 		if err == nil {
 			continue
 		}
@@ -575,10 +580,12 @@ func (a *Agent) runOverrideWatch(ctx context.Context, locator OverrideLocator) {
 			a.recordOverrideReconnect(locator.Name, locator.BundleID)
 		}
 		connected = true
+		a.setOverrideWatchConnected(locator.Name, locator.BundleID, true)
 		backoff = initialSyncBackoff
 
 		err = a.consumeOverrideStream(ctx, locator, stream)
 		_ = stream.Close()
+		a.setOverrideWatchConnected(locator.Name, locator.BundleID, false)
 		if err == nil {
 			continue
 		}
@@ -624,6 +631,7 @@ func (a *Agent) recordBundleStatus(bundle Bundle, syncedAt time.Time) {
 	status.Checksum = bundle.Checksum
 	status.LoadedAt = syncedAt
 	status.BundleSyncedAt = syncedAt
+	status.OverrideConfigured = a.overrideCP != nil
 	a.statuses[bundle.Name] = status
 }
 
@@ -639,6 +647,36 @@ func (a *Agent) recordOverrideStatus(name, bundleID string, syncedAt time.Time) 
 		status.BundleID = bundleID
 	}
 	status.OverrideSyncedAt = syncedAt
+	status.OverrideConfigured = true
+	a.statuses[name] = status
+}
+
+func (a *Agent) setBundleWatchConnected(name string, connected bool) {
+	if name == "" {
+		return
+	}
+	a.statusMu.Lock()
+	defer a.statusMu.Unlock()
+	status := a.statuses[name]
+	status.Name = name
+	status.OverrideConfigured = a.overrideCP != nil || status.OverrideConfigured
+	status.BundleWatchConnected = connected
+	a.statuses[name] = status
+}
+
+func (a *Agent) setOverrideWatchConnected(name, bundleID string, connected bool) {
+	if name == "" {
+		return
+	}
+	a.statusMu.Lock()
+	defer a.statusMu.Unlock()
+	status := a.statuses[name]
+	status.Name = name
+	if bundleID != "" {
+		status.BundleID = bundleID
+	}
+	status.OverrideConfigured = true
+	status.OverrideWatchConnected = connected
 	a.statuses[name] = status
 }
 

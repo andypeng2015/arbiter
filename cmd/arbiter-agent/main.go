@@ -90,6 +90,17 @@ func main() {
 		log.Fatalf("connect upstream: %v", err)
 	}
 	defer func() { _ = upstreamConn.Close() }()
+	upstreamTransport, err := describeUpstreamTransport(upstreamDialConfig{
+		target:        *upstreamAddr,
+		token:         *upstreamToken,
+		caFile:        *upstreamCAFile,
+		serverName:    *upstreamServerName,
+		forceInsecure: *upstreamPlaintext,
+	})
+	if err != nil {
+		log.Fatalf("describe upstream transport: %v", err)
+	}
+	controlTransport := newAgentControlTransport(*listenAddr)
 
 	upstreamCP := dataplane.NewGRPCControlPlane(arbiterv1.NewArbiterServiceClient(upstreamConn))
 	var overrideCP dataplane.OverrideControlPlane = upstreamCP
@@ -117,8 +128,11 @@ func main() {
 	var statusServer *http.Server
 	if *statusAddr != "" {
 		statusServer = &http.Server{
-			Addr:              *statusAddr,
-			Handler:           newStatusHandler(syncer, readinessPolicy{maxStaleness: *readyMaxStaleness}),
+			Addr: *statusAddr,
+			Handler: newStatusHandler(syncer, readinessPolicy{maxStaleness: *readyMaxStaleness}, agentTransportStatus{
+				Control:  controlTransport,
+				Upstream: upstreamTransport,
+			}),
 			ReadHeaderTimeout: 5 * time.Second,
 		}
 		go func() {
@@ -223,4 +237,12 @@ func dialUpstream(cfg upstreamDialConfig) (*grpc.ClientConn, string, error) {
 		ServerName:    cfg.serverName,
 		ForceInsecure: cfg.forceInsecure,
 	})
+}
+
+func describeUpstreamTransport(cfg upstreamDialConfig) (agentUpstreamTransport, error) {
+	target, tlsEnabled, err := grpcutil.NormalizeTarget(cfg.target, cfg.forceInsecure, cfg.caFile != "" || cfg.serverName != "")
+	if err != nil {
+		return agentUpstreamTransport{}, err
+	}
+	return newAgentUpstreamTransport(target, strings.TrimSpace(cfg.token) != "", tlsEnabled, cfg.serverName), nil
 }

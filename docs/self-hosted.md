@@ -104,6 +104,8 @@ Two patterns are credible in production:
 
 The agent path is the better story when you want local low-latency eval without turning the engine into a shared multi-tenant service.
 
+Treat the agent with the same discipline as the runtime: inspect `/status` and verify the local listener posture, upstream auth/TLS posture, readiness reason, and bundle/override watch connectivity instead of assuming the sidecar is healthy because the process is up.
+
 ## Decision rule
 
 Self-host `arbiter` when you own one trust boundary and want a governed decision engine.
