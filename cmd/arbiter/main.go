@@ -1315,9 +1315,18 @@ func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
 
 	if bundles := resp.GetBundles(); bundles != nil {
 		fmt.Println("bundles:")
-		fmt.Printf("  published_total=%d active_total=%d persisted=%t\n", bundles.GetPublishedTotal(), bundles.GetActiveTotal(), bundles.GetPersisted())
+		fmt.Printf("  published_total=%d active_total=%d persisted=%t healthy=%t writes=%d errors=%d\n", bundles.GetPublishedTotal(), bundles.GetActiveTotal(), bundles.GetPersisted(), bundles.GetHealthy(), bundles.GetWritesTotal(), bundles.GetErrorsTotal())
 		if file := strings.TrimSpace(bundles.GetFile()); file != "" {
 			fmt.Printf("  file=%s\n", file)
+		}
+		if ts := formatProtoTimestamp(bundles.GetLastSuccessAt()); ts != "" {
+			fmt.Printf("  last_success_at=%s\n", ts)
+		}
+		if lastError := strings.TrimSpace(bundles.GetLastError()); lastError != "" {
+			fmt.Printf("  last_error=%s\n", lastError)
+		}
+		if ts := formatProtoTimestamp(bundles.GetLastErrorAt()); ts != "" {
+			fmt.Printf("  last_error_at=%s\n", ts)
 		}
 		fmt.Println("  active:")
 		if len(bundles.GetActive()) == 0 {
@@ -1335,9 +1344,18 @@ func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
 
 	if overrides := resp.GetOverrides(); overrides != nil {
 		fmt.Println("overrides:")
-		fmt.Printf("  bundle_total=%d rules=%d flags=%d flag_rules=%d strategies=%d persisted=%t\n", overrides.GetBundleTotal(), overrides.GetRules(), overrides.GetFlags(), overrides.GetFlagRules(), overrides.GetStrategies(), overrides.GetPersisted())
+		fmt.Printf("  bundle_total=%d rules=%d flags=%d flag_rules=%d strategies=%d persisted=%t healthy=%t writes=%d errors=%d\n", overrides.GetBundleTotal(), overrides.GetRules(), overrides.GetFlags(), overrides.GetFlagRules(), overrides.GetStrategies(), overrides.GetPersisted(), overrides.GetHealthy(), overrides.GetWritesTotal(), overrides.GetErrorsTotal())
 		if file := strings.TrimSpace(overrides.GetFile()); file != "" {
 			fmt.Printf("  file=%s\n", file)
+		}
+		if ts := formatProtoTimestamp(overrides.GetLastSuccessAt()); ts != "" {
+			fmt.Printf("  last_success_at=%s\n", ts)
+		}
+		if lastError := strings.TrimSpace(overrides.GetLastError()); lastError != "" {
+			fmt.Printf("  last_error=%s\n", lastError)
+		}
+		if ts := formatProtoTimestamp(overrides.GetLastErrorAt()); ts != "" {
+			fmt.Printf("  last_error_at=%s\n", ts)
 		}
 		fmt.Println("  bundles:")
 		if len(overrides.GetBundles()) == 0 {

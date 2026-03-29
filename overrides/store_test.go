@@ -102,6 +102,38 @@ func TestFileStorePersistsOnMutation(t *testing.T) {
 	}
 }
 
+func TestStorePersistenceStatusTracksHealth(t *testing.T) {
+	path := t.TempDir() + "/overrides/store.json"
+	store, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("NewFileStore: %v", err)
+	}
+	if status := store.PersistenceStatus(); !status.Configured || !status.Durable || status.File != path || !status.Healthy || status.WritesTotal == 0 {
+		t.Fatalf("unexpected initial persistence status: %+v", status)
+	}
+
+	kill := true
+	if err := store.SetFlag("bundle_a", "checkout_v2", FlagOverride{KillSwitch: &kill}); err != nil {
+		t.Fatalf("SetFlag: %v", err)
+	}
+	if status := store.PersistenceStatus(); !status.Healthy || status.WritesTotal < 2 {
+		t.Fatalf("expected successful persisted mutation, got %+v", status)
+	}
+
+	badPath := t.TempDir()
+	store.mu.Lock()
+	store.path = badPath
+	store.mu.Unlock()
+	store.persistence.Configure(true, true, badPath)
+	if err := store.SetFlag("bundle_a", "checkout_v3", FlagOverride{KillSwitch: &kill}); err == nil {
+		t.Fatal("expected SetFlag against directory path to fail")
+	}
+	status := store.PersistenceStatus()
+	if status.Healthy || status.ErrorsTotal != 1 || status.LastError == "" || status.LastErrorAt.IsZero() {
+		t.Fatalf("expected failed persistence status, got %+v", status)
+	}
+}
+
 func TestStoreSnapshotForBundleReturnsDeepCopy(t *testing.T) {
 	store := NewStore()
 	kill := true

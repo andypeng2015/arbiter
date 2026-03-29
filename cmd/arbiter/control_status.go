@@ -49,6 +49,12 @@ type controlBundlesStatus struct {
 	ActiveTotal    int                   `json:"active_total"`
 	Persisted      bool                  `json:"persisted"`
 	File           string                `json:"file,omitempty"`
+	Healthy        bool                  `json:"healthy"`
+	WritesTotal    uint64                `json:"writes_total"`
+	ErrorsTotal    uint64                `json:"errors_total"`
+	LastSuccessAt  time.Time             `json:"last_success_at,omitempty"`
+	LastError      string                `json:"last_error,omitempty"`
+	LastErrorAt    time.Time             `json:"last_error_at,omitempty"`
 	Active         []controlBundleStatus `json:"active,omitempty"`
 }
 
@@ -62,14 +68,20 @@ type controlBundleOverrideStatus struct {
 }
 
 type controlOverridesStatus struct {
-	BundleTotal int                           `json:"bundle_total"`
-	Rules       int                           `json:"rules"`
-	Flags       int                           `json:"flags"`
-	FlagRules   int                           `json:"flag_rules"`
-	Strategies  int                           `json:"strategies"`
-	Persisted   bool                          `json:"persisted"`
-	File        string                        `json:"file,omitempty"`
-	Bundles     []controlBundleOverrideStatus `json:"bundles,omitempty"`
+	BundleTotal   int                           `json:"bundle_total"`
+	Rules         int                           `json:"rules"`
+	Flags         int                           `json:"flags"`
+	FlagRules     int                           `json:"flag_rules"`
+	Strategies    int                           `json:"strategies"`
+	Persisted     bool                          `json:"persisted"`
+	File          string                        `json:"file,omitempty"`
+	Healthy       bool                          `json:"healthy"`
+	WritesTotal   uint64                        `json:"writes_total"`
+	ErrorsTotal   uint64                        `json:"errors_total"`
+	LastSuccessAt time.Time                     `json:"last_success_at,omitempty"`
+	LastError     string                        `json:"last_error,omitempty"`
+	LastErrorAt   time.Time                     `json:"last_error_at,omitempty"`
+	Bundles       []controlBundleOverrideStatus `json:"bundles,omitempty"`
 }
 
 type controlSessionBundleStatus struct {
@@ -179,10 +191,20 @@ func controlBundlesPayload(registry *grpcserver.Registry, bundleFile string) con
 	status := controlBundlesStatus{
 		Persisted: bundleFile != "",
 		File:      bundleFile,
+		Healthy:   true,
 	}
 	if registry == nil {
 		return status
 	}
+	persistence := registry.PersistenceStatus()
+	status.Persisted = persistence.Configured
+	status.File = persistence.File
+	status.Healthy = persistence.Healthy
+	status.WritesTotal = persistence.WritesTotal
+	status.ErrorsTotal = persistence.ErrorsTotal
+	status.LastSuccessAt = persistence.LastSuccessAt
+	status.LastError = persistence.LastError
+	status.LastErrorAt = persistence.LastErrorAt
 
 	published := registry.List("")
 	active := registry.ActiveBundles(nil)
@@ -224,10 +246,20 @@ func controlOverridesPayload(registry *grpcserver.Registry, store *overrides.Sto
 	status := controlOverridesStatus{
 		Persisted: overridesFile != "",
 		File:      overridesFile,
+		Healthy:   true,
 	}
 	if store == nil {
 		return status
 	}
+	persistence := store.PersistenceStatus()
+	status.Persisted = persistence.Configured
+	status.File = persistence.File
+	status.Healthy = persistence.Healthy
+	status.WritesTotal = persistence.WritesTotal
+	status.ErrorsTotal = persistence.ErrorsTotal
+	status.LastSuccessAt = persistence.LastSuccessAt
+	status.LastError = persistence.LastError
+	status.LastErrorAt = persistence.LastErrorAt
 
 	snapshot := store.Snapshot()
 	bundleIDs := make(map[string]struct{})
@@ -382,17 +414,29 @@ func protoControlStatus(payload controlStatusPayload) *arbiterv1.GetControlStatu
 			ActiveTotal:    uint32(payload.Bundles.ActiveTotal),
 			Persisted:      payload.Bundles.Persisted,
 			File:           payload.Bundles.File,
+			Healthy:        payload.Bundles.Healthy,
+			WritesTotal:    payload.Bundles.WritesTotal,
+			ErrorsTotal:    payload.Bundles.ErrorsTotal,
+			LastSuccessAt:  protoControlTimestamp(payload.Bundles.LastSuccessAt),
+			LastError:      payload.Bundles.LastError,
+			LastErrorAt:    protoControlTimestamp(payload.Bundles.LastErrorAt),
 			Active:         make([]*arbiterv1.ControlBundleStatus, 0, len(payload.Bundles.Active)),
 		},
 		Overrides: &arbiterv1.ControlOverridesStatus{
-			BundleTotal: uint32(payload.Overrides.BundleTotal),
-			Rules:       uint32(payload.Overrides.Rules),
-			Flags:       uint32(payload.Overrides.Flags),
-			FlagRules:   uint32(payload.Overrides.FlagRules),
-			Strategies:  uint32(payload.Overrides.Strategies),
-			Persisted:   payload.Overrides.Persisted,
-			File:        payload.Overrides.File,
-			Bundles:     make([]*arbiterv1.ControlBundleOverrideStatus, 0, len(payload.Overrides.Bundles)),
+			BundleTotal:   uint32(payload.Overrides.BundleTotal),
+			Rules:         uint32(payload.Overrides.Rules),
+			Flags:         uint32(payload.Overrides.Flags),
+			FlagRules:     uint32(payload.Overrides.FlagRules),
+			Strategies:    uint32(payload.Overrides.Strategies),
+			Persisted:     payload.Overrides.Persisted,
+			File:          payload.Overrides.File,
+			Healthy:       payload.Overrides.Healthy,
+			WritesTotal:   payload.Overrides.WritesTotal,
+			ErrorsTotal:   payload.Overrides.ErrorsTotal,
+			LastSuccessAt: protoControlTimestamp(payload.Overrides.LastSuccessAt),
+			LastError:     payload.Overrides.LastError,
+			LastErrorAt:   protoControlTimestamp(payload.Overrides.LastErrorAt),
+			Bundles:       make([]*arbiterv1.ControlBundleOverrideStatus, 0, len(payload.Overrides.Bundles)),
 		},
 		Sessions: &arbiterv1.ControlSessionsStatus{
 			Active:      uint32(payload.Sessions.Active),

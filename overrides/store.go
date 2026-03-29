@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/odvcencio/arbiter/ir"
 )
@@ -111,11 +112,114 @@ type Store struct {
 	subscribers map[uint64]overrideSubscription
 	nextSubID   uint64
 	path        string
+	persistence *persistenceTracker
+}
+
+// PersistenceStatus reports the health of file-backed override persistence.
+type PersistenceStatus struct {
+	Configured    bool
+	Durable       bool
+	File          string
+	Healthy       bool
+	WritesTotal   uint64
+	ErrorsTotal   uint64
+	LastSuccessAt time.Time
+	LastError     string
+	LastErrorAt   time.Time
 }
 
 type overrideSubscription struct {
 	bundleID string
 	ch       chan OverrideEvent
+}
+
+type persistenceTracker struct {
+	mu sync.RWMutex
+
+	configured bool
+	durable    bool
+	file       string
+
+	writesTotal   uint64
+	errorsTotal   uint64
+	lastSuccessAt time.Time
+	lastError     string
+	lastErrorAt   time.Time
+}
+
+func newPersistenceTracker() *persistenceTracker {
+	return &persistenceTracker{}
+}
+
+func (t *persistenceTracker) Configure(configured bool, durable bool, file string) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.configured != configured || t.durable != durable || t.file != file {
+		t.writesTotal = 0
+		t.errorsTotal = 0
+		t.lastSuccessAt = time.Time{}
+		t.lastError = ""
+		t.lastErrorAt = time.Time{}
+	}
+	t.configured = configured
+	t.durable = durable
+	t.file = file
+}
+
+func (t *persistenceTracker) Snapshot() PersistenceStatus {
+	if t == nil {
+		return PersistenceStatus{Healthy: true}
+	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if !t.configured {
+		return PersistenceStatus{Healthy: true}
+	}
+	healthy := true
+	if !t.lastErrorAt.IsZero() && (t.lastSuccessAt.IsZero() || t.lastErrorAt.After(t.lastSuccessAt)) {
+		healthy = false
+	}
+	return PersistenceStatus{
+		Configured:    true,
+		Durable:       t.durable,
+		File:          t.file,
+		Healthy:       healthy,
+		WritesTotal:   t.writesTotal,
+		ErrorsTotal:   t.errorsTotal,
+		LastSuccessAt: t.lastSuccessAt,
+		LastError:     t.lastError,
+		LastErrorAt:   t.lastErrorAt,
+	}
+}
+
+func (t *persistenceTracker) RecordSuccess(at time.Time) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.configured {
+		return
+	}
+	t.writesTotal++
+	t.lastSuccessAt = at.UTC()
+}
+
+func (t *persistenceTracker) RecordError(at time.Time, err error) {
+	if t == nil || err == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.configured {
+		return
+	}
+	t.errorsTotal++
+	t.lastError = err.Error()
+	t.lastErrorAt = at.UTC()
 }
 
 // Snapshot is a serializable copy of all stored overrides.
@@ -134,6 +238,7 @@ func NewStore() *Store {
 		flagRules:   make(map[string]map[string]map[int]FlagRuleOverride),
 		strategies:  make(map[string]map[string]map[string]StrategyOverride),
 		subscribers: make(map[uint64]overrideSubscription),
+		persistence: newPersistenceTracker(),
 	}
 }
 
@@ -152,9 +257,12 @@ func (s *Store) UseFile(path string) error {
 		s.mu.Lock()
 		s.path = ""
 		s.mu.Unlock()
+		s.persistence.Configure(false, false, "")
 		return nil
 	}
+	s.persistence.Configure(true, true, path)
 	if err := s.loadFileIfExists(path); err != nil {
+		s.persistence.RecordError(time.Now().UTC(), err)
 		return err
 	}
 	s.mu.Lock()
@@ -582,12 +690,19 @@ func (s *Store) SaveFile(path string) error {
 	snapshot := s.Snapshot()
 	data, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
+		s.persistence.RecordError(time.Now().UTC(), err)
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		s.persistence.RecordError(time.Now().UTC(), err)
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		s.persistence.RecordError(time.Now().UTC(), err)
+		return err
+	}
+	s.persistence.RecordSuccess(time.Now().UTC())
+	return nil
 }
 
 // LoadFile restores a snapshot from a JSON file.
@@ -656,13 +771,23 @@ func (s *Store) persistAndNotifyLocked(event OverrideEvent, changed bool) error 
 	s.mu.Unlock()
 	if path != "" {
 		if err := saveSnapshot(path, snapshot); err != nil {
+			s.persistence.RecordError(time.Now().UTC(), err)
 			return err
 		}
+		s.persistence.RecordSuccess(time.Now().UTC())
 	}
 	if changed {
 		s.notify(event)
 	}
 	return nil
+}
+
+// PersistenceStatus reports the health of the store's file-backed persistence.
+func (s *Store) PersistenceStatus() PersistenceStatus {
+	if s == nil {
+		return PersistenceStatus{Healthy: true}
+	}
+	return s.persistence.Snapshot()
 }
 
 func (s *Store) loadFileIfExists(path string) error {

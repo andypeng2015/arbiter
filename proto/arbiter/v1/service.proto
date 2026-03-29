@@ -387,6 +387,12 @@ message ControlBundlesStatus {
   bool persisted = 3;
   string file = 4;
   repeated ControlBundleStatus active = 5;
+  bool healthy = 6;
+  uint64 writes_total = 7;
+  uint64 errors_total = 8;
+  google.protobuf.Timestamp last_success_at = 9;
+  string last_error = 10;
+  google.protobuf.Timestamp last_error_at = 11;
 }
 
 message ControlBundleOverrideStatus {
@@ -407,6 +413,12 @@ message ControlOverridesStatus {
   bool persisted = 6;
   string file = 7;
   repeated ControlBundleOverrideStatus bundles = 8;
+  bool healthy = 9;
+  uint64 writes_total = 10;
+  uint64 errors_total = 11;
+  google.protobuf.Timestamp last_success_at = 12;
+  string last_error = 13;
+  google.protobuf.Timestamp last_error_at = 14;
 }
 
 message ControlSessionBundleStatus {

@@ -39,7 +39,12 @@ strategy CheckoutRouting returns CheckoutPath {
 `
 
 func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
-	registry := grpcserver.NewRegistry()
+	dir := t.TempDir()
+	bundleFile := dir + "/bundles.json"
+	registry, err := grpcserver.NewFileRegistry(bundleFile)
+	if err != nil {
+		t.Fatalf("NewFileRegistry: %v", err)
+	}
 	bundle, err := registry.Publish("checkout", []byte(controlStatusTestSource))
 	if err != nil {
 		t.Fatalf("Publish: %v", err)
@@ -48,7 +53,11 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 		t.Fatalf("Publish second version: %v", err)
 	}
 
-	store := overrides.NewStore()
+	overridesFile := dir + "/overrides.json"
+	store, err := overrides.NewFileStore(overridesFile)
+	if err != nil {
+		t.Fatalf("NewFileStore: %v", err)
+	}
 	enabled := true
 	rollout := uint16(25)
 	if err := store.SetRule(bundle.ID, "AllowCheckout", overrides.RuleOverride{KillSwitch: &enabled, Rollout: &rollout}); err != nil {
@@ -74,8 +83,8 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 		store,
 		sessions,
 		controlListenerTransport{Enabled: true, Address: "127.0.0.1:8081", AuthEnabled: true, TLSEnabled: true},
-		"/tmp/bundles.json",
-		"/tmp/overrides.json",
+		bundleFile,
+		overridesFile,
 		newControlAuditTracker(true, "jsonl", true, "/tmp/decisions.jsonl"),
 	)
 
@@ -85,13 +94,13 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 	if payload.Transport.Control.Address != "127.0.0.1:8081" || !payload.Transport.Control.AuthEnabled {
 		t.Fatalf("unexpected transport: %+v", payload.Transport)
 	}
-	if payload.Bundles.PublishedTotal != 2 || payload.Bundles.ActiveTotal != 1 || !payload.Bundles.Persisted {
+	if payload.Bundles.PublishedTotal != 2 || payload.Bundles.ActiveTotal != 1 || !payload.Bundles.Persisted || !payload.Bundles.Healthy || payload.Bundles.File != bundleFile || payload.Bundles.WritesTotal == 0 {
 		t.Fatalf("unexpected bundles status: %+v", payload.Bundles)
 	}
 	if len(payload.Bundles.Active) != 1 || payload.Bundles.Active[0].Name != "checkout" || payload.Bundles.Active[0].PublishedVersions != 2 {
 		t.Fatalf("unexpected active bundle status: %+v", payload.Bundles.Active)
 	}
-	if payload.Overrides.BundleTotal != 1 || payload.Overrides.Rules != 1 || payload.Overrides.Flags != 1 || payload.Overrides.Strategies != 1 || !payload.Overrides.Persisted {
+	if payload.Overrides.BundleTotal != 1 || payload.Overrides.Rules != 1 || payload.Overrides.Flags != 1 || payload.Overrides.Strategies != 1 || !payload.Overrides.Persisted || !payload.Overrides.Healthy || payload.Overrides.File != overridesFile || payload.Overrides.WritesTotal == 0 {
 		t.Fatalf("unexpected overrides status: %+v", payload.Overrides)
 	}
 	if len(payload.Overrides.Bundles) != 1 || payload.Overrides.Bundles[0].Name != "checkout" {
@@ -126,6 +135,12 @@ func TestProtoControlStatus(t *testing.T) {
 			ActiveTotal:    1,
 			Persisted:      true,
 			File:           "/tmp/bundles.json",
+			Healthy:        false,
+			WritesTotal:    5,
+			ErrorsTotal:    1,
+			LastSuccessAt:  time.Unix(1710000000, 0).UTC(),
+			LastError:      "disk full",
+			LastErrorAt:    time.Unix(1710000060, 0).UTC(),
 			Active: []controlBundleStatus{{
 				Name:              "checkout",
 				BundleID:          "bundle-1",
@@ -139,13 +154,19 @@ func TestProtoControlStatus(t *testing.T) {
 			}},
 		},
 		Overrides: controlOverridesStatus{
-			BundleTotal: 1,
-			Rules:       1,
-			Flags:       1,
-			FlagRules:   0,
-			Strategies:  1,
-			Persisted:   true,
-			File:        "/tmp/overrides.json",
+			BundleTotal:   1,
+			Rules:         1,
+			Flags:         1,
+			FlagRules:     0,
+			Strategies:    1,
+			Persisted:     true,
+			File:          "/tmp/overrides.json",
+			Healthy:       false,
+			WritesTotal:   4,
+			ErrorsTotal:   2,
+			LastSuccessAt: time.Unix(1710000120, 0).UTC(),
+			LastError:     "read-only file system",
+			LastErrorAt:   time.Unix(1710000180, 0).UTC(),
 			Bundles: []controlBundleOverrideStatus{{
 				Name:       "checkout",
 				BundleID:   "bundle-1",
@@ -190,11 +211,23 @@ func TestProtoControlStatus(t *testing.T) {
 	if resp.GetBundles().GetPublishedTotal() != 2 || len(resp.GetBundles().GetActive()) != 1 {
 		t.Fatalf("unexpected bundles payload: %+v", resp.GetBundles())
 	}
+	if resp.GetBundles().GetHealthy() || resp.GetBundles().GetWritesTotal() != 5 || resp.GetBundles().GetErrorsTotal() != 1 || resp.GetBundles().GetLastError() != "disk full" {
+		t.Fatalf("unexpected bundle persistence payload: %+v", resp.GetBundles())
+	}
+	if resp.GetBundles().GetLastSuccessAt() == nil || resp.GetBundles().GetLastErrorAt() == nil {
+		t.Fatalf("expected bundle persistence timestamps: %+v", resp.GetBundles())
+	}
 	if bundle := resp.GetBundles().GetActive()[0]; bundle.GetName() != "checkout" || bundle.GetPublishedVersions() != 2 || bundle.GetChecksum() != "abc123" {
 		t.Fatalf("unexpected active bundle: %+v", bundle)
 	}
 	if resp.GetOverrides().GetBundleTotal() != 1 || len(resp.GetOverrides().GetBundles()) != 1 {
 		t.Fatalf("unexpected overrides payload: %+v", resp.GetOverrides())
+	}
+	if resp.GetOverrides().GetHealthy() || resp.GetOverrides().GetWritesTotal() != 4 || resp.GetOverrides().GetErrorsTotal() != 2 || resp.GetOverrides().GetLastError() != "read-only file system" {
+		t.Fatalf("unexpected override persistence payload: %+v", resp.GetOverrides())
+	}
+	if resp.GetOverrides().GetLastSuccessAt() == nil || resp.GetOverrides().GetLastErrorAt() == nil {
+		t.Fatalf("expected override persistence timestamps: %+v", resp.GetOverrides())
 	}
 	if item := resp.GetOverrides().GetBundles()[0]; item.GetName() != "checkout" || item.GetStrategies() != 1 {
 		t.Fatalf("unexpected override bundle: %+v", item)

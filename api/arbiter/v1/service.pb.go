@@ -3258,6 +3258,12 @@ type ControlBundlesStatus struct {
 	Persisted      bool                   `protobuf:"varint,3,opt,name=persisted,proto3" json:"persisted,omitempty"`
 	File           string                 `protobuf:"bytes,4,opt,name=file,proto3" json:"file,omitempty"`
 	Active         []*ControlBundleStatus `protobuf:"bytes,5,rep,name=active,proto3" json:"active,omitempty"`
+	Healthy        bool                   `protobuf:"varint,6,opt,name=healthy,proto3" json:"healthy,omitempty"`
+	WritesTotal    uint64                 `protobuf:"varint,7,opt,name=writes_total,json=writesTotal,proto3" json:"writes_total,omitempty"`
+	ErrorsTotal    uint64                 `protobuf:"varint,8,opt,name=errors_total,json=errorsTotal,proto3" json:"errors_total,omitempty"`
+	LastSuccessAt  *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_success_at,json=lastSuccessAt,proto3" json:"last_success_at,omitempty"`
+	LastError      string                 `protobuf:"bytes,10,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	LastErrorAt    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_error_at,json=lastErrorAt,proto3" json:"last_error_at,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -3323,6 +3329,48 @@ func (x *ControlBundlesStatus) GetFile() string {
 func (x *ControlBundlesStatus) GetActive() []*ControlBundleStatus {
 	if x != nil {
 		return x.Active
+	}
+	return nil
+}
+
+func (x *ControlBundlesStatus) GetHealthy() bool {
+	if x != nil {
+		return x.Healthy
+	}
+	return false
+}
+
+func (x *ControlBundlesStatus) GetWritesTotal() uint64 {
+	if x != nil {
+		return x.WritesTotal
+	}
+	return 0
+}
+
+func (x *ControlBundlesStatus) GetErrorsTotal() uint64 {
+	if x != nil {
+		return x.ErrorsTotal
+	}
+	return 0
+}
+
+func (x *ControlBundlesStatus) GetLastSuccessAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSuccessAt
+	}
+	return nil
+}
+
+func (x *ControlBundlesStatus) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *ControlBundlesStatus) GetLastErrorAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastErrorAt
 	}
 	return nil
 }
@@ -3421,6 +3469,12 @@ type ControlOverridesStatus struct {
 	Persisted     bool                           `protobuf:"varint,6,opt,name=persisted,proto3" json:"persisted,omitempty"`
 	File          string                         `protobuf:"bytes,7,opt,name=file,proto3" json:"file,omitempty"`
 	Bundles       []*ControlBundleOverrideStatus `protobuf:"bytes,8,rep,name=bundles,proto3" json:"bundles,omitempty"`
+	Healthy       bool                           `protobuf:"varint,9,opt,name=healthy,proto3" json:"healthy,omitempty"`
+	WritesTotal   uint64                         `protobuf:"varint,10,opt,name=writes_total,json=writesTotal,proto3" json:"writes_total,omitempty"`
+	ErrorsTotal   uint64                         `protobuf:"varint,11,opt,name=errors_total,json=errorsTotal,proto3" json:"errors_total,omitempty"`
+	LastSuccessAt *timestamppb.Timestamp         `protobuf:"bytes,12,opt,name=last_success_at,json=lastSuccessAt,proto3" json:"last_success_at,omitempty"`
+	LastError     string                         `protobuf:"bytes,13,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	LastErrorAt   *timestamppb.Timestamp         `protobuf:"bytes,14,opt,name=last_error_at,json=lastErrorAt,proto3" json:"last_error_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3507,6 +3561,48 @@ func (x *ControlOverridesStatus) GetFile() string {
 func (x *ControlOverridesStatus) GetBundles() []*ControlBundleOverrideStatus {
 	if x != nil {
 		return x.Bundles
+	}
+	return nil
+}
+
+func (x *ControlOverridesStatus) GetHealthy() bool {
+	if x != nil {
+		return x.Healthy
+	}
+	return false
+}
+
+func (x *ControlOverridesStatus) GetWritesTotal() uint64 {
+	if x != nil {
+		return x.WritesTotal
+	}
+	return 0
+}
+
+func (x *ControlOverridesStatus) GetErrorsTotal() uint64 {
+	if x != nil {
+		return x.ErrorsTotal
+	}
+	return 0
+}
+
+func (x *ControlOverridesStatus) GetLastSuccessAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSuccessAt
+	}
+	return nil
+}
+
+func (x *ControlOverridesStatus) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *ControlOverridesStatus) GetLastErrorAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastErrorAt
 	}
 	return nil
 }
@@ -6540,13 +6636,21 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"flag_count\x18\a \x01(\rR\tflagCount\x12*\n" +
 	"\x11expert_rule_count\x18\b \x01(\rR\x0fexpertRuleCount\x12%\n" +
-	"\x0estrategy_count\x18\t \x01(\rR\rstrategyCount\"\xcd\x01\n" +
+	"\x0estrategy_count\x18\t \x01(\rR\rstrategyCount\"\xd0\x03\n" +
 	"\x14ControlBundlesStatus\x12'\n" +
 	"\x0fpublished_total\x18\x01 \x01(\rR\x0epublishedTotal\x12!\n" +
 	"\factive_total\x18\x02 \x01(\rR\vactiveTotal\x12\x1c\n" +
 	"\tpersisted\x18\x03 \x01(\bR\tpersisted\x12\x12\n" +
 	"\x04file\x18\x04 \x01(\tR\x04file\x127\n" +
-	"\x06active\x18\x05 \x03(\v2\x1f.arbiter.v1.ControlBundleStatusR\x06active\"\xb9\x01\n" +
+	"\x06active\x18\x05 \x03(\v2\x1f.arbiter.v1.ControlBundleStatusR\x06active\x12\x18\n" +
+	"\ahealthy\x18\x06 \x01(\bR\ahealthy\x12!\n" +
+	"\fwrites_total\x18\a \x01(\x04R\vwritesTotal\x12!\n" +
+	"\ferrors_total\x18\b \x01(\x04R\verrorsTotal\x12B\n" +
+	"\x0flast_success_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\rlastSuccessAt\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\n" +
+	" \x01(\tR\tlastError\x12>\n" +
+	"\rlast_error_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\vlastErrorAt\"\xb9\x01\n" +
 	"\x1bControlBundleOverrideStatus\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tbundle_id\x18\x02 \x01(\tR\bbundleId\x12\x14\n" +
@@ -6556,7 +6660,7 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"flag_rules\x18\x05 \x01(\rR\tflagRules\x12\x1e\n" +
 	"\n" +
 	"strategies\x18\x06 \x01(\rR\n" +
-	"strategies\"\x9b\x02\n" +
+	"strategies\"\x9e\x04\n" +
 	"\x16ControlOverridesStatus\x12!\n" +
 	"\fbundle_total\x18\x01 \x01(\rR\vbundleTotal\x12\x14\n" +
 	"\x05rules\x18\x02 \x01(\rR\x05rules\x12\x14\n" +
@@ -6568,7 +6672,15 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"strategies\x12\x1c\n" +
 	"\tpersisted\x18\x06 \x01(\bR\tpersisted\x12\x12\n" +
 	"\x04file\x18\a \x01(\tR\x04file\x12A\n" +
-	"\abundles\x18\b \x03(\v2'.arbiter.v1.ControlBundleOverrideStatusR\abundles\"e\n" +
+	"\abundles\x18\b \x03(\v2'.arbiter.v1.ControlBundleOverrideStatusR\abundles\x12\x18\n" +
+	"\ahealthy\x18\t \x01(\bR\ahealthy\x12!\n" +
+	"\fwrites_total\x18\n" +
+	" \x01(\x04R\vwritesTotal\x12!\n" +
+	"\ferrors_total\x18\v \x01(\x04R\verrorsTotal\x12B\n" +
+	"\x0flast_success_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\rlastSuccessAt\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\r \x01(\tR\tlastError\x12>\n" +
+	"\rlast_error_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\vlastErrorAt\"e\n" +
 	"\x1aControlSessionBundleStatus\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tbundle_id\x18\x02 \x01(\tR\bbundleId\x12\x16\n" +
@@ -7027,114 +7139,118 @@ var file_arbiter_v1_service_proto_depIdxs = []int32{
 	45,  // 49: arbiter.v1.ControlTransportStatus.control:type_name -> arbiter.v1.ControlListenerTransport
 	94,  // 50: arbiter.v1.ControlBundleStatus.published_at:type_name -> google.protobuf.Timestamp
 	48,  // 51: arbiter.v1.ControlBundlesStatus.active:type_name -> arbiter.v1.ControlBundleStatus
-	50,  // 52: arbiter.v1.ControlOverridesStatus.bundles:type_name -> arbiter.v1.ControlBundleOverrideStatus
-	52,  // 53: arbiter.v1.ControlSessionsStatus.bundles:type_name -> arbiter.v1.ControlSessionBundleStatus
-	94,  // 54: arbiter.v1.ControlAuditStatus.last_success_at:type_name -> google.protobuf.Timestamp
-	94,  // 55: arbiter.v1.ControlAuditStatus.last_error_at:type_name -> google.protobuf.Timestamp
-	47,  // 56: arbiter.v1.GetControlStatusResponse.readiness:type_name -> arbiter.v1.ControlReadinessStatus
-	46,  // 57: arbiter.v1.GetControlStatusResponse.transport:type_name -> arbiter.v1.ControlTransportStatus
-	49,  // 58: arbiter.v1.GetControlStatusResponse.bundles:type_name -> arbiter.v1.ControlBundlesStatus
-	51,  // 59: arbiter.v1.GetControlStatusResponse.overrides:type_name -> arbiter.v1.ControlOverridesStatus
-	53,  // 60: arbiter.v1.GetControlStatusResponse.sessions:type_name -> arbiter.v1.ControlSessionsStatus
-	54,  // 61: arbiter.v1.GetControlStatusResponse.audit:type_name -> arbiter.v1.ControlAuditStatus
-	57,  // 62: arbiter.v1.BundleOverrides.rules:type_name -> arbiter.v1.RuleOverrideEntry
-	58,  // 63: arbiter.v1.BundleOverrides.flags:type_name -> arbiter.v1.FlagOverrideEntry
-	59,  // 64: arbiter.v1.BundleOverrides.flag_rules:type_name -> arbiter.v1.FlagRuleOverrideEntry
-	60,  // 65: arbiter.v1.BundleOverrides.strategies:type_name -> arbiter.v1.StrategyOverrideEntry
-	2,   // 66: arbiter.v1.RuleOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
-	2,   // 67: arbiter.v1.FlagOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
-	2,   // 68: arbiter.v1.StrategyOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
-	1,   // 69: arbiter.v1.OverrideEvent.type:type_name -> arbiter.v1.OverrideEventType
-	56,  // 70: arbiter.v1.OverrideEvent.snapshot:type_name -> arbiter.v1.BundleOverrides
-	57,  // 71: arbiter.v1.OverrideEvent.rule:type_name -> arbiter.v1.RuleOverrideEntry
-	58,  // 72: arbiter.v1.OverrideEvent.flag:type_name -> arbiter.v1.FlagOverrideEntry
-	59,  // 73: arbiter.v1.OverrideEvent.flag_rule:type_name -> arbiter.v1.FlagRuleOverrideEntry
-	60,  // 74: arbiter.v1.OverrideEvent.strategy:type_name -> arbiter.v1.StrategyOverrideEntry
-	95,  // 75: arbiter.v1.RuleMatch.params:type_name -> google.protobuf.Struct
-	95,  // 76: arbiter.v1.EvaluateRulesRequest.context:type_name -> google.protobuf.Struct
-	63,  // 77: arbiter.v1.EvaluateRulesResponse.matched:type_name -> arbiter.v1.RuleMatch
-	62,  // 78: arbiter.v1.EvaluateRulesResponse.trace:type_name -> arbiter.v1.TraceStep
-	95,  // 79: arbiter.v1.ResolveFlagRequest.context:type_name -> google.protobuf.Struct
-	95,  // 80: arbiter.v1.ResolveFlagResponse.values:type_name -> google.protobuf.Struct
-	62,  // 81: arbiter.v1.ResolveFlagResponse.trace:type_name -> arbiter.v1.TraceStep
-	95,  // 82: arbiter.v1.EvaluateStrategyRequest.context:type_name -> google.protobuf.Struct
-	95,  // 83: arbiter.v1.EvaluateStrategyResponse.params:type_name -> google.protobuf.Struct
-	62,  // 84: arbiter.v1.EvaluateStrategyResponse.trace:type_name -> arbiter.v1.TraceStep
-	95,  // 85: arbiter.v1.ExpertFact.fields:type_name -> google.protobuf.Struct
-	95,  // 86: arbiter.v1.ExpertOutcome.params:type_name -> google.protobuf.Struct
-	95,  // 87: arbiter.v1.ExpertActivation.params:type_name -> google.protobuf.Struct
-	62,  // 88: arbiter.v1.ExpertActivation.trace:type_name -> arbiter.v1.TraceStep
-	95,  // 89: arbiter.v1.StartSessionRequest.envelope:type_name -> google.protobuf.Struct
-	70,  // 90: arbiter.v1.StartSessionRequest.facts:type_name -> arbiter.v1.ExpertFact
-	71,  // 91: arbiter.v1.RunSessionResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
-	70,  // 92: arbiter.v1.RunSessionResponse.facts:type_name -> arbiter.v1.ExpertFact
-	72,  // 93: arbiter.v1.RunSessionResponse.activations:type_name -> arbiter.v1.ExpertActivation
-	70,  // 94: arbiter.v1.AssertFactsRequest.facts:type_name -> arbiter.v1.ExpertFact
-	79,  // 95: arbiter.v1.RetractFactsRequest.facts:type_name -> arbiter.v1.FactRef
-	71,  // 96: arbiter.v1.GetSessionTraceResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
-	70,  // 97: arbiter.v1.GetSessionTraceResponse.facts:type_name -> arbiter.v1.ExpertFact
-	72,  // 98: arbiter.v1.GetSessionTraceResponse.activations:type_name -> arbiter.v1.ExpertActivation
-	96,  // 99: arbiter.v1.SetRuleOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
-	97,  // 100: arbiter.v1.SetRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
-	96,  // 101: arbiter.v1.SetFlagOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
-	97,  // 102: arbiter.v1.SetFlagRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
-	96,  // 103: arbiter.v1.SetStrategyOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
-	97,  // 104: arbiter.v1.SetStrategyOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
-	4,   // 105: arbiter.v1.ArbiterService.PublishBundle:input_type -> arbiter.v1.PublishBundleRequest
-	7,   // 106: arbiter.v1.ArbiterService.ListBundles:input_type -> arbiter.v1.ListBundlesRequest
-	9,   // 107: arbiter.v1.ArbiterService.ActivateBundle:input_type -> arbiter.v1.ActivateBundleRequest
-	11,  // 108: arbiter.v1.ArbiterService.RollbackBundle:input_type -> arbiter.v1.RollbackBundleRequest
-	13,  // 109: arbiter.v1.ArbiterService.GetBundle:input_type -> arbiter.v1.GetBundleRequest
-	15,  // 110: arbiter.v1.ArbiterService.WatchBundles:input_type -> arbiter.v1.WatchBundlesRequest
-	17,  // 111: arbiter.v1.ArbiterService.GetOverrides:input_type -> arbiter.v1.GetOverridesRequest
-	19,  // 112: arbiter.v1.ArbiterService.WatchOverrides:input_type -> arbiter.v1.WatchOverridesRequest
-	64,  // 113: arbiter.v1.ArbiterService.EvaluateRules:input_type -> arbiter.v1.EvaluateRulesRequest
-	66,  // 114: arbiter.v1.ArbiterService.ResolveFlag:input_type -> arbiter.v1.ResolveFlagRequest
-	68,  // 115: arbiter.v1.ArbiterService.EvaluateStrategy:input_type -> arbiter.v1.EvaluateStrategyRequest
-	73,  // 116: arbiter.v1.ArbiterService.StartSession:input_type -> arbiter.v1.StartSessionRequest
-	75,  // 117: arbiter.v1.ArbiterService.RunSession:input_type -> arbiter.v1.RunSessionRequest
-	77,  // 118: arbiter.v1.ArbiterService.AssertFacts:input_type -> arbiter.v1.AssertFactsRequest
-	80,  // 119: arbiter.v1.ArbiterService.RetractFacts:input_type -> arbiter.v1.RetractFactsRequest
-	82,  // 120: arbiter.v1.ArbiterService.GetSessionTrace:input_type -> arbiter.v1.GetSessionTraceRequest
-	84,  // 121: arbiter.v1.ArbiterService.CloseSession:input_type -> arbiter.v1.CloseSessionRequest
-	86,  // 122: arbiter.v1.ArbiterService.SetRuleOverride:input_type -> arbiter.v1.SetRuleOverrideRequest
-	88,  // 123: arbiter.v1.ArbiterService.SetFlagOverride:input_type -> arbiter.v1.SetFlagOverrideRequest
-	90,  // 124: arbiter.v1.ArbiterService.SetFlagRuleOverride:input_type -> arbiter.v1.SetFlagRuleOverrideRequest
-	92,  // 125: arbiter.v1.ArbiterService.SetStrategyOverride:input_type -> arbiter.v1.SetStrategyOverrideRequest
-	20,  // 126: arbiter.v1.RuntimeService.GetRuntimeCapabilities:input_type -> arbiter.v1.GetRuntimeCapabilitiesRequest
-	21,  // 127: arbiter.v1.RuntimeService.GetRuntimeStatus:input_type -> arbiter.v1.GetRuntimeStatusRequest
-	22,  // 128: arbiter.v1.AgentService.GetAgentStatus:input_type -> arbiter.v1.GetAgentStatusRequest
-	23,  // 129: arbiter.v1.ControlService.GetControlStatus:input_type -> arbiter.v1.GetControlStatusRequest
-	5,   // 130: arbiter.v1.ArbiterService.PublishBundle:output_type -> arbiter.v1.PublishBundleResponse
-	8,   // 131: arbiter.v1.ArbiterService.ListBundles:output_type -> arbiter.v1.ListBundlesResponse
-	10,  // 132: arbiter.v1.ArbiterService.ActivateBundle:output_type -> arbiter.v1.ActivateBundleResponse
-	12,  // 133: arbiter.v1.ArbiterService.RollbackBundle:output_type -> arbiter.v1.RollbackBundleResponse
-	14,  // 134: arbiter.v1.ArbiterService.GetBundle:output_type -> arbiter.v1.GetBundleResponse
-	16,  // 135: arbiter.v1.ArbiterService.WatchBundles:output_type -> arbiter.v1.BundleEvent
-	18,  // 136: arbiter.v1.ArbiterService.GetOverrides:output_type -> arbiter.v1.GetOverridesResponse
-	61,  // 137: arbiter.v1.ArbiterService.WatchOverrides:output_type -> arbiter.v1.OverrideEvent
-	65,  // 138: arbiter.v1.ArbiterService.EvaluateRules:output_type -> arbiter.v1.EvaluateRulesResponse
-	67,  // 139: arbiter.v1.ArbiterService.ResolveFlag:output_type -> arbiter.v1.ResolveFlagResponse
-	69,  // 140: arbiter.v1.ArbiterService.EvaluateStrategy:output_type -> arbiter.v1.EvaluateStrategyResponse
-	74,  // 141: arbiter.v1.ArbiterService.StartSession:output_type -> arbiter.v1.StartSessionResponse
-	76,  // 142: arbiter.v1.ArbiterService.RunSession:output_type -> arbiter.v1.RunSessionResponse
-	78,  // 143: arbiter.v1.ArbiterService.AssertFacts:output_type -> arbiter.v1.AssertFactsResponse
-	81,  // 144: arbiter.v1.ArbiterService.RetractFacts:output_type -> arbiter.v1.RetractFactsResponse
-	83,  // 145: arbiter.v1.ArbiterService.GetSessionTrace:output_type -> arbiter.v1.GetSessionTraceResponse
-	85,  // 146: arbiter.v1.ArbiterService.CloseSession:output_type -> arbiter.v1.CloseSessionResponse
-	87,  // 147: arbiter.v1.ArbiterService.SetRuleOverride:output_type -> arbiter.v1.SetRuleOverrideResponse
-	89,  // 148: arbiter.v1.ArbiterService.SetFlagOverride:output_type -> arbiter.v1.SetFlagOverrideResponse
-	91,  // 149: arbiter.v1.ArbiterService.SetFlagRuleOverride:output_type -> arbiter.v1.SetFlagRuleOverrideResponse
-	93,  // 150: arbiter.v1.ArbiterService.SetStrategyOverride:output_type -> arbiter.v1.SetStrategyOverrideResponse
-	29,  // 151: arbiter.v1.RuntimeService.GetRuntimeCapabilities:output_type -> arbiter.v1.GetRuntimeCapabilitiesResponse
-	37,  // 152: arbiter.v1.RuntimeService.GetRuntimeStatus:output_type -> arbiter.v1.GetRuntimeStatusResponse
-	44,  // 153: arbiter.v1.AgentService.GetAgentStatus:output_type -> arbiter.v1.GetAgentStatusResponse
-	55,  // 154: arbiter.v1.ControlService.GetControlStatus:output_type -> arbiter.v1.GetControlStatusResponse
-	130, // [130:155] is the sub-list for method output_type
-	105, // [105:130] is the sub-list for method input_type
-	105, // [105:105] is the sub-list for extension type_name
-	105, // [105:105] is the sub-list for extension extendee
-	0,   // [0:105] is the sub-list for field type_name
+	94,  // 52: arbiter.v1.ControlBundlesStatus.last_success_at:type_name -> google.protobuf.Timestamp
+	94,  // 53: arbiter.v1.ControlBundlesStatus.last_error_at:type_name -> google.protobuf.Timestamp
+	50,  // 54: arbiter.v1.ControlOverridesStatus.bundles:type_name -> arbiter.v1.ControlBundleOverrideStatus
+	94,  // 55: arbiter.v1.ControlOverridesStatus.last_success_at:type_name -> google.protobuf.Timestamp
+	94,  // 56: arbiter.v1.ControlOverridesStatus.last_error_at:type_name -> google.protobuf.Timestamp
+	52,  // 57: arbiter.v1.ControlSessionsStatus.bundles:type_name -> arbiter.v1.ControlSessionBundleStatus
+	94,  // 58: arbiter.v1.ControlAuditStatus.last_success_at:type_name -> google.protobuf.Timestamp
+	94,  // 59: arbiter.v1.ControlAuditStatus.last_error_at:type_name -> google.protobuf.Timestamp
+	47,  // 60: arbiter.v1.GetControlStatusResponse.readiness:type_name -> arbiter.v1.ControlReadinessStatus
+	46,  // 61: arbiter.v1.GetControlStatusResponse.transport:type_name -> arbiter.v1.ControlTransportStatus
+	49,  // 62: arbiter.v1.GetControlStatusResponse.bundles:type_name -> arbiter.v1.ControlBundlesStatus
+	51,  // 63: arbiter.v1.GetControlStatusResponse.overrides:type_name -> arbiter.v1.ControlOverridesStatus
+	53,  // 64: arbiter.v1.GetControlStatusResponse.sessions:type_name -> arbiter.v1.ControlSessionsStatus
+	54,  // 65: arbiter.v1.GetControlStatusResponse.audit:type_name -> arbiter.v1.ControlAuditStatus
+	57,  // 66: arbiter.v1.BundleOverrides.rules:type_name -> arbiter.v1.RuleOverrideEntry
+	58,  // 67: arbiter.v1.BundleOverrides.flags:type_name -> arbiter.v1.FlagOverrideEntry
+	59,  // 68: arbiter.v1.BundleOverrides.flag_rules:type_name -> arbiter.v1.FlagRuleOverrideEntry
+	60,  // 69: arbiter.v1.BundleOverrides.strategies:type_name -> arbiter.v1.StrategyOverrideEntry
+	2,   // 70: arbiter.v1.RuleOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
+	2,   // 71: arbiter.v1.FlagOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
+	2,   // 72: arbiter.v1.StrategyOverrideEntry.kill_switch_state:type_name -> arbiter.v1.KillSwitchState
+	1,   // 73: arbiter.v1.OverrideEvent.type:type_name -> arbiter.v1.OverrideEventType
+	56,  // 74: arbiter.v1.OverrideEvent.snapshot:type_name -> arbiter.v1.BundleOverrides
+	57,  // 75: arbiter.v1.OverrideEvent.rule:type_name -> arbiter.v1.RuleOverrideEntry
+	58,  // 76: arbiter.v1.OverrideEvent.flag:type_name -> arbiter.v1.FlagOverrideEntry
+	59,  // 77: arbiter.v1.OverrideEvent.flag_rule:type_name -> arbiter.v1.FlagRuleOverrideEntry
+	60,  // 78: arbiter.v1.OverrideEvent.strategy:type_name -> arbiter.v1.StrategyOverrideEntry
+	95,  // 79: arbiter.v1.RuleMatch.params:type_name -> google.protobuf.Struct
+	95,  // 80: arbiter.v1.EvaluateRulesRequest.context:type_name -> google.protobuf.Struct
+	63,  // 81: arbiter.v1.EvaluateRulesResponse.matched:type_name -> arbiter.v1.RuleMatch
+	62,  // 82: arbiter.v1.EvaluateRulesResponse.trace:type_name -> arbiter.v1.TraceStep
+	95,  // 83: arbiter.v1.ResolveFlagRequest.context:type_name -> google.protobuf.Struct
+	95,  // 84: arbiter.v1.ResolveFlagResponse.values:type_name -> google.protobuf.Struct
+	62,  // 85: arbiter.v1.ResolveFlagResponse.trace:type_name -> arbiter.v1.TraceStep
+	95,  // 86: arbiter.v1.EvaluateStrategyRequest.context:type_name -> google.protobuf.Struct
+	95,  // 87: arbiter.v1.EvaluateStrategyResponse.params:type_name -> google.protobuf.Struct
+	62,  // 88: arbiter.v1.EvaluateStrategyResponse.trace:type_name -> arbiter.v1.TraceStep
+	95,  // 89: arbiter.v1.ExpertFact.fields:type_name -> google.protobuf.Struct
+	95,  // 90: arbiter.v1.ExpertOutcome.params:type_name -> google.protobuf.Struct
+	95,  // 91: arbiter.v1.ExpertActivation.params:type_name -> google.protobuf.Struct
+	62,  // 92: arbiter.v1.ExpertActivation.trace:type_name -> arbiter.v1.TraceStep
+	95,  // 93: arbiter.v1.StartSessionRequest.envelope:type_name -> google.protobuf.Struct
+	70,  // 94: arbiter.v1.StartSessionRequest.facts:type_name -> arbiter.v1.ExpertFact
+	71,  // 95: arbiter.v1.RunSessionResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
+	70,  // 96: arbiter.v1.RunSessionResponse.facts:type_name -> arbiter.v1.ExpertFact
+	72,  // 97: arbiter.v1.RunSessionResponse.activations:type_name -> arbiter.v1.ExpertActivation
+	70,  // 98: arbiter.v1.AssertFactsRequest.facts:type_name -> arbiter.v1.ExpertFact
+	79,  // 99: arbiter.v1.RetractFactsRequest.facts:type_name -> arbiter.v1.FactRef
+	71,  // 100: arbiter.v1.GetSessionTraceResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
+	70,  // 101: arbiter.v1.GetSessionTraceResponse.facts:type_name -> arbiter.v1.ExpertFact
+	72,  // 102: arbiter.v1.GetSessionTraceResponse.activations:type_name -> arbiter.v1.ExpertActivation
+	96,  // 103: arbiter.v1.SetRuleOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
+	97,  // 104: arbiter.v1.SetRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
+	96,  // 105: arbiter.v1.SetFlagOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
+	97,  // 106: arbiter.v1.SetFlagRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
+	96,  // 107: arbiter.v1.SetStrategyOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
+	97,  // 108: arbiter.v1.SetStrategyOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
+	4,   // 109: arbiter.v1.ArbiterService.PublishBundle:input_type -> arbiter.v1.PublishBundleRequest
+	7,   // 110: arbiter.v1.ArbiterService.ListBundles:input_type -> arbiter.v1.ListBundlesRequest
+	9,   // 111: arbiter.v1.ArbiterService.ActivateBundle:input_type -> arbiter.v1.ActivateBundleRequest
+	11,  // 112: arbiter.v1.ArbiterService.RollbackBundle:input_type -> arbiter.v1.RollbackBundleRequest
+	13,  // 113: arbiter.v1.ArbiterService.GetBundle:input_type -> arbiter.v1.GetBundleRequest
+	15,  // 114: arbiter.v1.ArbiterService.WatchBundles:input_type -> arbiter.v1.WatchBundlesRequest
+	17,  // 115: arbiter.v1.ArbiterService.GetOverrides:input_type -> arbiter.v1.GetOverridesRequest
+	19,  // 116: arbiter.v1.ArbiterService.WatchOverrides:input_type -> arbiter.v1.WatchOverridesRequest
+	64,  // 117: arbiter.v1.ArbiterService.EvaluateRules:input_type -> arbiter.v1.EvaluateRulesRequest
+	66,  // 118: arbiter.v1.ArbiterService.ResolveFlag:input_type -> arbiter.v1.ResolveFlagRequest
+	68,  // 119: arbiter.v1.ArbiterService.EvaluateStrategy:input_type -> arbiter.v1.EvaluateStrategyRequest
+	73,  // 120: arbiter.v1.ArbiterService.StartSession:input_type -> arbiter.v1.StartSessionRequest
+	75,  // 121: arbiter.v1.ArbiterService.RunSession:input_type -> arbiter.v1.RunSessionRequest
+	77,  // 122: arbiter.v1.ArbiterService.AssertFacts:input_type -> arbiter.v1.AssertFactsRequest
+	80,  // 123: arbiter.v1.ArbiterService.RetractFacts:input_type -> arbiter.v1.RetractFactsRequest
+	82,  // 124: arbiter.v1.ArbiterService.GetSessionTrace:input_type -> arbiter.v1.GetSessionTraceRequest
+	84,  // 125: arbiter.v1.ArbiterService.CloseSession:input_type -> arbiter.v1.CloseSessionRequest
+	86,  // 126: arbiter.v1.ArbiterService.SetRuleOverride:input_type -> arbiter.v1.SetRuleOverrideRequest
+	88,  // 127: arbiter.v1.ArbiterService.SetFlagOverride:input_type -> arbiter.v1.SetFlagOverrideRequest
+	90,  // 128: arbiter.v1.ArbiterService.SetFlagRuleOverride:input_type -> arbiter.v1.SetFlagRuleOverrideRequest
+	92,  // 129: arbiter.v1.ArbiterService.SetStrategyOverride:input_type -> arbiter.v1.SetStrategyOverrideRequest
+	20,  // 130: arbiter.v1.RuntimeService.GetRuntimeCapabilities:input_type -> arbiter.v1.GetRuntimeCapabilitiesRequest
+	21,  // 131: arbiter.v1.RuntimeService.GetRuntimeStatus:input_type -> arbiter.v1.GetRuntimeStatusRequest
+	22,  // 132: arbiter.v1.AgentService.GetAgentStatus:input_type -> arbiter.v1.GetAgentStatusRequest
+	23,  // 133: arbiter.v1.ControlService.GetControlStatus:input_type -> arbiter.v1.GetControlStatusRequest
+	5,   // 134: arbiter.v1.ArbiterService.PublishBundle:output_type -> arbiter.v1.PublishBundleResponse
+	8,   // 135: arbiter.v1.ArbiterService.ListBundles:output_type -> arbiter.v1.ListBundlesResponse
+	10,  // 136: arbiter.v1.ArbiterService.ActivateBundle:output_type -> arbiter.v1.ActivateBundleResponse
+	12,  // 137: arbiter.v1.ArbiterService.RollbackBundle:output_type -> arbiter.v1.RollbackBundleResponse
+	14,  // 138: arbiter.v1.ArbiterService.GetBundle:output_type -> arbiter.v1.GetBundleResponse
+	16,  // 139: arbiter.v1.ArbiterService.WatchBundles:output_type -> arbiter.v1.BundleEvent
+	18,  // 140: arbiter.v1.ArbiterService.GetOverrides:output_type -> arbiter.v1.GetOverridesResponse
+	61,  // 141: arbiter.v1.ArbiterService.WatchOverrides:output_type -> arbiter.v1.OverrideEvent
+	65,  // 142: arbiter.v1.ArbiterService.EvaluateRules:output_type -> arbiter.v1.EvaluateRulesResponse
+	67,  // 143: arbiter.v1.ArbiterService.ResolveFlag:output_type -> arbiter.v1.ResolveFlagResponse
+	69,  // 144: arbiter.v1.ArbiterService.EvaluateStrategy:output_type -> arbiter.v1.EvaluateStrategyResponse
+	74,  // 145: arbiter.v1.ArbiterService.StartSession:output_type -> arbiter.v1.StartSessionResponse
+	76,  // 146: arbiter.v1.ArbiterService.RunSession:output_type -> arbiter.v1.RunSessionResponse
+	78,  // 147: arbiter.v1.ArbiterService.AssertFacts:output_type -> arbiter.v1.AssertFactsResponse
+	81,  // 148: arbiter.v1.ArbiterService.RetractFacts:output_type -> arbiter.v1.RetractFactsResponse
+	83,  // 149: arbiter.v1.ArbiterService.GetSessionTrace:output_type -> arbiter.v1.GetSessionTraceResponse
+	85,  // 150: arbiter.v1.ArbiterService.CloseSession:output_type -> arbiter.v1.CloseSessionResponse
+	87,  // 151: arbiter.v1.ArbiterService.SetRuleOverride:output_type -> arbiter.v1.SetRuleOverrideResponse
+	89,  // 152: arbiter.v1.ArbiterService.SetFlagOverride:output_type -> arbiter.v1.SetFlagOverrideResponse
+	91,  // 153: arbiter.v1.ArbiterService.SetFlagRuleOverride:output_type -> arbiter.v1.SetFlagRuleOverrideResponse
+	93,  // 154: arbiter.v1.ArbiterService.SetStrategyOverride:output_type -> arbiter.v1.SetStrategyOverrideResponse
+	29,  // 155: arbiter.v1.RuntimeService.GetRuntimeCapabilities:output_type -> arbiter.v1.GetRuntimeCapabilitiesResponse
+	37,  // 156: arbiter.v1.RuntimeService.GetRuntimeStatus:output_type -> arbiter.v1.GetRuntimeStatusResponse
+	44,  // 157: arbiter.v1.AgentService.GetAgentStatus:output_type -> arbiter.v1.GetAgentStatusResponse
+	55,  // 158: arbiter.v1.ControlService.GetControlStatus:output_type -> arbiter.v1.GetControlStatusResponse
+	134, // [134:159] is the sub-list for method output_type
+	109, // [109:134] is the sub-list for method input_type
+	109, // [109:109] is the sub-list for extension type_name
+	109, // [109:109] is the sub-list for extension extendee
+	0,   // [0:109] is the sub-list for field type_name
 }
 
 func init() { file_arbiter_v1_service_proto_init() }

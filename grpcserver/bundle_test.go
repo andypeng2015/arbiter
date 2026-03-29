@@ -99,3 +99,35 @@ func TestRegistryInstallStoresCompiledBundleWithoutPrematureActivation(t *testin
 		t.Fatalf("expected install(true) to activate checkout bundle, got %+v ok=%v", active, ok)
 	}
 }
+
+func TestRegistryPersistenceStatusTracksHealth(t *testing.T) {
+	path := t.TempDir() + "/bundles/registry.json"
+	registry, err := NewFileRegistry(path)
+	if err != nil {
+		t.Fatalf("NewFileRegistry: %v", err)
+	}
+	if status := registry.PersistenceStatus(); !status.Configured || !status.Durable || status.File != path || !status.Healthy || status.WritesTotal == 0 {
+		t.Fatalf("unexpected initial persistence status: %+v", status)
+	}
+
+	if _, err := registry.Publish("checkout", []byte(bundleSourceV1)); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	if status := registry.PersistenceStatus(); !status.Healthy || status.WritesTotal < 2 {
+		t.Fatalf("expected successful persisted publish, got %+v", status)
+	}
+
+	badPath := t.TempDir()
+	registry.mu.Lock()
+	registry.path = badPath
+	registry.mu.Unlock()
+	registry.persistence.Configure(true, true, badPath)
+
+	if _, err := registry.Publish("checkout_failure", []byte(bundleSourceV1)); err == nil {
+		t.Fatal("expected publish against directory path to fail")
+	}
+	status := registry.PersistenceStatus()
+	if status.Healthy || status.ErrorsTotal != 1 || status.LastError == "" || status.LastErrorAt.IsZero() {
+		t.Fatalf("expected failed persistence status, got %+v", status)
+	}
+}

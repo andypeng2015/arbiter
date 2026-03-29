@@ -61,6 +61,19 @@ type registrySnapshot struct {
 	Active  map[string]string   `json:"active,omitempty"`
 }
 
+// PersistenceStatus reports the health of file-backed bundle persistence.
+type PersistenceStatus struct {
+	Configured    bool
+	Durable       bool
+	File          string
+	Healthy       bool
+	WritesTotal   uint64
+	ErrorsTotal   uint64
+	LastSuccessAt time.Time
+	LastError     string
+	LastErrorAt   time.Time
+}
+
 // Registry stores published bundles and optional active versions per bundle name.
 type Registry struct {
 	mu          sync.RWMutex
@@ -70,6 +83,96 @@ type Registry struct {
 	subscribers map[uint64]chan bundleEvent
 	nextSubID   uint64
 	path        string
+	persistence *persistenceTracker
+}
+
+type persistenceTracker struct {
+	mu sync.RWMutex
+
+	configured bool
+	durable    bool
+	file       string
+
+	writesTotal   uint64
+	errorsTotal   uint64
+	lastSuccessAt time.Time
+	lastError     string
+	lastErrorAt   time.Time
+}
+
+func newPersistenceTracker() *persistenceTracker {
+	return &persistenceTracker{}
+}
+
+func (t *persistenceTracker) Configure(configured bool, durable bool, file string) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.configured != configured || t.durable != durable || t.file != file {
+		t.writesTotal = 0
+		t.errorsTotal = 0
+		t.lastSuccessAt = time.Time{}
+		t.lastError = ""
+		t.lastErrorAt = time.Time{}
+	}
+	t.configured = configured
+	t.durable = durable
+	t.file = file
+}
+
+func (t *persistenceTracker) Snapshot() PersistenceStatus {
+	if t == nil {
+		return PersistenceStatus{Healthy: true}
+	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if !t.configured {
+		return PersistenceStatus{Healthy: true}
+	}
+	healthy := true
+	if !t.lastErrorAt.IsZero() && (t.lastSuccessAt.IsZero() || t.lastErrorAt.After(t.lastSuccessAt)) {
+		healthy = false
+	}
+	return PersistenceStatus{
+		Configured:    true,
+		Durable:       t.durable,
+		File:          t.file,
+		Healthy:       healthy,
+		WritesTotal:   t.writesTotal,
+		ErrorsTotal:   t.errorsTotal,
+		LastSuccessAt: t.lastSuccessAt,
+		LastError:     t.lastError,
+		LastErrorAt:   t.lastErrorAt,
+	}
+}
+
+func (t *persistenceTracker) RecordSuccess(at time.Time) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.configured {
+		return
+	}
+	t.writesTotal++
+	t.lastSuccessAt = at.UTC()
+}
+
+func (t *persistenceTracker) RecordError(at time.Time, err error) {
+	if t == nil || err == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.configured {
+		return
+	}
+	t.errorsTotal++
+	t.lastError = err.Error()
+	t.lastErrorAt = at.UTC()
 }
 
 // BuildBundle compiles one bundle payload without mutating a registry.
@@ -95,6 +198,7 @@ func NewRegistry() *Registry {
 		history:     make(map[string][]string),
 		active:      make(map[string]string),
 		subscribers: make(map[uint64]chan bundleEvent),
+		persistence: newPersistenceTracker(),
 	}
 }
 
@@ -113,16 +217,24 @@ func (r *Registry) UseFile(path string) error {
 		r.mu.Lock()
 		r.path = ""
 		r.mu.Unlock()
+		r.persistence.Configure(false, false, "")
 		return nil
 	}
+	r.persistence.Configure(true, true, path)
 	if err := r.loadFileIfExists(path); err != nil {
+		r.persistence.RecordError(time.Now().UTC(), err)
 		return err
 	}
 	r.mu.Lock()
 	r.path = path
 	snapshot := r.snapshotLocked()
 	r.mu.Unlock()
-	return saveRegistrySnapshot(path, snapshot)
+	if err := saveRegistrySnapshot(path, snapshot); err != nil {
+		r.persistence.RecordError(time.Now().UTC(), err)
+		return err
+	}
+	r.persistence.RecordSuccess(time.Now().UTC())
+	return nil
 }
 
 // Publish compiles and stores a governed bundle. The newest published version
@@ -500,7 +612,22 @@ func (r *Registry) persistSnapshot(snapshot registrySnapshot) error {
 	if r == nil || r.path == "" {
 		return nil
 	}
-	return saveRegistrySnapshot(r.path, snapshot)
+	err := saveRegistrySnapshot(r.path, snapshot)
+	now := time.Now().UTC()
+	if err != nil {
+		r.persistence.RecordError(now, err)
+		return err
+	}
+	r.persistence.RecordSuccess(now)
+	return nil
+}
+
+// PersistenceStatus reports the health of the registry's file-backed persistence.
+func (r *Registry) PersistenceStatus() PersistenceStatus {
+	if r == nil {
+		return PersistenceStatus{Healthy: true}
+	}
+	return r.persistence.Snapshot()
 }
 
 func (r *Registry) snapshotLocked() registrySnapshot {

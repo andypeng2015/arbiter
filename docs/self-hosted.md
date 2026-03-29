@@ -95,7 +95,7 @@ docker run --rm \
 
 Add auth and TLS before exposing it beyond a private network.
 
-Treat the hosted control plane with the same discipline: inspect `/status` or `ControlService.GetControlStatus` and verify the `readiness`, `transport`, `bundles`, `overrides`, `sessions`, and `audit` sections, including persisted bundle/override files, active bundle versions, live expert-session occupancy, listener auth/TLS posture, and whether decision recording is durable, healthy, and currently succeeding.
+Treat the hosted control plane with the same discipline: inspect `/status` or `ControlService.GetControlStatus` and verify the `readiness`, `transport`, `bundles`, `overrides`, `sessions`, and `audit` sections, including whether bundle and override persistence are healthy, active bundle versions, live expert-session occupancy, listener auth/TLS posture, and whether decision recording is durable, healthy, and currently succeeding.
 
 ## Edge and agent patterns
 
