@@ -34,11 +34,12 @@ func (s *agentRPCServer) GetAgentStatus(context.Context, *arbiterv1.GetAgentStat
 }
 
 func (*agentRPCServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
-	return &arbiterv1.GetStatusIssueCatalogResponse{Definitions: statusview.ProtoDefinitions()}, nil
+	return statusview.ProtoCatalog(statusview.SurfaceAgent), nil
 }
 
 func protoAgentStatus(payload agentStatusPayload) *arbiterv1.GetAgentStatusResponse {
 	return &arbiterv1.GetAgentStatusResponse{
+		Operator: statusview.ProtoOperator(),
 		Readiness: &arbiterv1.AgentReadinessStatus{
 			Ready:          payload.Readiness.Ready,
 			Reason:         payload.Readiness.Reason,

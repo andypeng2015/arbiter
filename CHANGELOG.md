@@ -27,6 +27,7 @@
 - **Issue catalog surfaces** — the canonical status-issue vocabulary now carries explicit runtime/agent/control surface membership and is exposed directly through `arbiter status-issues` plus `GetStatusIssueCatalog` on runtime, agent, and control gRPC services.
 - **HTTP issue catalogs** — runtime, agent, and hosted control now also expose scoped `GET /status/issues` JSON catalogs, so HTTP-first operators can inspect the same issue contract without gRPC tooling.
 - **Remote CLI issue catalogs** — `arbiter status-issues` now accepts a live target plus auth/TLS flags, auto-detects runtime vs agent vs control surfaces, and prints the remote-advertised issue catalog instead of assuming the local CLI build matches the running process.
+- **Versioned operator identity** — runtime, agent, hosted control, and issue-catalog surfaces now advertise `operator.product`, `operator.build_version`, and `operator.operator_contract_version`, so tooling can verify build and operator-contract compatibility directly from a live process.
 
 ### SDKs
 

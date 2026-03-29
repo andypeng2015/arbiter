@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/odvcencio/arbiter/dataplane"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/internal/statusview"
 )
@@ -18,10 +19,11 @@ type readinessPolicy struct {
 }
 
 type agentStatusPayload struct {
-	Readiness agentReadinessStatus `json:"readiness"`
-	Issues    []statusview.Issue   `json:"issues"`
-	Transport agentTransportStatus `json:"transport"`
-	Sync      agentSyncStatus      `json:"sync"`
+	Operator  buildinfo.OperatorInfo `json:"operator"`
+	Readiness agentReadinessStatus   `json:"readiness"`
+	Issues    []statusview.Issue     `json:"issues"`
+	Transport agentTransportStatus   `json:"transport"`
+	Sync      agentSyncStatus        `json:"sync"`
 
 	Ready                   bool                         `json:"ready"`
 	PrimaryName             string                       `json:"primary_name,omitempty"`
@@ -64,13 +66,14 @@ func newStatusHandler(syncer *dataplane.Agent, policy readinessPolicy, transport
 	mux.HandleFunc("/status/issues", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(statusview.DefinitionsForSurface(statusview.SurfaceAgent))
+		_ = json.NewEncoder(w).Encode(statusview.CatalogForSurface(statusview.SurfaceAgent))
 	})
 	return mux
 }
 
 func newAgentStatusPayload(status dataplane.AgentStatus, reason string, policy readinessPolicy, transport agentTransportStatus) agentStatusPayload {
 	return agentStatusPayload{
+		Operator: buildinfo.Current(),
 		Readiness: agentReadinessStatus{
 			Ready:          reason == "",
 			Reason:         reason,

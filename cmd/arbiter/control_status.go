@@ -10,6 +10,7 @@ import (
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/grpcserver"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/overrides"
@@ -114,6 +115,7 @@ type controlAuditStatus struct {
 }
 
 type controlStatusPayload struct {
+	Operator  buildinfo.OperatorInfo `json:"operator"`
 	Readiness controlReadinessStatus `json:"readiness"`
 	Issues    []statusview.Issue     `json:"issues"`
 	Transport controlTransportStatus `json:"transport"`
@@ -166,6 +168,7 @@ func newControlStatusPayload(
 	auditStatus := controlAuditPayload(audit)
 	issues := controlIssues(registry != nil && store != nil && sessions != nil, transport, bundles, overrideStatus, auditStatus)
 	return controlStatusPayload{
+		Operator:  buildinfo.Current(),
 		Readiness: controlReadinessPayload(registry != nil && store != nil && sessions != nil, bundles, overrideStatus, auditStatus),
 		Issues:    issues,
 		Transport: controlTransportStatus{Control: transport},
@@ -462,11 +465,12 @@ func (s *controlRPCServer) GetControlStatus(context.Context, *arbiterv1.GetContr
 }
 
 func (*controlRPCServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
-	return &arbiterv1.GetStatusIssueCatalogResponse{Definitions: statusview.ProtoDefinitions()}, nil
+	return statusview.ProtoCatalog(statusview.SurfaceControl), nil
 }
 
 func protoControlStatus(payload controlStatusPayload) *arbiterv1.GetControlStatusResponse {
 	resp := &arbiterv1.GetControlStatusResponse{
+		Operator: statusview.ProtoOperator(),
 		Readiness: &arbiterv1.ControlReadinessStatus{
 			Ready:  payload.Readiness.Ready,
 			Reason: payload.Readiness.Reason,

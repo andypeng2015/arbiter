@@ -49,7 +49,7 @@ func (s *runtimeRPCServer) GetRuntimeStatus(context.Context, *arbiterv1.GetRunti
 }
 
 func (*runtimeRPCServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
-	return &arbiterv1.GetStatusIssueCatalogResponse{Definitions: statusview.ProtoDefinitions()}, nil
+	return statusview.ProtoCatalog(statusview.SurfaceRuntime), nil
 }
 
 func protoRuntimeCapabilities(surface workflow.CapabilitySurface, manifest *capability.Manifest, control runtimeControlTransport, capabilityTransport runtimeCapabilityTransport) *arbiterv1.GetRuntimeCapabilitiesResponse {
@@ -68,6 +68,7 @@ func protoRuntimeCapabilities(surface workflow.CapabilitySurface, manifest *capa
 
 func protoRuntimeStatus(payload runtimeStatusPayload) *arbiterv1.GetRuntimeStatusResponse {
 	return &arbiterv1.GetRuntimeStatusResponse{
+		Operator: statusview.ProtoOperator(),
 		Readiness: &arbiterv1.RuntimeReadinessStatus{
 			Ready:  payload.Readiness.Ready,
 			Reason: payload.Readiness.Reason,

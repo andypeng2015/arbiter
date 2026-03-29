@@ -9,6 +9,12 @@ The same vocabulary is available in product surfaces too:
 - `GetStatusIssueCatalog` on runtime, agent, and control gRPC services for machine-readable clients
 - `GET /status/issues` on runtime, agent, and hosted control HTTP status listeners for scoped JSON catalogs
 
+Every catalog and status surface also advertises:
+
+- `operator.product` — the product name (`arbiter`)
+- `operator.build_version` — the running build version
+- `operator.operator_contract_version` — the operator-surface contract version
+
 Each issue has:
 
 - `severity` — `warning` or `error`

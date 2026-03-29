@@ -178,6 +178,12 @@ message GetControlStatusRequest {}
 
 message GetStatusIssueCatalogRequest {}
 
+message OperatorIdentity {
+  string product = 1;
+  string build_version = 2;
+  string operator_contract_version = 3;
+}
+
 message RuntimeSourceCapability {
   string scheme = 1;
   CapabilityOwner owner = 2;
@@ -300,6 +306,8 @@ message StatusIssueDefinition {
 
 message GetStatusIssueCatalogResponse {
   repeated StatusIssueDefinition definitions = 1;
+  OperatorIdentity operator = 2;
+  string surface = 3;
 }
 
 message GetRuntimeStatusResponse {
@@ -308,6 +316,7 @@ message GetRuntimeStatusResponse {
   RuntimeCapabilitiesStatus capabilities = 3;
   RuntimeActivityStatus activity = 4;
   repeated StatusIssue issues = 5;
+  OperatorIdentity operator = 6;
 }
 
 message AgentControlTransport {
@@ -378,6 +387,7 @@ message GetAgentStatusResponse {
   AgentTransportStatus transport = 2;
   AgentSyncStatus sync = 3;
   repeated StatusIssue issues = 4;
+  OperatorIdentity operator = 5;
 }
 
 message ControlListenerTransport {
@@ -485,6 +495,7 @@ message GetControlStatusResponse {
   ControlSessionsStatus sessions = 5;
   ControlAuditStatus audit = 6;
   repeated StatusIssue issues = 7;
+  OperatorIdentity operator = 8;
 }
 
 message BundleOverrides {

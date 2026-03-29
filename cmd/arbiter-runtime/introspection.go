@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/odvcencio/arbiter/capability"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/workflow"
@@ -80,6 +81,7 @@ type runtimeActivityStatus struct {
 }
 
 type runtimeStatusPayload struct {
+	Operator     buildinfo.OperatorInfo    `json:"operator"`
 	Readiness    runtimeReadinessStatus    `json:"readiness"`
 	Issues       []statusview.Issue        `json:"issues"`
 	Transport    runtimeTransportStatus    `json:"transport"`
@@ -142,6 +144,7 @@ func newRuntimeStatusPayload(
 	sinks := cloneSinkStatus(lastResult.Sinks)
 	issues := runtimeIssues(ready, reason, lastResult, control, capabilityTransport)
 	return runtimeStatusPayload{
+		Operator: buildinfo.Current(),
 		Readiness: runtimeReadinessStatus{
 			Ready:  ready,
 			Reason: reason,

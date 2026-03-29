@@ -10,6 +10,7 @@ import (
 	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/expert"
 	"github.com/odvcencio/arbiter/grpcserver"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/overrides"
 )
@@ -91,6 +92,9 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 
 	if !payload.Readiness.Ready || payload.Readiness.Reason != "" {
 		t.Fatalf("unexpected readiness: %+v", payload.Readiness)
+	}
+	if payload.Operator.BuildVersion != buildinfo.Version || payload.Operator.OperatorContractVersion != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator info: %+v", payload.Operator)
 	}
 	if payload.Transport.Control.Address != "127.0.0.1:8081" || !payload.Transport.Control.AuthEnabled {
 		t.Fatalf("unexpected transport: %+v", payload.Transport)
@@ -300,6 +304,9 @@ func TestProtoControlStatus(t *testing.T) {
 	}
 
 	resp := protoControlStatus(payload)
+	if resp.GetOperator().GetBuildVersion() != buildinfo.Version || resp.GetOperator().GetOperatorContractVersion() != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator info: %+v", resp.GetOperator())
+	}
 	if !resp.GetReadiness().GetReady() {
 		t.Fatalf("unexpected readiness: %+v", resp.GetReadiness())
 	}

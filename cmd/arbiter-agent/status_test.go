@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/odvcencio/arbiter/dataplane"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 	"github.com/odvcencio/arbiter/internal/statusview"
 )
 
@@ -86,6 +87,10 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 	if readiness == nil {
 		t.Fatal("expected readiness payload")
 	}
+	operator, _ := payload["operator"].(map[string]any)
+	if operator == nil || operator["build_version"] != buildinfo.Version || operator["operator_contract_version"] != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator payload: %+v", operator)
+	}
 	if _, ok := payload["issues"]; !ok {
 		t.Fatal("expected issues payload")
 	}
@@ -146,14 +151,20 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("/status/issues code = %d", rr.Code)
 	}
-	var definitions []statusview.Definition
-	if err := json.Unmarshal(rr.Body.Bytes(), &definitions); err != nil {
+	var catalog statusview.Catalog
+	if err := json.Unmarshal(rr.Body.Bytes(), &catalog); err != nil {
 		t.Fatalf("decode status issues: %v", err)
 	}
-	if len(definitions) == 0 || definitions[0].Code == "" {
-		t.Fatalf("expected issue definitions, got %+v", definitions)
+	if catalog.Surface != statusview.SurfaceAgent {
+		t.Fatalf("catalog surface = %q, want agent", catalog.Surface)
 	}
-	for _, item := range definitions {
+	if catalog.Operator.BuildVersion != buildinfo.Version || catalog.Operator.OperatorContractVersion != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator info: %+v", catalog.Operator)
+	}
+	if len(catalog.Definitions) == 0 || catalog.Definitions[0].Code == "" {
+		t.Fatalf("expected issue definitions, got %+v", catalog.Definitions)
+	}
+	for _, item := range catalog.Definitions {
 		if item.Code == statusview.CodeFirstTickIncomplete {
 			t.Fatalf("unexpected runtime-only code in agent catalog: %+v", item)
 		}
@@ -206,6 +217,9 @@ func TestNewAgentStatusPayloadExposesCanonicalSections(t *testing.T) {
 	if !payload.Readiness.Ready || payload.Readiness.MaxStalenessMs != 30000 {
 		t.Fatalf("unexpected readiness: %+v", payload.Readiness)
 	}
+	if payload.Operator.BuildVersion != buildinfo.Version || payload.Operator.OperatorContractVersion != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator info: %+v", payload.Operator)
+	}
 	if len(payload.Issues) != 1 || payload.Issues[0].Code != statusview.CodeUpstreamError || payload.Issues[0].Blocking {
 		t.Fatalf("unexpected issues: %+v", payload.Issues)
 	}
@@ -252,6 +266,9 @@ func TestProtoAgentStatus(t *testing.T) {
 	})
 
 	resp := protoAgentStatus(payload)
+	if resp.GetOperator().GetBuildVersion() != buildinfo.Version || resp.GetOperator().GetOperatorContractVersion() != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator info: %+v", resp.GetOperator())
+	}
 	if !resp.GetReadiness().GetReady() || resp.GetReadiness().GetMaxStalenessMs() != 30000 {
 		t.Fatalf("unexpected readiness: %+v", resp.GetReadiness())
 	}

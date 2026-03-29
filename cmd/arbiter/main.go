@@ -49,6 +49,7 @@ import (
 	"github.com/odvcencio/arbiter/flags"
 	"github.com/odvcencio/arbiter/format"
 	"github.com/odvcencio/arbiter/grpcserver"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/observability"
@@ -1049,7 +1050,7 @@ func serveCmd(cfg serveConfig) error {
 				return payload.Readiness.Ready, payload.Readiness.Reason
 			},
 			func() any {
-				return statusview.DefinitionsForSurface(statusview.SurfaceControl)
+				return statusview.CatalogForSurface(statusview.SurfaceControl)
 			},
 		)
 		statusSrv.ReadHeaderTimeout = 5 * time.Second
@@ -1225,58 +1226,32 @@ func statusIssuesCmd(cfg remoteInspectConfig, surface string) error {
 		return err
 	}
 
-	var items []statusview.Definition
+	var catalog statusview.Catalog
 	if strings.TrimSpace(cfg.target) == "" {
-		items = filterStatusIssueDefinitions(statusview.Definitions(), surface)
+		if strings.TrimSpace(surface) == "" {
+			catalog = statusview.CatalogAll()
+		} else {
+			normalized, _ := normalizeStatusSurface(surface)
+			catalog = statusview.CatalogForSurface(normalized)
+		}
 	} else {
-		detectedSurface, remoteItems, err := remoteStatusIssueDefinitions(cfg, surface)
+		remoteCatalog, err := remoteStatusIssueCatalog(cfg, surface)
 		if err != nil {
 			return err
 		}
-		items = remoteItems
-		if strings.TrimSpace(surface) == "" {
-			surface = string(detectedSurface)
-		}
+		catalog = remoteCatalog
 	}
 
 	if cfg.jsonOut {
-		data, err := json.MarshalIndent(items, "", "  ")
+		data, err := json.MarshalIndent(catalog, "", "  ")
 		if err != nil {
 			return fmt.Errorf("marshal status issues: %w", err)
 		}
 		fmt.Println(string(data))
 		return nil
 	}
-	printStatusIssueDefinitions(items, surface)
+	printStatusIssueCatalog(catalog)
 	return nil
-}
-
-func filterStatusIssueDefinitions(items []statusview.Definition, surface string) []statusview.Definition {
-	switch strings.TrimSpace(surface) {
-	case "":
-		return items
-	case string(statusview.SurfaceRuntime):
-		return filterStatusIssueDefinitionsBySurface(items, statusview.SurfaceRuntime)
-	case string(statusview.SurfaceAgent):
-		return filterStatusIssueDefinitionsBySurface(items, statusview.SurfaceAgent)
-	case string(statusview.SurfaceControl):
-		return filterStatusIssueDefinitionsBySurface(items, statusview.SurfaceControl)
-	default:
-		return nil
-	}
-}
-
-func filterStatusIssueDefinitionsBySurface(items []statusview.Definition, surface statusview.Surface) []statusview.Definition {
-	out := make([]statusview.Definition, 0)
-	for _, item := range items {
-		for _, candidate := range item.Surfaces {
-			if candidate == surface {
-				out = append(out, item)
-				break
-			}
-		}
-	}
-	return out
 }
 
 func normalizeStatusSurface(surface string) (statusview.Surface, error) {
@@ -1294,7 +1269,7 @@ func normalizeStatusSurface(surface string) (statusview.Surface, error) {
 	}
 }
 
-func remoteStatusIssueDefinitions(cfg remoteInspectConfig, surfaceHint string) (statusview.Surface, []statusview.Definition, error) {
+func remoteStatusIssueCatalog(cfg remoteInspectConfig, surfaceHint string) (statusview.Catalog, error) {
 	conn, _, err := grpcutil.Dial(grpcutil.DialConfig{
 		Target:        cfg.target,
 		Token:         cfg.token,
@@ -1303,7 +1278,7 @@ func remoteStatusIssueDefinitions(cfg remoteInspectConfig, surfaceHint string) (
 		ForceInsecure: cfg.forceInsecure,
 	})
 	if err != nil {
-		return "", nil, fmt.Errorf("connect status surface %s: %w", strings.TrimSpace(cfg.target), err)
+		return statusview.Catalog{}, fmt.Errorf("connect status surface %s: %w", strings.TrimSpace(cfg.target), err)
 	}
 	defer conn.Close()
 
@@ -1314,35 +1289,29 @@ func remoteStatusIssueDefinitions(cfg remoteInspectConfig, surfaceHint string) (
 	for _, candidate := range order {
 		resp, err := fetchRemoteStatusIssueCatalog(ctx, conn, candidate)
 		if err == nil {
-			items := protoStatusIssueDefinitions(resp.GetDefinitions())
-			if strings.TrimSpace(surfaceHint) != "" {
-				items = filterStatusIssueDefinitions(items, surfaceHint)
-			} else {
-				items = filterStatusIssueDefinitionsBySurface(items, candidate)
+			catalog := protoStatusIssueCatalog(resp)
+			if catalog.Surface == "" {
+				catalog.Surface = candidate
 			}
-			return candidate, items, nil
+			return catalog, nil
 		}
 		if grpcstatus.Code(err) == codes.Unimplemented {
 			continue
 		}
-		return "", nil, fmt.Errorf("get status issue catalog from %s: %w", strings.TrimSpace(cfg.target), err)
+		return statusview.Catalog{}, fmt.Errorf("get status issue catalog from %s: %w", strings.TrimSpace(cfg.target), err)
 	}
-	return "", nil, fmt.Errorf("target %s does not expose a status issue catalog on runtime, agent, or control services", strings.TrimSpace(cfg.target))
+	return statusview.Catalog{}, fmt.Errorf("target %s does not expose a status issue catalog on runtime, agent, or control services", strings.TrimSpace(cfg.target))
 }
 
 func remoteStatusIssueServiceOrder(surfaceHint string) []statusview.Surface {
-	base := []statusview.Surface{statusview.SurfaceRuntime, statusview.SurfaceAgent, statusview.SurfaceControl}
 	preferred, err := normalizeStatusSurface(surfaceHint)
-	if err != nil || preferred == "" {
-		return base
+	if err != nil {
+		return nil
 	}
-	out := []statusview.Surface{preferred}
-	for _, item := range base {
-		if item != preferred {
-			out = append(out, item)
-		}
+	if preferred != "" {
+		return []statusview.Surface{preferred}
 	}
-	return out
+	return []statusview.Surface{statusview.SurfaceRuntime, statusview.SurfaceAgent, statusview.SurfaceControl}
 }
 
 func fetchRemoteStatusIssueCatalog(ctx context.Context, conn *grpc.ClientConn, surface statusview.Surface) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
@@ -1377,6 +1346,28 @@ func protoStatusIssueDefinitions(items []*arbiterv1.StatusIssueDefinition) []sta
 	return out
 }
 
+func protoStatusIssueCatalog(resp *arbiterv1.GetStatusIssueCatalogResponse) statusview.Catalog {
+	catalog := statusview.Catalog{
+		Surface:     statusview.Surface(resp.GetSurface()),
+		Definitions: protoStatusIssueDefinitions(resp.GetDefinitions()),
+	}
+	if operator := resp.GetOperator(); operator != nil {
+		catalog.Operator = protoOperatorInfo(operator)
+	}
+	return catalog
+}
+
+func protoOperatorInfo(operator *arbiterv1.OperatorIdentity) buildinfo.OperatorInfo {
+	if operator == nil {
+		return buildinfo.OperatorInfo{}
+	}
+	return buildinfo.OperatorInfo{
+		Product:                 operator.GetProduct(),
+		BuildVersion:            operator.GetBuildVersion(),
+		OperatorContractVersion: operator.GetOperatorContractVersion(),
+	}
+}
+
 func printRuntimeCapabilities(resp *arbiterv1.GetRuntimeCapabilitiesResponse) {
 	fmt.Println("runtime surface")
 	fmt.Println("transport:")
@@ -1396,6 +1387,7 @@ func printRuntimeCapabilities(resp *arbiterv1.GetRuntimeCapabilitiesResponse) {
 
 func printRuntimeStatus(resp *arbiterv1.GetRuntimeStatusResponse) {
 	fmt.Println("runtime status")
+	printOperatorBlock(protoOperatorInfo(resp.GetOperator()))
 	fmt.Println("readiness:")
 	if readiness := resp.GetReadiness(); readiness != nil {
 		fmt.Printf("  ready=%t\n", readiness.GetReady())
@@ -1465,6 +1457,7 @@ func printRuntimeStatus(resp *arbiterv1.GetRuntimeStatusResponse) {
 
 func printAgentStatus(resp *arbiterv1.GetAgentStatusResponse) {
 	fmt.Println("agent status")
+	printOperatorBlock(protoOperatorInfo(resp.GetOperator()))
 	fmt.Println("readiness:")
 	if readiness := resp.GetReadiness(); readiness != nil {
 		fmt.Printf("  ready=%t\n", readiness.GetReady())
@@ -1524,6 +1517,7 @@ func printAgentStatus(resp *arbiterv1.GetAgentStatusResponse) {
 
 func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
 	fmt.Println("control status")
+	printOperatorBlock(protoOperatorInfo(resp.GetOperator()))
 	fmt.Println("readiness:")
 	if readiness := resp.GetReadiness(); readiness != nil {
 		fmt.Printf("  ready=%t\n", readiness.GetReady())
@@ -1631,17 +1625,18 @@ func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
 	}
 }
 
-func printStatusIssueDefinitions(items []statusview.Definition, surface string) {
+func printStatusIssueCatalog(catalog statusview.Catalog) {
 	title := "status issue catalog"
-	if trimmed := strings.TrimSpace(surface); trimmed != "" {
+	if trimmed := strings.TrimSpace(string(catalog.Surface)); trimmed != "" {
 		title = fmt.Sprintf("%s (%s)", title, trimmed)
 	}
 	fmt.Println(title)
-	if len(items) == 0 {
+	printOperatorBlock(catalog.Operator)
+	if len(catalog.Definitions) == 0 {
 		fmt.Println("  - none")
 		return
 	}
-	for _, item := range items {
+	for _, item := range catalog.Definitions {
 		surfaces := make([]string, 0, len(item.Surfaces))
 		for _, surface := range item.Surfaces {
 			surfaces = append(surfaces, string(surface))
@@ -1649,6 +1644,15 @@ func printStatusIssueDefinitions(items []statusview.Definition, surface string) 
 		fmt.Printf("  - code=%s severity=%s scope=%s blocking=%t surfaces=%s\n", item.Code, item.Severity, item.Scope, item.Blocking, strings.Join(surfaces, ","))
 		fmt.Printf("    description=%s\n", item.Description)
 	}
+}
+
+func printOperatorBlock(operator buildinfo.OperatorInfo) {
+	fmt.Println("operator:")
+	if strings.TrimSpace(operator.Product) == "" && strings.TrimSpace(operator.BuildVersion) == "" && strings.TrimSpace(operator.OperatorContractVersion) == "" {
+		fmt.Println("  unavailable")
+		return
+	}
+	fmt.Printf("  product=%s build_version=%s operator_contract_version=%s\n", operator.Product, operator.BuildVersion, operator.OperatorContractVersion)
 }
 
 func printStatusIssues(issues []*arbiterv1.StatusIssue) {

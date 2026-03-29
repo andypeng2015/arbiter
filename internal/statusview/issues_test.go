@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 )
 
 func TestDefinitionsUseUniqueCodes(t *testing.T) {
@@ -56,6 +58,56 @@ func TestProtoDefinitionsExposeSurfaces(t *testing.T) {
 	}
 	if items[0].GetCode() == "" || len(items[0].GetSurfaces()) == 0 {
 		t.Fatalf("unexpected proto definition payload: %+v", items[0])
+	}
+}
+
+func TestCatalogForSurfaceCarriesOperatorIdentity(t *testing.T) {
+	catalog := CatalogForSurface(SurfaceControl)
+	if catalog.Surface != SurfaceControl {
+		t.Fatalf("catalog surface = %q, want control", catalog.Surface)
+	}
+	if catalog.Operator.Product != buildinfo.Product || catalog.Operator.BuildVersion != buildinfo.Version || catalog.Operator.OperatorContractVersion != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator identity: %+v", catalog.Operator)
+	}
+	if len(catalog.Definitions) == 0 {
+		t.Fatal("expected scoped definitions")
+	}
+	for _, item := range catalog.Definitions {
+		found := false
+		for _, surface := range item.Surfaces {
+			if surface == SurfaceControl {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("definition %q missing control surface: %+v", item.Code, item)
+		}
+	}
+}
+
+func TestProtoCatalogCarriesScopedDefinitionsAndOperatorIdentity(t *testing.T) {
+	catalog := ProtoCatalog(SurfaceAgent)
+	if catalog.GetSurface() != string(SurfaceAgent) {
+		t.Fatalf("catalog surface = %q, want agent", catalog.GetSurface())
+	}
+	if catalog.GetOperator().GetProduct() != buildinfo.Product || catalog.GetOperator().GetBuildVersion() != buildinfo.Version || catalog.GetOperator().GetOperatorContractVersion() != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator identity: %+v", catalog.GetOperator())
+	}
+	if len(catalog.GetDefinitions()) == 0 {
+		t.Fatal("expected scoped proto definitions")
+	}
+	for _, item := range catalog.GetDefinitions() {
+		found := false
+		for _, surface := range item.GetSurfaces() {
+			if surface == string(SurfaceAgent) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("definition %q missing agent surface: %+v", item.GetCode(), item)
+		}
 	}
 }
 

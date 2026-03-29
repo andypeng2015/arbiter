@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 )
 
 type Severity string
@@ -116,6 +117,12 @@ type Issue struct {
 	Blocking bool     `json:"blocking,omitempty"`
 }
 
+type Catalog struct {
+	Operator    buildinfo.OperatorInfo `json:"operator"`
+	Surface     Surface                `json:"surface,omitempty"`
+	Definitions []Definition           `json:"definitions,omitempty"`
+}
+
 // Definitions returns the canonical issue-code vocabulary in stable order.
 func Definitions() []Definition {
 	out := make([]Definition, 0, len(issueDefinitions))
@@ -143,6 +150,21 @@ func DefinitionsForSurface(surface Surface) []Definition {
 		}
 	}
 	return out
+}
+
+func CatalogForSurface(surface Surface) Catalog {
+	return Catalog{
+		Surface:     surface,
+		Operator:    buildinfo.Current(),
+		Definitions: DefinitionsForSurface(surface),
+	}
+}
+
+func CatalogAll() Catalog {
+	return Catalog{
+		Operator:    buildinfo.Current(),
+		Definitions: Definitions(),
+	}
 }
 
 // New constructs one issue from the canonical code vocabulary.
@@ -181,6 +203,31 @@ func ProtoIssues(items []Issue) []*arbiterv1.StatusIssue {
 
 func ProtoDefinitions() []*arbiterv1.StatusIssueDefinition {
 	items := Definitions()
+	return protoDefinitions(items)
+}
+
+func ProtoDefinitionsForSurface(surface Surface) []*arbiterv1.StatusIssueDefinition {
+	return protoDefinitions(DefinitionsForSurface(surface))
+}
+
+func ProtoOperator() *arbiterv1.OperatorIdentity {
+	item := buildinfo.Current()
+	return &arbiterv1.OperatorIdentity{
+		Product:                 item.Product,
+		BuildVersion:            item.BuildVersion,
+		OperatorContractVersion: item.OperatorContractVersion,
+	}
+}
+
+func ProtoCatalog(surface Surface) *arbiterv1.GetStatusIssueCatalogResponse {
+	return &arbiterv1.GetStatusIssueCatalogResponse{
+		Definitions: ProtoDefinitionsForSurface(surface),
+		Operator:    ProtoOperator(),
+		Surface:     string(surface),
+	}
+}
+
+func protoDefinitions(items []Definition) []*arbiterv1.StatusIssueDefinition {
 	out := make([]*arbiterv1.StatusIssueDefinition, 0, len(items))
 	for _, item := range items {
 		definition := &arbiterv1.StatusIssueDefinition{

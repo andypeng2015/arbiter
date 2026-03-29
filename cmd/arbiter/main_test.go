@@ -12,6 +12,7 @@ import (
 
 	"github.com/odvcencio/arbiter"
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/internal/statusview"
 	"google.golang.org/grpc"
@@ -97,6 +98,9 @@ func TestStatusIssuesCmdPrintsFilteredCatalog(t *testing.T) {
 	if !strings.Contains(out, "status issue catalog (runtime)") {
 		t.Fatalf("expected runtime catalog title, got %s", out)
 	}
+	if !strings.Contains(out, "product=arbiter build_version="+buildinfo.Version+" operator_contract_version="+buildinfo.OperatorContractVersion) {
+		t.Fatalf("expected operator contract stamp, got %s", out)
+	}
 	if !strings.Contains(out, "code=first_tick_incomplete") {
 		t.Fatalf("expected runtime issue code, got %s", out)
 	}
@@ -122,6 +126,9 @@ func TestStatusIssuesCmdFetchesRemoteCatalogFromRuntime(t *testing.T) {
 	if !strings.Contains(out, "status issue catalog (runtime)") {
 		t.Fatalf("expected runtime title, got %s", out)
 	}
+	if !strings.Contains(out, "product=arbiter build_version="+buildinfo.Version+" operator_contract_version="+buildinfo.OperatorContractVersion) {
+		t.Fatalf("expected runtime operator stamp, got %s", out)
+	}
 	if !strings.Contains(out, "code=first_tick_incomplete") {
 		t.Fatalf("expected runtime issue code, got %s", out)
 	}
@@ -140,11 +147,35 @@ func TestStatusIssuesCmdDetectsAgentServiceRemotely(t *testing.T) {
 	if !strings.Contains(out, "status issue catalog (agent)") {
 		t.Fatalf("expected agent title, got %s", out)
 	}
+	if !strings.Contains(out, "product=arbiter build_version="+buildinfo.Version+" operator_contract_version="+buildinfo.OperatorContractVersion) {
+		t.Fatalf("expected agent operator stamp, got %s", out)
+	}
 	if !strings.Contains(out, "code=upstream_error") {
 		t.Fatalf("expected agent issue code, got %s", out)
 	}
 	if strings.Contains(out, "code=first_tick_incomplete") || strings.Contains(out, "code=audit_unhealthy") {
 		t.Fatalf("did not expect runtime/control codes in agent remote catalog, got %s", out)
+	}
+}
+
+func TestStatusIssuesCmdDetectsControlServiceRemotely(t *testing.T) {
+	target := newStatusCatalogTestTarget(t, "control")
+	out := captureStdout(t, func() {
+		if err := statusIssuesCmd(remoteInspectConfig{target: "grpc://" + target}, ""); err != nil {
+			t.Fatalf("statusIssuesCmd(remote control): %v", err)
+		}
+	})
+	if !strings.Contains(out, "status issue catalog (control)") {
+		t.Fatalf("expected control title, got %s", out)
+	}
+	if !strings.Contains(out, "product=arbiter build_version="+buildinfo.Version+" operator_contract_version="+buildinfo.OperatorContractVersion) {
+		t.Fatalf("expected control operator stamp, got %s", out)
+	}
+	if !strings.Contains(out, "code=audit_unhealthy") {
+		t.Fatalf("expected control issue code, got %s", out)
+	}
+	if strings.Contains(out, "code=first_tick_incomplete") || strings.Contains(out, "code=upstream_error") {
+		t.Fatalf("did not expect runtime/agent codes in control remote catalog, got %s", out)
 	}
 }
 
@@ -390,6 +421,11 @@ func TestPrintRuntimeCapabilitiesUsesCanonicalSections(t *testing.T) {
 func TestPrintRuntimeStatusUsesCanonicalSections(t *testing.T) {
 	out := captureStdout(t, func() {
 		printRuntimeStatus(&arbiterv1.GetRuntimeStatusResponse{
+			Operator: &arbiterv1.OperatorIdentity{
+				Product:                 buildinfo.Product,
+				BuildVersion:            buildinfo.Version,
+				OperatorContractVersion: buildinfo.OperatorContractVersion,
+			},
 			Readiness: &arbiterv1.RuntimeReadinessStatus{
 				Ready:  false,
 				Reason: "first tick incomplete",
@@ -445,6 +481,8 @@ func TestPrintRuntimeStatusUsesCanonicalSections(t *testing.T) {
 
 	for _, fragment := range []string{
 		"runtime status",
+		"operator:",
+		"product=arbiter build_version=" + buildinfo.Version + " operator_contract_version=" + buildinfo.OperatorContractVersion,
 		"readiness:",
 		"reason=first tick incomplete",
 		"issues:",
@@ -467,6 +505,11 @@ func TestPrintRuntimeStatusUsesCanonicalSections(t *testing.T) {
 func TestPrintAgentStatusUsesCanonicalSections(t *testing.T) {
 	out := captureStdout(t, func() {
 		printAgentStatus(&arbiterv1.GetAgentStatusResponse{
+			Operator: &arbiterv1.OperatorIdentity{
+				Product:                 buildinfo.Product,
+				BuildVersion:            buildinfo.Version,
+				OperatorContractVersion: buildinfo.OperatorContractVersion,
+			},
 			Readiness: &arbiterv1.AgentReadinessStatus{
 				Ready:          true,
 				MaxStalenessMs: 30000,
@@ -519,6 +562,8 @@ func TestPrintAgentStatusUsesCanonicalSections(t *testing.T) {
 
 	for _, fragment := range []string{
 		"agent status",
+		"operator:",
+		"product=arbiter build_version=" + buildinfo.Version + " operator_contract_version=" + buildinfo.OperatorContractVersion,
 		"readiness:",
 		"targets=1/2 max_staleness_ms=30000",
 		"issues:",
@@ -541,6 +586,11 @@ func TestPrintAgentStatusUsesCanonicalSections(t *testing.T) {
 func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
 	out := captureStdout(t, func() {
 		printControlStatus(&arbiterv1.GetControlStatusResponse{
+			Operator: &arbiterv1.OperatorIdentity{
+				Product:                 buildinfo.Product,
+				BuildVersion:            buildinfo.Version,
+				OperatorContractVersion: buildinfo.OperatorContractVersion,
+			},
 			Readiness: &arbiterv1.ControlReadinessStatus{
 				Ready:  false,
 				Reason: "audit unhealthy",
@@ -626,6 +676,8 @@ func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
 
 	for _, fragment := range []string{
 		"control status",
+		"operator:",
+		"product=arbiter build_version=" + buildinfo.Version + " operator_contract_version=" + buildinfo.OperatorContractVersion,
 		"readiness:",
 		"reason=audit unhealthy",
 		"issues:",
@@ -668,7 +720,7 @@ type runtimeStatusCatalogTestServer struct {
 }
 
 func (*runtimeStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
-	return &arbiterv1.GetStatusIssueCatalogResponse{Definitions: statusview.ProtoDefinitions()}, nil
+	return statusview.ProtoCatalog(statusview.SurfaceRuntime), nil
 }
 
 type agentStatusCatalogTestServer struct {
@@ -676,7 +728,15 @@ type agentStatusCatalogTestServer struct {
 }
 
 func (*agentStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
-	return &arbiterv1.GetStatusIssueCatalogResponse{Definitions: statusview.ProtoDefinitions()}, nil
+	return statusview.ProtoCatalog(statusview.SurfaceAgent), nil
+}
+
+type controlStatusCatalogTestServer struct {
+	arbiterv1.UnimplementedControlServiceServer
+}
+
+func (*controlStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
+	return statusview.ProtoCatalog(statusview.SurfaceControl), nil
 }
 
 func newStatusCatalogTestTarget(t *testing.T, surface string) string {
@@ -692,6 +752,8 @@ func newStatusCatalogTestTarget(t *testing.T, surface string) string {
 		arbiterv1.RegisterRuntimeServiceServer(srv, &runtimeStatusCatalogTestServer{})
 	case "agent":
 		arbiterv1.RegisterAgentServiceServer(srv, &agentStatusCatalogTestServer{})
+	case "control":
+		arbiterv1.RegisterControlServiceServer(srv, &controlStatusCatalogTestServer{})
 	default:
 		t.Fatalf("unknown test surface %q", surface)
 	}

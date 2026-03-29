@@ -11,6 +11,7 @@ import (
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/capability"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/workflow"
 )
@@ -125,6 +126,9 @@ func TestRuntimeStatusPayloadExposesCanonicalSections(t *testing.T) {
 	if payload.Readiness.Ready || payload.Readiness.Reason != "first tick incomplete" {
 		t.Fatalf("unexpected readiness: %+v", payload.Readiness)
 	}
+	if payload.Operator.BuildVersion != buildinfo.Version || payload.Operator.OperatorContractVersion != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator info: %+v", payload.Operator)
+	}
 	if len(payload.Issues) != 1 || payload.Issues[0].Code != statusview.CodeFirstTickIncomplete || !payload.Issues[0].Blocking {
 		t.Fatalf("unexpected issues: %+v", payload.Issues)
 	}
@@ -157,15 +161,21 @@ func TestRuntimeStatusMuxExposesIssueCatalog(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("/status/issues code = %d", rr.Code)
 	}
-	var definitions []statusview.Definition
-	if err := json.Unmarshal(rr.Body.Bytes(), &definitions); err != nil {
+	var catalog statusview.Catalog
+	if err := json.Unmarshal(rr.Body.Bytes(), &catalog); err != nil {
 		t.Fatalf("decode runtime issue catalog: %v", err)
 	}
-	if len(definitions) == 0 {
+	if catalog.Surface != statusview.SurfaceRuntime {
+		t.Fatalf("catalog surface = %q, want runtime", catalog.Surface)
+	}
+	if catalog.Operator.BuildVersion != buildinfo.Version || catalog.Operator.OperatorContractVersion != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator info: %+v", catalog.Operator)
+	}
+	if len(catalog.Definitions) == 0 {
 		t.Fatal("expected runtime issue catalog")
 	}
 	found := false
-	for _, item := range definitions {
+	for _, item := range catalog.Definitions {
 		if item.Code == statusview.CodeFirstTickIncomplete {
 			found = true
 		}
@@ -174,7 +184,7 @@ func TestRuntimeStatusMuxExposesIssueCatalog(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("missing runtime readiness code in catalog: %+v", definitions)
+		t.Fatalf("missing runtime readiness code in catalog: %+v", catalog.Definitions)
 	}
 }
 
@@ -282,6 +292,9 @@ func TestProtoRuntimeStatus(t *testing.T) {
 	)
 
 	resp := protoRuntimeStatus(payload)
+	if resp.GetOperator().GetBuildVersion() != buildinfo.Version || resp.GetOperator().GetOperatorContractVersion() != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator info: %+v", resp.GetOperator())
+	}
 	if !resp.GetReadiness().GetReady() || resp.GetReadiness().GetReason() != "" {
 		t.Fatalf("unexpected readiness: %+v", resp.GetReadiness())
 	}

@@ -95,9 +95,9 @@ docker run --rm \
 
 Add auth and TLS before exposing it beyond a private network.
 
-Treat the hosted control plane with the same discipline: inspect `/status` or `ControlService.GetControlStatus` and verify the `readiness`, `issues`, `transport`, `bundles`, `overrides`, `sessions`, and `audit` sections, including whether bundle and override persistence are healthy, active bundle versions, live expert-session occupancy, listener auth/TLS posture, and whether decision recording is durable, healthy, and currently succeeding. `/readyz` now follows that same readiness judgment, so a configured-but-failing durable surface will take the control plane out of readiness.
+Treat the hosted control plane with the same discipline: inspect `/status` or `ControlService.GetControlStatus` and verify the `operator`, `readiness`, `issues`, `transport`, `bundles`, `overrides`, `sessions`, and `audit` sections, including whether bundle and override persistence are healthy, active bundle versions, live expert-session occupancy, listener auth/TLS posture, and whether decision recording is durable, healthy, and currently succeeding. `/readyz` now follows that same readiness judgment, so a configured-but-failing durable surface will take the control plane out of readiness.
 
-Treat the `issues.code` field as the stable machine-facing contract. The canonical vocabulary lives in [`docs/status-issues.md`](status-issues.md), and you can inspect it directly with `arbiter status-issues`, `arbiter status-issues grpcs://host:port --surface runtime|agent|control`, `GetStatusIssueCatalog`, or the scoped HTTP `GET /status/issues` endpoint on runtime, agent, and hosted control status listeners.
+Treat the `issues.code` field as the stable machine-facing contract. The canonical vocabulary lives in [`docs/status-issues.md`](status-issues.md), and you can inspect it directly with `arbiter status-issues`, `arbiter status-issues grpcs://host:port --surface runtime|agent|control`, `GetStatusIssueCatalog`, or the scoped HTTP `GET /status/issues` endpoint on runtime, agent, and hosted control status listeners. Those same surfaces now advertise `operator.product`, `operator.build_version`, and `operator.operator_contract_version`, so automation can confirm it is speaking to the expected build and operator contract instead of assuming the local CLI and remote process match.
 
 ## Edge and agent patterns
 
@@ -108,7 +108,7 @@ Two patterns are credible in production:
 
 The agent path is the better story when you want local low-latency eval without turning the engine into a shared multi-tenant service.
 
-Treat the agent with the same discipline as the runtime: inspect `/status` or `AgentService.GetAgentStatus` and verify the `readiness`, `issues`, `transport`, and `sync` sections, including local listener posture, upstream auth/TLS posture, readiness reason, and bundle/override watch connectivity, instead of assuming the sidecar is healthy because the process is up.
+Treat the agent with the same discipline as the runtime: inspect `/status` or `AgentService.GetAgentStatus` and verify the `operator`, `readiness`, `issues`, `transport`, and `sync` sections, including local listener posture, upstream auth/TLS posture, readiness reason, and bundle/override watch connectivity, instead of assuming the sidecar is healthy because the process is up.
 
 If the agent's local gRPC surface is reachable beyond localhost, harden it the same way: `--auth-token` / `--auth-token-file`, plus `--tls-cert`, `--tls-key`, and optionally `--tls-client-ca`.
 

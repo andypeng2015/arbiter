@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/odvcencio/arbiter/format"
+	"github.com/odvcencio/arbiter/internal/buildinfo"
 	"github.com/odvcencio/arbiter/ir"
 )
 
@@ -164,7 +165,7 @@ func (s *server) handleInitialize(msg rpcMessage) rpcMessage {
 			},
 			"serverInfo": map[string]any{
 				"name":    "arbiter-lsp",
-				"version": "1.4.0",
+				"version": buildinfo.Version,
 			},
 		},
 	}
