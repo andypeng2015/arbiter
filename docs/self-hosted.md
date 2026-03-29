@@ -97,7 +97,7 @@ Add auth and TLS before exposing it beyond a private network.
 
 Treat the hosted control plane with the same discipline: inspect `/status` or `ControlService.GetControlStatus` and verify the `readiness`, `issues`, `transport`, `bundles`, `overrides`, `sessions`, and `audit` sections, including whether bundle and override persistence are healthy, active bundle versions, live expert-session occupancy, listener auth/TLS posture, and whether decision recording is durable, healthy, and currently succeeding. `/readyz` now follows that same readiness judgment, so a configured-but-failing durable surface will take the control plane out of readiness.
 
-Treat the `issues.code` field as the stable machine-facing contract. The canonical vocabulary lives in [`docs/status-issues.md`](status-issues.md), and you can inspect it directly with `arbiter status-issues`, `GetStatusIssueCatalog`, or the scoped HTTP `GET /status/issues` endpoint on runtime, agent, and hosted control status listeners.
+Treat the `issues.code` field as the stable machine-facing contract. The canonical vocabulary lives in [`docs/status-issues.md`](status-issues.md), and you can inspect it directly with `arbiter status-issues`, `arbiter status-issues grpcs://host:port --surface runtime|agent|control`, `GetStatusIssueCatalog`, or the scoped HTTP `GET /status/issues` endpoint on runtime, agent, and hosted control status listeners.
 
 ## Edge and agent patterns
 

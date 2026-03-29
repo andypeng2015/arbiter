@@ -4,7 +4,8 @@ Arbiter status surfaces expose a canonical `issues` list across runtime, agent, 
 
 The same vocabulary is available in product surfaces too:
 
-- `arbiter status-issues [--surface runtime|agent|control]` for local inspection
+- `arbiter status-issues` for local inspection
+- `arbiter status-issues grpcs://host:port --surface runtime|agent|control` for live CLI inspection against a remote surface
 - `GetStatusIssueCatalog` on runtime, agent, and control gRPC services for machine-readable clients
 - `GET /status/issues` on runtime, agent, and hosted control HTTP status listeners for scoped JSON catalogs
 

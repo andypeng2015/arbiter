@@ -18,7 +18,7 @@
 //	arbiter runtime-status <target> [--json] [--fail-on-issues] — inspect one runtime's status surface over gRPC
 //	arbiter agent-status <target> [--json] [--fail-on-issues] — inspect one agent's status surface over gRPC
 //	arbiter control-status <target> [--json] [--fail-on-issues] — inspect one hosted control plane's status surface over gRPC
-//	arbiter status-issues [--surface runtime|agent|control] [--json] — inspect the canonical status-issue vocabulary
+//	arbiter status-issues [target] [--surface runtime|agent|control] [--json] — inspect the canonical status-issue vocabulary locally or from a live surface
 //	arbiter serve [--grpc :8081] [--status 127.0.0.1:8082] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
 
@@ -56,7 +56,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -323,23 +325,49 @@ func runControlStatus(args []string) error {
 }
 
 func runStatusIssues(args []string) error {
-	jsonOut := false
+	cfg := remoteInspectConfig{}
 	surface := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--json":
-			jsonOut = true
+			cfg.jsonOut = true
 		case "--surface":
 			if i+1 >= len(args) {
-				return usageError("Usage: arbiter status-issues [--surface runtime|agent|control] [--json]")
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 			}
 			surface = strings.TrimSpace(args[i+1])
 			i++
+		case "--token":
+			if i+1 >= len(args) {
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+			}
+			cfg.token = args[i+1]
+			i++
+		case "--ca-file":
+			if i+1 >= len(args) {
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+			}
+			cfg.caFile = args[i+1]
+			i++
+		case "--server-name":
+			if i+1 >= len(args) {
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+			}
+			cfg.serverName = args[i+1]
+			i++
+		case "--plaintext":
+			cfg.forceInsecure = true
 		default:
-			return usageError("Usage: arbiter status-issues [--surface runtime|agent|control] [--json]")
+			if strings.HasPrefix(args[i], "--") {
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+			}
+			if cfg.target != "" {
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+			}
+			cfg.target = args[i]
 		}
 	}
-	return statusIssuesCmd(surface, jsonOut)
+	return statusIssuesCmd(cfg, surface)
 }
 
 func runExplore(args []string) error {
@@ -1192,21 +1220,26 @@ func controlStatusCmd(cfg remoteInspectConfig) error {
 	return failOnBlockingIssues("control status", cfg.failOnIssues, resp.GetIssues())
 }
 
-func statusIssuesCmd(surface string, jsonOut bool) error {
-	var items []statusview.Definition
-	switch strings.TrimSpace(surface) {
-	case "":
-		items = statusview.Definitions()
-	case string(statusview.SurfaceRuntime):
-		items = statusview.DefinitionsForSurface(statusview.SurfaceRuntime)
-	case string(statusview.SurfaceAgent):
-		items = statusview.DefinitionsForSurface(statusview.SurfaceAgent)
-	case string(statusview.SurfaceControl):
-		items = statusview.DefinitionsForSurface(statusview.SurfaceControl)
-	default:
-		return fmt.Errorf("unknown status surface %q", surface)
+func statusIssuesCmd(cfg remoteInspectConfig, surface string) error {
+	if _, err := normalizeStatusSurface(surface); err != nil {
+		return err
 	}
-	if jsonOut {
+
+	var items []statusview.Definition
+	if strings.TrimSpace(cfg.target) == "" {
+		items = filterStatusIssueDefinitions(statusview.Definitions(), surface)
+	} else {
+		detectedSurface, remoteItems, err := remoteStatusIssueDefinitions(cfg, surface)
+		if err != nil {
+			return err
+		}
+		items = remoteItems
+		if strings.TrimSpace(surface) == "" {
+			surface = string(detectedSurface)
+		}
+	}
+
+	if cfg.jsonOut {
 		data, err := json.MarshalIndent(items, "", "  ")
 		if err != nil {
 			return fmt.Errorf("marshal status issues: %w", err)
@@ -1216,6 +1249,132 @@ func statusIssuesCmd(surface string, jsonOut bool) error {
 	}
 	printStatusIssueDefinitions(items, surface)
 	return nil
+}
+
+func filterStatusIssueDefinitions(items []statusview.Definition, surface string) []statusview.Definition {
+	switch strings.TrimSpace(surface) {
+	case "":
+		return items
+	case string(statusview.SurfaceRuntime):
+		return filterStatusIssueDefinitionsBySurface(items, statusview.SurfaceRuntime)
+	case string(statusview.SurfaceAgent):
+		return filterStatusIssueDefinitionsBySurface(items, statusview.SurfaceAgent)
+	case string(statusview.SurfaceControl):
+		return filterStatusIssueDefinitionsBySurface(items, statusview.SurfaceControl)
+	default:
+		return nil
+	}
+}
+
+func filterStatusIssueDefinitionsBySurface(items []statusview.Definition, surface statusview.Surface) []statusview.Definition {
+	out := make([]statusview.Definition, 0)
+	for _, item := range items {
+		for _, candidate := range item.Surfaces {
+			if candidate == surface {
+				out = append(out, item)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func normalizeStatusSurface(surface string) (statusview.Surface, error) {
+	switch strings.TrimSpace(surface) {
+	case "":
+		return "", nil
+	case string(statusview.SurfaceRuntime):
+		return statusview.SurfaceRuntime, nil
+	case string(statusview.SurfaceAgent):
+		return statusview.SurfaceAgent, nil
+	case string(statusview.SurfaceControl):
+		return statusview.SurfaceControl, nil
+	default:
+		return "", fmt.Errorf("unknown status surface %q", surface)
+	}
+}
+
+func remoteStatusIssueDefinitions(cfg remoteInspectConfig, surfaceHint string) (statusview.Surface, []statusview.Definition, error) {
+	conn, _, err := grpcutil.Dial(grpcutil.DialConfig{
+		Target:        cfg.target,
+		Token:         cfg.token,
+		CAFile:        cfg.caFile,
+		ServerName:    cfg.serverName,
+		ForceInsecure: cfg.forceInsecure,
+	})
+	if err != nil {
+		return "", nil, fmt.Errorf("connect status surface %s: %w", strings.TrimSpace(cfg.target), err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	order := remoteStatusIssueServiceOrder(surfaceHint)
+	for _, candidate := range order {
+		resp, err := fetchRemoteStatusIssueCatalog(ctx, conn, candidate)
+		if err == nil {
+			items := protoStatusIssueDefinitions(resp.GetDefinitions())
+			if strings.TrimSpace(surfaceHint) != "" {
+				items = filterStatusIssueDefinitions(items, surfaceHint)
+			} else {
+				items = filterStatusIssueDefinitionsBySurface(items, candidate)
+			}
+			return candidate, items, nil
+		}
+		if grpcstatus.Code(err) == codes.Unimplemented {
+			continue
+		}
+		return "", nil, fmt.Errorf("get status issue catalog from %s: %w", strings.TrimSpace(cfg.target), err)
+	}
+	return "", nil, fmt.Errorf("target %s does not expose a status issue catalog on runtime, agent, or control services", strings.TrimSpace(cfg.target))
+}
+
+func remoteStatusIssueServiceOrder(surfaceHint string) []statusview.Surface {
+	base := []statusview.Surface{statusview.SurfaceRuntime, statusview.SurfaceAgent, statusview.SurfaceControl}
+	preferred, err := normalizeStatusSurface(surfaceHint)
+	if err != nil || preferred == "" {
+		return base
+	}
+	out := []statusview.Surface{preferred}
+	for _, item := range base {
+		if item != preferred {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func fetchRemoteStatusIssueCatalog(ctx context.Context, conn *grpc.ClientConn, surface statusview.Surface) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
+	req := &arbiterv1.GetStatusIssueCatalogRequest{}
+	switch surface {
+	case statusview.SurfaceRuntime:
+		return arbiterv1.NewRuntimeServiceClient(conn).GetStatusIssueCatalog(ctx, req)
+	case statusview.SurfaceAgent:
+		return arbiterv1.NewAgentServiceClient(conn).GetStatusIssueCatalog(ctx, req)
+	case statusview.SurfaceControl:
+		return arbiterv1.NewControlServiceClient(conn).GetStatusIssueCatalog(ctx, req)
+	default:
+		return nil, fmt.Errorf("unknown remote status surface %q", surface)
+	}
+}
+
+func protoStatusIssueDefinitions(items []*arbiterv1.StatusIssueDefinition) []statusview.Definition {
+	out := make([]statusview.Definition, 0, len(items))
+	for _, item := range items {
+		definition := statusview.Definition{
+			Code:        statusview.Code(item.GetCode()),
+			Severity:    statusview.Severity(item.GetSeverity()),
+			Scope:       statusview.Scope(item.GetScope()),
+			Blocking:    item.GetBlocking(),
+			Description: item.GetDescription(),
+		}
+		for _, surface := range item.GetSurfaces() {
+			definition.Surfaces = append(definition.Surfaces, statusview.Surface(surface))
+		}
+		out = append(out, definition)
+	}
+	return out
 }
 
 func printRuntimeCapabilities(resp *arbiterv1.GetRuntimeCapabilitiesResponse) {

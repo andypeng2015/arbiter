@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"github.com/odvcencio/arbiter/internal/statusview"
+	"google.golang.org/grpc"
 )
 
 func TestFormatCLIErrorPreservesDiagnostics(t *testing.T) {
@@ -87,7 +90,7 @@ func TestFailOnBlockingIssuesCountsBlockingOnly(t *testing.T) {
 
 func TestStatusIssuesCmdPrintsFilteredCatalog(t *testing.T) {
 	out := captureStdout(t, func() {
-		if err := statusIssuesCmd("runtime", false); err != nil {
+		if err := statusIssuesCmd(remoteInspectConfig{}, "runtime"); err != nil {
 			t.Fatalf("statusIssuesCmd: %v", err)
 		}
 	})
@@ -103,9 +106,45 @@ func TestStatusIssuesCmdPrintsFilteredCatalog(t *testing.T) {
 }
 
 func TestStatusIssuesCmdRejectsUnknownSurface(t *testing.T) {
-	err := statusIssuesCmd("wat", false)
+	err := statusIssuesCmd(remoteInspectConfig{}, "wat")
 	if err == nil || !strings.Contains(err.Error(), `unknown status surface "wat"`) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestStatusIssuesCmdFetchesRemoteCatalogFromRuntime(t *testing.T) {
+	target := newStatusCatalogTestTarget(t, "runtime")
+	out := captureStdout(t, func() {
+		if err := statusIssuesCmd(remoteInspectConfig{target: "grpc://" + target}, ""); err != nil {
+			t.Fatalf("statusIssuesCmd(remote runtime): %v", err)
+		}
+	})
+	if !strings.Contains(out, "status issue catalog (runtime)") {
+		t.Fatalf("expected runtime title, got %s", out)
+	}
+	if !strings.Contains(out, "code=first_tick_incomplete") {
+		t.Fatalf("expected runtime issue code, got %s", out)
+	}
+	if strings.Contains(out, "code=upstream_error") || strings.Contains(out, "code=audit_unhealthy") {
+		t.Fatalf("did not expect non-runtime codes in runtime remote catalog, got %s", out)
+	}
+}
+
+func TestStatusIssuesCmdDetectsAgentServiceRemotely(t *testing.T) {
+	target := newStatusCatalogTestTarget(t, "agent")
+	out := captureStdout(t, func() {
+		if err := statusIssuesCmd(remoteInspectConfig{target: "grpc://" + target}, ""); err != nil {
+			t.Fatalf("statusIssuesCmd(remote agent): %v", err)
+		}
+	})
+	if !strings.Contains(out, "status issue catalog (agent)") {
+		t.Fatalf("expected agent title, got %s", out)
+	}
+	if !strings.Contains(out, "code=upstream_error") {
+		t.Fatalf("expected agent issue code, got %s", out)
+	}
+	if strings.Contains(out, "code=first_tick_incomplete") || strings.Contains(out, "code=audit_unhealthy") {
+		t.Fatalf("did not expect runtime/control codes in agent remote catalog, got %s", out)
 	}
 }
 
@@ -622,4 +661,47 @@ func writeCLIFile(t *testing.T, dir, name, contents string) string {
 		t.Fatalf("write %s: %v", path, err)
 	}
 	return path
+}
+
+type runtimeStatusCatalogTestServer struct {
+	arbiterv1.UnimplementedRuntimeServiceServer
+}
+
+func (*runtimeStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
+	return &arbiterv1.GetStatusIssueCatalogResponse{Definitions: statusview.ProtoDefinitions()}, nil
+}
+
+type agentStatusCatalogTestServer struct {
+	arbiterv1.UnimplementedAgentServiceServer
+}
+
+func (*agentStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
+	return &arbiterv1.GetStatusIssueCatalogResponse{Definitions: statusview.ProtoDefinitions()}, nil
+}
+
+func newStatusCatalogTestTarget(t *testing.T, surface string) string {
+	t.Helper()
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	srv := grpc.NewServer()
+	switch surface {
+	case "runtime":
+		arbiterv1.RegisterRuntimeServiceServer(srv, &runtimeStatusCatalogTestServer{})
+	case "agent":
+		arbiterv1.RegisterAgentServiceServer(srv, &agentStatusCatalogTestServer{})
+	default:
+		t.Fatalf("unknown test surface %q", surface)
+	}
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+	return lis.Addr().String()
 }

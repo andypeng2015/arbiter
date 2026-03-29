@@ -26,6 +26,7 @@
 - **Issue-code contract** — the status issue vocabulary is now centralized and documented, so `issues.code` is an explicit operator-facing contract instead of a scattered implementation detail.
 - **Issue catalog surfaces** — the canonical status-issue vocabulary now carries explicit runtime/agent/control surface membership and is exposed directly through `arbiter status-issues` plus `GetStatusIssueCatalog` on runtime, agent, and control gRPC services.
 - **HTTP issue catalogs** — runtime, agent, and hosted control now also expose scoped `GET /status/issues` JSON catalogs, so HTTP-first operators can inspect the same issue contract without gRPC tooling.
+- **Remote CLI issue catalogs** — `arbiter status-issues` now accepts a live target plus auth/TLS flags, auto-detects runtime vs agent vs control surfaces, and prints the remote-advertised issue catalog instead of assuming the local CLI build matches the running process.
 
 ### SDKs
 
