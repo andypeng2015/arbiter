@@ -33,7 +33,7 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 	})
 	syncer := dataplane.New(cp)
 	handler := newStatusHandler(syncer, readinessPolicy{}, agentTransportStatus{
-		Control:  newAgentControlTransport("127.0.0.1:7081"),
+		Control:  newAgentControlTransport("127.0.0.1:7081", nil, nil),
 		Upstream: newAgentUpstreamTransport("arbiter.internal:7443", true, true, "arbiter.internal"),
 	})
 
@@ -151,7 +151,7 @@ func TestStatusHandlerReadinessThresholdMarksStaleSyncUnready(t *testing.T) {
 	})
 	syncer := dataplane.New(cp)
 	handler := newStatusHandler(syncer, readinessPolicy{maxStaleness: time.Millisecond}, agentTransportStatus{
-		Control:  newAgentControlTransport("127.0.0.1:7081"),
+		Control:  newAgentControlTransport("127.0.0.1:7081", nil, nil),
 		Upstream: newAgentUpstreamTransport("arbiter.internal:7443", true, true, "arbiter.internal"),
 	})
 

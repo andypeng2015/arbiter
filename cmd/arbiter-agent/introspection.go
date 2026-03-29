@@ -1,6 +1,10 @@
 package main
 
-import "github.com/odvcencio/arbiter/internal/grpcutil"
+import (
+	"crypto/tls"
+
+	"github.com/odvcencio/arbiter/internal/grpcutil"
+)
 
 type agentControlTransport struct {
 	Enabled          bool   `json:"enabled"`
@@ -32,12 +36,18 @@ type agentReadinessStatus struct {
 	ReadyCount     int    `json:"ready_count"`
 }
 
-func newAgentControlTransport(address string) agentControlTransport {
-	return agentControlTransport{
+func newAgentControlTransport(address string, tokens []string, tlsConfig *tls.Config) agentControlTransport {
+	status := agentControlTransport{
 		Enabled:        address != "",
 		Address:        address,
 		PublicListener: grpcutil.IsPublicListenAddr(address),
+		AuthEnabled:    len(tokens) > 0,
+		TLSEnabled:     tlsConfig != nil,
 	}
+	if tlsConfig != nil && tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
+		status.MutualTLSEnabled = true
+	}
+	return status
 }
 
 func newAgentUpstreamTransport(target string, authEnabled bool, tlsEnabled bool, serverName string) agentUpstreamTransport {

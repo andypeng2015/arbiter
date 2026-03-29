@@ -597,6 +597,8 @@ Set `--ready-max-staleness 30s` or `ARBITER_AGENT_READY_MAX_STALENESS=30s` if yo
 
 Use `--upstream-token`, `--upstream-ca-file`, `--upstream-server-name`, or `--upstream-plaintext` when the upstream control plane is protected with auth and TLS.
 
+Use `--auth-token`, `--auth-token-file`, `--tls-cert`, `--tls-key`, and optional `--tls-client-ca` when the agent's local gRPC surface leaves localhost or crosses a trust boundary.
+
 `arbiter runtime-capabilities` accepts `grpc://`, `http://`, `grpcs://`, `https://`, or a bare `host:port`. Use `--token`, `--ca-file`, and `--server-name` for secure runtime control, or `--plaintext` to force insecure transport against a bare target. The response now includes both the runtime control surface posture (`auth`, `tls`, `mtls`, `public_listener`) and the bound capability-plugin transport posture (`target`, `auth`, `tls`, `server_name`) when one is configured.
 
 ### Self-Hosted Profile
@@ -609,7 +611,7 @@ It also exposes local health and status on the HTTP listener:
 
 - `GET /healthz` for process liveness
 - `GET /readyz` for sync readiness, optionally gated by the configured freshness threshold
-- `GET /status` for JSON introspection of synced bundles, checksums, bundle/override freshness, reconnect/error counters, watch connectivity, readiness policy/reason, local control-listener posture, upstream transport posture, and the last upstream failure when one is present
+- `GET /status` for JSON introspection of synced bundles, checksums, bundle/override freshness, reconnect/error counters, watch connectivity, readiness policy/reason, local control-listener auth/TLS posture, upstream transport posture, and the last upstream failure when one is present
 
 When `include` is involved, file-backed commands report diagnostics against the original source file:
 

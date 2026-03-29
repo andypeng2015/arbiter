@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"os"
 	"reflect"
 	"testing"
@@ -74,5 +75,15 @@ func TestDescribeUpstreamTransport(t *testing.T) {
 	}
 	if !transport.AuthEnabled || !transport.TLSEnabled || transport.ServerName != "arbiter.internal" {
 		t.Fatalf("unexpected upstream transport posture: %+v", transport)
+	}
+}
+
+func TestAgentControlTransportCapturesSecurityPosture(t *testing.T) {
+	transport := newAgentControlTransport("0.0.0.0:7081", []string{"top-secret"}, &tls.Config{ClientAuth: tls.RequireAndVerifyClientCert})
+	if !transport.Enabled || !transport.PublicListener {
+		t.Fatalf("unexpected control transport listener posture: %+v", transport)
+	}
+	if !transport.AuthEnabled || !transport.TLSEnabled || !transport.MutualTLSEnabled {
+		t.Fatalf("unexpected control transport security posture: %+v", transport)
 	}
 }

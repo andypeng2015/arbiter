@@ -19,6 +19,7 @@ import (
 	"github.com/odvcencio/arbiter/grpcserver"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 type bundleNamesFlag struct {
@@ -49,6 +50,7 @@ func (f *bundleNamesFlag) Values() []string {
 }
 
 func main() {
+	authTokens := []string{}
 	bundleNames := bundleNamesFlag{}
 	if err := bundleNames.Set(envOr("ARBITER_BUNDLE_NAMES", envOr("ARBITER_BUNDLE_NAME", ""))); err != nil {
 		log.Fatalf("parse bundle names: %v", err)
@@ -64,11 +66,19 @@ func main() {
 		upstreamServerName = flag.String("upstream-server-name", envOr("ARBITER_UPSTREAM_SERVER_NAME", ""), "optional upstream TLS server name override")
 		upstreamPlaintext  = flag.Bool("upstream-plaintext", envOrBool("ARBITER_UPSTREAM_PLAINTEXT", false), "force plaintext transport to the upstream even when TLS options are set")
 		listenAddr         = flag.String("grpc", envOr("ARBITER_AGENT_ADDR", "127.0.0.1:7081"), "local agent gRPC listen address")
+		authTokenFile      = flag.String("auth-token-file", envOr("ARBITER_AGENT_AUTH_TOKEN_FILE", ""), "optional file with one or more local agent bearer tokens")
+		tlsCertFile        = flag.String("tls-cert", envOr("ARBITER_AGENT_TLS_CERT", ""), "optional PEM certificate for local agent gRPC")
+		tlsKeyFile         = flag.String("tls-key", envOr("ARBITER_AGENT_TLS_KEY", ""), "optional PEM private key for local agent gRPC")
+		tlsClientCAFile    = flag.String("tls-client-ca", envOr("ARBITER_AGENT_TLS_CLIENT_CA", ""), "optional PEM CA bundle for local client certificate verification")
 		statusAddr         = flag.String("status", envOr("ARBITER_AGENT_STATUS_ADDR", "127.0.0.1:7082"), "local agent health/status HTTP listen address")
 		overridesFile      = flag.String("overrides-file", envOr("ARBITER_OVERRIDES_FILE", ""), "optional override snapshot file to sync")
 		readyMaxStaleness  = flag.Duration("ready-max-staleness", readyMaxStalenessDefault, "max acceptable age for bundle/override sync before /readyz returns 503; 0 disables freshness enforcement")
 	)
 	flag.Var(&bundleNames, "bundle-name", "active bundle name to sync from the control plane; repeat or comma-separate to sync multiple bundles")
+	flag.Func("auth-token", "repeatable local agent bearer token", func(value string) error {
+		authTokens = append(authTokens, value)
+		return nil
+	})
 	flag.Parse()
 
 	names := bundleNames.Values()
@@ -100,7 +110,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("describe upstream transport: %v", err)
 	}
-	controlTransport := newAgentControlTransport(*listenAddr)
+	localAuthTokens, err := grpcutil.LoadAuthTokens(authTokens, *authTokenFile)
+	if err != nil {
+		log.Fatalf("load local auth tokens: %v", err)
+	}
+	localTLSConfig, err := grpcutil.LoadServerTLSConfig(*tlsCertFile, *tlsKeyFile, *tlsClientCAFile)
+	if err != nil {
+		log.Fatalf("load local TLS config: %v", err)
+	}
+	controlTransport := newAgentControlTransport(*listenAddr, localAuthTokens, localTLSConfig)
 
 	upstreamCP := dataplane.NewGRPCControlPlane(arbiterv1.NewArbiterServiceClient(upstreamConn))
 	var overrideCP dataplane.OverrideControlPlane = upstreamCP
@@ -115,9 +133,44 @@ func main() {
 	}
 	defer func() { _ = localListener.Close() }()
 
-	localServer := grpc.NewServer()
+	unaryInterceptors := []grpc.UnaryServerInterceptor{
+		grpcserver.UnaryRecoveryInterceptor(nil),
+	}
+	streamInterceptors := []grpc.StreamServerInterceptor{
+		grpcserver.StreamRecoveryInterceptor(nil),
+	}
+	if len(localAuthTokens) > 0 {
+		auth, err := grpcserver.NewStaticTokenAuth(localAuthTokens)
+		if err != nil {
+			log.Fatalf("configure local auth: %v", err)
+		}
+		unaryInterceptors = append(unaryInterceptors, auth.UnaryServerInterceptor())
+		streamInterceptors = append(streamInterceptors, auth.StreamServerInterceptor())
+	}
+	serverOptions := []grpc.ServerOption{}
+	if len(unaryInterceptors) > 0 {
+		serverOptions = append(serverOptions, grpc.ChainUnaryInterceptor(unaryInterceptors...))
+	}
+	if len(streamInterceptors) > 0 {
+		serverOptions = append(serverOptions, grpc.ChainStreamInterceptor(streamInterceptors...))
+	}
+	if localTLSConfig != nil {
+		serverOptions = append(serverOptions, grpc.Creds(credentials.NewTLS(localTLSConfig)))
+	}
+
+	localServer := grpc.NewServer(serverOptions...)
 	arbiterv1.RegisterArbiterServiceServer(localServer, grpcserver.NewServer(syncer.Registry(), syncer.Overrides(), audit.NopSink{}))
 	go func() {
+		if controlTransport.PublicListener && !controlTransport.AuthEnabled && !controlTransport.TLSEnabled {
+			log.Printf("arbiter-agent: local gRPC listener is public without TLS or auth addr=%s", *listenAddr)
+		}
+		log.Printf(
+			"arbiter-agent: local gRPC listening addr=%s auth_enabled=%t tls_enabled=%t mutual_tls_enabled=%t",
+			*listenAddr,
+			controlTransport.AuthEnabled,
+			controlTransport.TLSEnabled,
+			controlTransport.MutualTLSEnabled,
+		)
 		if serveErr := localServer.Serve(localListener); serveErr != nil && ctx.Err() == nil {
 			log.Printf("arbiter-agent serve: %v", serveErr)
 			stop()

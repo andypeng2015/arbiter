@@ -106,6 +106,8 @@ The agent path is the better story when you want local low-latency eval without 
 
 Treat the agent with the same discipline as the runtime: inspect `/status` and verify the local listener posture, upstream auth/TLS posture, readiness reason, and bundle/override watch connectivity instead of assuming the sidecar is healthy because the process is up.
 
+If the agent's local gRPC surface is reachable beyond localhost, harden it the same way: `--auth-token` / `--auth-token-file`, plus `--tls-cert`, `--tls-key`, and optionally `--tls-client-ca`.
+
 ## Decision rule
 
 Self-host `arbiter` when you own one trust boundary and want a governed decision engine.
