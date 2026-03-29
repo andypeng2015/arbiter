@@ -976,6 +976,11 @@ class RuntimeServiceStub(object):
                 request_serializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusRequest.SerializeToString,
                 response_deserializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusResponse.FromString,
                 _registered_method=True)
+        self.GetStatusIssueCatalog = channel.unary_unary(
+                '/arbiter.v1.RuntimeService/GetStatusIssueCatalog',
+                request_serializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogRequest.SerializeToString,
+                response_deserializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogResponse.FromString,
+                _registered_method=True)
 
 
 class RuntimeServiceServicer(object):
@@ -993,6 +998,12 @@ class RuntimeServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetStatusIssueCatalog(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RuntimeServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -1005,6 +1016,11 @@ def add_RuntimeServiceServicer_to_server(servicer, server):
                     servicer.GetRuntimeStatus,
                     request_deserializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusRequest.FromString,
                     response_serializer=arbiter_dot_v1_dot_service__pb2.GetRuntimeStatusResponse.SerializeToString,
+            ),
+            'GetStatusIssueCatalog': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetStatusIssueCatalog,
+                    request_deserializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogRequest.FromString,
+                    response_serializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1071,6 +1087,33 @@ class RuntimeService(object):
             metadata,
             _registered_method=True)
 
+    @staticmethod
+    def GetStatusIssueCatalog(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/arbiter.v1.RuntimeService/GetStatusIssueCatalog',
+            arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogRequest.SerializeToString,
+            arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
 
 class AgentServiceStub(object):
     """Missing associated documentation comment in .proto file."""
@@ -1086,12 +1129,23 @@ class AgentServiceStub(object):
                 request_serializer=arbiter_dot_v1_dot_service__pb2.GetAgentStatusRequest.SerializeToString,
                 response_deserializer=arbiter_dot_v1_dot_service__pb2.GetAgentStatusResponse.FromString,
                 _registered_method=True)
+        self.GetStatusIssueCatalog = channel.unary_unary(
+                '/arbiter.v1.AgentService/GetStatusIssueCatalog',
+                request_serializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogRequest.SerializeToString,
+                response_deserializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogResponse.FromString,
+                _registered_method=True)
 
 
 class AgentServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetAgentStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetStatusIssueCatalog(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -1104,6 +1158,11 @@ def add_AgentServiceServicer_to_server(servicer, server):
                     servicer.GetAgentStatus,
                     request_deserializer=arbiter_dot_v1_dot_service__pb2.GetAgentStatusRequest.FromString,
                     response_serializer=arbiter_dot_v1_dot_service__pb2.GetAgentStatusResponse.SerializeToString,
+            ),
+            'GetStatusIssueCatalog': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetStatusIssueCatalog,
+                    request_deserializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogRequest.FromString,
+                    response_serializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1143,6 +1202,33 @@ class AgentService(object):
             metadata,
             _registered_method=True)
 
+    @staticmethod
+    def GetStatusIssueCatalog(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/arbiter.v1.AgentService/GetStatusIssueCatalog',
+            arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogRequest.SerializeToString,
+            arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
 
 class ControlServiceStub(object):
     """Missing associated documentation comment in .proto file."""
@@ -1158,12 +1244,23 @@ class ControlServiceStub(object):
                 request_serializer=arbiter_dot_v1_dot_service__pb2.GetControlStatusRequest.SerializeToString,
                 response_deserializer=arbiter_dot_v1_dot_service__pb2.GetControlStatusResponse.FromString,
                 _registered_method=True)
+        self.GetStatusIssueCatalog = channel.unary_unary(
+                '/arbiter.v1.ControlService/GetStatusIssueCatalog',
+                request_serializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogRequest.SerializeToString,
+                response_deserializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogResponse.FromString,
+                _registered_method=True)
 
 
 class ControlServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetControlStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetStatusIssueCatalog(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -1176,6 +1273,11 @@ def add_ControlServiceServicer_to_server(servicer, server):
                     servicer.GetControlStatus,
                     request_deserializer=arbiter_dot_v1_dot_service__pb2.GetControlStatusRequest.FromString,
                     response_serializer=arbiter_dot_v1_dot_service__pb2.GetControlStatusResponse.SerializeToString,
+            ),
+            'GetStatusIssueCatalog': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetStatusIssueCatalog,
+                    request_deserializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogRequest.FromString,
+                    response_serializer=arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1205,6 +1307,33 @@ class ControlService(object):
             '/arbiter.v1.ControlService/GetControlStatus',
             arbiter_dot_v1_dot_service__pb2.GetControlStatusRequest.SerializeToString,
             arbiter_dot_v1_dot_service__pb2.GetControlStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetStatusIssueCatalog(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/arbiter.v1.ControlService/GetStatusIssueCatalog',
+            arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogRequest.SerializeToString,
+            arbiter_dot_v1_dot_service__pb2.GetStatusIssueCatalogResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -35,14 +35,17 @@ service ArbiterService {
 service RuntimeService {
   rpc GetRuntimeCapabilities(GetRuntimeCapabilitiesRequest) returns (GetRuntimeCapabilitiesResponse);
   rpc GetRuntimeStatus(GetRuntimeStatusRequest) returns (GetRuntimeStatusResponse);
+  rpc GetStatusIssueCatalog(GetStatusIssueCatalogRequest) returns (GetStatusIssueCatalogResponse);
 }
 
 service AgentService {
   rpc GetAgentStatus(GetAgentStatusRequest) returns (GetAgentStatusResponse);
+  rpc GetStatusIssueCatalog(GetStatusIssueCatalogRequest) returns (GetStatusIssueCatalogResponse);
 }
 
 service ControlService {
   rpc GetControlStatus(GetControlStatusRequest) returns (GetControlStatusResponse);
+  rpc GetStatusIssueCatalog(GetStatusIssueCatalogRequest) returns (GetStatusIssueCatalogResponse);
 }
 
 message PublishBundleRequest {
@@ -173,6 +176,8 @@ message GetAgentStatusRequest {}
 
 message GetControlStatusRequest {}
 
+message GetStatusIssueCatalogRequest {}
+
 message RuntimeSourceCapability {
   string scheme = 1;
   CapabilityOwner owner = 2;
@@ -282,6 +287,19 @@ message StatusIssue {
   string code = 4;
   string message = 5;
   bool blocking = 6;
+}
+
+message StatusIssueDefinition {
+  string code = 1;
+  string severity = 2;
+  string scope = 3;
+  bool blocking = 4;
+  string description = 5;
+  repeated string surfaces = 6;
+}
+
+message GetStatusIssueCatalogResponse {
+  repeated StatusIssueDefinition definitions = 1;
 }
 
 message GetRuntimeStatusResponse {

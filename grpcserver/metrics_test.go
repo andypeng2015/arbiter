@@ -326,3 +326,24 @@ func TestNewHTTPServerWithStatusAndReadinessUsesCallback(t *testing.T) {
 		t.Fatalf("unexpected readiness body: %q", body)
 	}
 }
+
+func TestNewHTTPServerWithStatusAndReadinessAndCatalogUsesCallback(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	srv := NewHTTPServerWithStatusAndReadinessAndCatalog(":0", reg, func() any {
+		return map[string]any{"service": "arbiter-control", "ready": true}
+	}, nil, func() any {
+		return []map[string]any{{"code": "audit_unhealthy", "scope": "audit"}}
+	})
+	if srv == nil {
+		t.Fatal("NewHTTPServerWithStatusAndReadinessAndCatalog returned nil")
+	}
+
+	rr := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/status/issues", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/status/issues code = %d", rr.Code)
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "audit_unhealthy") {
+		t.Fatalf("unexpected issue catalog body: %q", body)
+	}
+}

@@ -2,6 +2,12 @@
 
 Arbiter status surfaces expose a canonical `issues` list across runtime, agent, and hosted control.
 
+The same vocabulary is available in product surfaces too:
+
+- `arbiter status-issues [--surface runtime|agent|control]` for local inspection
+- `GetStatusIssueCatalog` on runtime, agent, and control gRPC services for machine-readable clients
+- `GET /status/issues` on runtime, agent, and hosted control HTTP status listeners for scoped JSON catalogs
+
 Each issue has:
 
 - `severity` — `warning` or `error`
@@ -12,6 +18,7 @@ Each issue has:
 - `blocking` — whether the issue should count as a readiness-blocking problem
 
 The `code` field is the contract. Treat `message` as explanatory text, not a stable parsing surface.
+The catalog also records which surface each code belongs to: `runtime`, `agent`, `control`, or a shared subset such as the common `public_control_insecure` transport warning.
 
 ## Readiness
 

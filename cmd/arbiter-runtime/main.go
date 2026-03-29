@@ -30,6 +30,7 @@ import (
 	"github.com/odvcencio/arbiter/capability"
 	"github.com/odvcencio/arbiter/grpcserver"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
+	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/workflow"
 	"go.opentelemetry.io/otel"
@@ -458,6 +459,7 @@ func (rt *runtime) statusMux() *http.ServeMux {
 	mux.HandleFunc("/healthz", rt.handleHealthz)
 	mux.HandleFunc("/readyz", rt.handleReadyz)
 	mux.HandleFunc("/status", rt.handleStatus)
+	mux.HandleFunc("/status/issues", rt.handleStatusIssues)
 	return mux
 }
 
@@ -496,6 +498,12 @@ func (rt *runtime) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(status)
+}
+
+func (rt *runtime) handleStatusIssues(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(statusview.DefinitionsForSurface(statusview.SurfaceRuntime))
 }
 
 // --- Default Handlers ---

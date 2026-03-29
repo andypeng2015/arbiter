@@ -430,6 +430,12 @@ class RuntimeClient:
             service_pb2.GetRuntimeStatusRequest(),
         )
 
+    def get_status_issue_catalog(self) -> service_pb2.GetStatusIssueCatalogResponse:
+        return self._invoke(
+            self.stub.GetStatusIssueCatalog,
+            service_pb2.GetStatusIssueCatalogRequest(),
+        )
+
 
 class AgentClient:
     def __init__(
@@ -509,6 +515,12 @@ class AgentClient:
             service_pb2.GetAgentStatusRequest(),
         )
 
+    def get_status_issue_catalog(self) -> service_pb2.GetStatusIssueCatalogResponse:
+        return self._invoke(
+            self.stub.GetStatusIssueCatalog,
+            service_pb2.GetStatusIssueCatalogRequest(),
+        )
+
 
 class ControlClient:
     def __init__(
@@ -586,4 +598,10 @@ class ControlClient:
         return self._invoke(
             self.stub.GetControlStatus,
             service_pb2.GetControlStatusRequest(),
+        )
+
+    def get_status_issue_catalog(self) -> service_pb2.GetStatusIssueCatalogResponse:
+        return self._invoke(
+            self.stub.GetStatusIssueCatalog,
+            service_pb2.GetStatusIssueCatalogRequest(),
         )

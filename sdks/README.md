@@ -20,6 +20,7 @@ All three target the same control-plane surface:
 - runtime override mutation, including strategy-candidate governance
 - runtime capability introspection through `RuntimeService.GetRuntimeCapabilities`
 - runtime status introspection through `RuntimeService.GetRuntimeStatus`
+- status-issue catalog introspection through `GetStatusIssueCatalog`
 - agent sync-status introspection through `AgentService.GetAgentStatus`
 - hosted control-plane status introspection through `ControlService.GetControlStatus`
 

@@ -29,15 +29,16 @@ use arbiter::v1::{
     GetCapabilitiesRequest, GetCapabilitiesResponse, GetControlStatusRequest,
     GetControlStatusResponse, GetOverridesRequest, GetOverridesResponse,
     GetRuntimeCapabilitiesRequest, GetRuntimeCapabilitiesResponse, GetRuntimeStatusRequest,
-    GetSessionTraceRequest, GetSessionTraceResponse, ListBundlesRequest, ListBundlesResponse,
-    LoadSourceRequest, LoadSourceResponse, OverrideEvent, PublishBundleRequest,
-    PublishBundleResponse, ResolveFlagRequest, ResolveFlagResponse, RetractFactsRequest,
-    RetractFactsResponse, RollbackBundleRequest, RollbackBundleResponse, RunSessionRequest,
-    RunSessionResponse, SetFlagOverrideRequest, SetFlagOverrideResponse,
-    SetFlagRuleOverrideRequest, SetFlagRuleOverrideResponse, SetRuleOverrideRequest,
-    SetRuleOverrideResponse, SetStrategyOverrideRequest, SetStrategyOverrideResponse,
-    SinkCapability, SourceCapability, StartSessionRequest, StartSessionResponse,
-    WatchBundlesRequest, WatchOverridesRequest, WorkerCapability, WorkerSpec,
+    GetSessionTraceRequest, GetSessionTraceResponse, GetStatusIssueCatalogRequest,
+    GetStatusIssueCatalogResponse, ListBundlesRequest, ListBundlesResponse, LoadSourceRequest,
+    LoadSourceResponse, OverrideEvent, PublishBundleRequest, PublishBundleResponse,
+    ResolveFlagRequest, ResolveFlagResponse, RetractFactsRequest, RetractFactsResponse,
+    RollbackBundleRequest, RollbackBundleResponse, RunSessionRequest, RunSessionResponse,
+    SetFlagOverrideRequest, SetFlagOverrideResponse, SetFlagRuleOverrideRequest,
+    SetFlagRuleOverrideResponse, SetRuleOverrideRequest, SetRuleOverrideResponse,
+    SetStrategyOverrideRequest, SetStrategyOverrideResponse, SinkCapability, SourceCapability,
+    StartSessionRequest, StartSessionResponse, WatchBundlesRequest, WatchOverridesRequest,
+    WorkerCapability, WorkerSpec,
 };
 
 #[derive(Clone, Debug)]
@@ -138,6 +139,16 @@ impl RuntimeClient {
         .await
     }
 
+    pub async fn get_status_issue_catalog(
+        &self,
+    ) -> Result<GetStatusIssueCatalogResponse, tonic::Status> {
+        self.unary_with_retry(
+            GetStatusIssueCatalogRequest {},
+            |mut client, request| async move { client.get_status_issue_catalog(request).await },
+        )
+        .await
+    }
+
     async fn unary_with_retry<Req, Resp, F, Fut>(
         &self,
         request: Req,
@@ -221,6 +232,16 @@ impl AgentClient {
         .await
     }
 
+    pub async fn get_status_issue_catalog(
+        &self,
+    ) -> Result<GetStatusIssueCatalogResponse, tonic::Status> {
+        self.unary_with_retry(
+            GetStatusIssueCatalogRequest {},
+            |mut client, request| async move { client.get_status_issue_catalog(request).await },
+        )
+        .await
+    }
+
     async fn unary_with_retry<Req, Resp, F, Fut>(
         &self,
         request: Req,
@@ -301,6 +322,16 @@ impl ControlClient {
         self.unary_with_retry(
             GetControlStatusRequest {},
             |mut client, request| async move { client.get_control_status(request).await },
+        )
+        .await
+    }
+
+    pub async fn get_status_issue_catalog(
+        &self,
+    ) -> Result<GetStatusIssueCatalogResponse, tonic::Status> {
+        self.unary_with_retry(
+            GetStatusIssueCatalogRequest {},
+            |mut client, request| async move { client.get_status_issue_catalog(request).await },
         )
         .await
     }

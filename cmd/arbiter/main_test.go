@@ -85,6 +85,30 @@ func TestFailOnBlockingIssuesCountsBlockingOnly(t *testing.T) {
 	}
 }
 
+func TestStatusIssuesCmdPrintsFilteredCatalog(t *testing.T) {
+	out := captureStdout(t, func() {
+		if err := statusIssuesCmd("runtime", false); err != nil {
+			t.Fatalf("statusIssuesCmd: %v", err)
+		}
+	})
+	if !strings.Contains(out, "status issue catalog (runtime)") {
+		t.Fatalf("expected runtime catalog title, got %s", out)
+	}
+	if !strings.Contains(out, "code=first_tick_incomplete") {
+		t.Fatalf("expected runtime issue code, got %s", out)
+	}
+	if strings.Contains(out, "code=audit_unhealthy") {
+		t.Fatalf("did not expect control-only issue in runtime catalog, got %s", out)
+	}
+}
+
+func TestStatusIssuesCmdRejectsUnknownSurface(t *testing.T) {
+	err := statusIssuesCmd("wat", false)
+	if err == nil || !strings.Contains(err.Error(), `unknown status surface "wat"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRunRejectsRemovedEmitCommand(t *testing.T) {
 	err := run([]string{"emit", "bundle.arb"})
 	if err == nil {

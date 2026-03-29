@@ -461,6 +461,10 @@ func (s *controlRPCServer) GetControlStatus(context.Context, *arbiterv1.GetContr
 	return protoControlStatus(s.source.Payload()), nil
 }
 
+func (*controlRPCServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
+	return &arbiterv1.GetStatusIssueCatalogResponse{Definitions: statusview.ProtoDefinitions()}, nil
+}
+
 func protoControlStatus(payload controlStatusPayload) *arbiterv1.GetControlStatusResponse {
 	resp := &arbiterv1.GetControlStatusResponse{
 		Readiness: &arbiterv1.ControlReadinessStatus{

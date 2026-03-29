@@ -2,6 +2,9 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +148,33 @@ func TestRuntimeStatusPayloadExposesCanonicalSections(t *testing.T) {
 	lastResult.Sinks["ops"] = workflow.SinkSnapshot{Alias: "mutated"}
 	if payload.Activity.SourceStatus["prices"].Alias != "prices" || payload.Activity.SinkStatus["ops"].Alias != "ops" {
 		t.Fatalf("payload should snapshot source/sink status, got sources=%+v sinks=%+v", payload.Activity.SourceStatus, payload.Activity.SinkStatus)
+	}
+}
+
+func TestRuntimeStatusMuxExposesIssueCatalog(t *testing.T) {
+	rr := httptest.NewRecorder()
+	(&runtime{}).statusMux().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/status/issues", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/status/issues code = %d", rr.Code)
+	}
+	var definitions []statusview.Definition
+	if err := json.Unmarshal(rr.Body.Bytes(), &definitions); err != nil {
+		t.Fatalf("decode runtime issue catalog: %v", err)
+	}
+	if len(definitions) == 0 {
+		t.Fatal("expected runtime issue catalog")
+	}
+	found := false
+	for _, item := range definitions {
+		if item.Code == statusview.CodeFirstTickIncomplete {
+			found = true
+		}
+		if item.Code == statusview.CodeAuditUnhealthy {
+			t.Fatalf("unexpected control-only code in runtime catalog: %+v", item)
+		}
+	}
+	if !found {
+		t.Fatalf("missing runtime readiness code in catalog: %+v", definitions)
 	}
 }
 

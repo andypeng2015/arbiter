@@ -890,6 +890,7 @@ var ArbiterService_ServiceDesc = grpc.ServiceDesc{
 const (
 	RuntimeService_GetRuntimeCapabilities_FullMethodName = "/arbiter.v1.RuntimeService/GetRuntimeCapabilities"
 	RuntimeService_GetRuntimeStatus_FullMethodName       = "/arbiter.v1.RuntimeService/GetRuntimeStatus"
+	RuntimeService_GetStatusIssueCatalog_FullMethodName  = "/arbiter.v1.RuntimeService/GetStatusIssueCatalog"
 )
 
 // RuntimeServiceClient is the client API for RuntimeService service.
@@ -898,6 +899,7 @@ const (
 type RuntimeServiceClient interface {
 	GetRuntimeCapabilities(ctx context.Context, in *GetRuntimeCapabilitiesRequest, opts ...grpc.CallOption) (*GetRuntimeCapabilitiesResponse, error)
 	GetRuntimeStatus(ctx context.Context, in *GetRuntimeStatusRequest, opts ...grpc.CallOption) (*GetRuntimeStatusResponse, error)
+	GetStatusIssueCatalog(ctx context.Context, in *GetStatusIssueCatalogRequest, opts ...grpc.CallOption) (*GetStatusIssueCatalogResponse, error)
 }
 
 type runtimeServiceClient struct {
@@ -928,12 +930,23 @@ func (c *runtimeServiceClient) GetRuntimeStatus(ctx context.Context, in *GetRunt
 	return out, nil
 }
 
+func (c *runtimeServiceClient) GetStatusIssueCatalog(ctx context.Context, in *GetStatusIssueCatalogRequest, opts ...grpc.CallOption) (*GetStatusIssueCatalogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetStatusIssueCatalogResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_GetStatusIssueCatalog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RuntimeServiceServer is the server API for RuntimeService service.
 // All implementations must embed UnimplementedRuntimeServiceServer
 // for forward compatibility.
 type RuntimeServiceServer interface {
 	GetRuntimeCapabilities(context.Context, *GetRuntimeCapabilitiesRequest) (*GetRuntimeCapabilitiesResponse, error)
 	GetRuntimeStatus(context.Context, *GetRuntimeStatusRequest) (*GetRuntimeStatusResponse, error)
+	GetStatusIssueCatalog(context.Context, *GetStatusIssueCatalogRequest) (*GetStatusIssueCatalogResponse, error)
 	mustEmbedUnimplementedRuntimeServiceServer()
 }
 
@@ -949,6 +962,9 @@ func (UnimplementedRuntimeServiceServer) GetRuntimeCapabilities(context.Context,
 }
 func (UnimplementedRuntimeServiceServer) GetRuntimeStatus(context.Context, *GetRuntimeStatusRequest) (*GetRuntimeStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetRuntimeStatus not implemented")
+}
+func (UnimplementedRuntimeServiceServer) GetStatusIssueCatalog(context.Context, *GetStatusIssueCatalogRequest) (*GetStatusIssueCatalogResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetStatusIssueCatalog not implemented")
 }
 func (UnimplementedRuntimeServiceServer) mustEmbedUnimplementedRuntimeServiceServer() {}
 func (UnimplementedRuntimeServiceServer) testEmbeddedByValue()                        {}
@@ -1007,6 +1023,24 @@ func _RuntimeService_GetRuntimeStatus_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RuntimeService_GetStatusIssueCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStatusIssueCatalogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).GetStatusIssueCatalog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_GetStatusIssueCatalog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).GetStatusIssueCatalog(ctx, req.(*GetStatusIssueCatalogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RuntimeService_ServiceDesc is the grpc.ServiceDesc for RuntimeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1022,13 +1056,18 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetRuntimeStatus",
 			Handler:    _RuntimeService_GetRuntimeStatus_Handler,
 		},
+		{
+			MethodName: "GetStatusIssueCatalog",
+			Handler:    _RuntimeService_GetStatusIssueCatalog_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "arbiter/v1/service.proto",
 }
 
 const (
-	AgentService_GetAgentStatus_FullMethodName = "/arbiter.v1.AgentService/GetAgentStatus"
+	AgentService_GetAgentStatus_FullMethodName        = "/arbiter.v1.AgentService/GetAgentStatus"
+	AgentService_GetStatusIssueCatalog_FullMethodName = "/arbiter.v1.AgentService/GetStatusIssueCatalog"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -1036,6 +1075,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentServiceClient interface {
 	GetAgentStatus(ctx context.Context, in *GetAgentStatusRequest, opts ...grpc.CallOption) (*GetAgentStatusResponse, error)
+	GetStatusIssueCatalog(ctx context.Context, in *GetStatusIssueCatalogRequest, opts ...grpc.CallOption) (*GetStatusIssueCatalogResponse, error)
 }
 
 type agentServiceClient struct {
@@ -1056,11 +1096,22 @@ func (c *agentServiceClient) GetAgentStatus(ctx context.Context, in *GetAgentSta
 	return out, nil
 }
 
+func (c *agentServiceClient) GetStatusIssueCatalog(ctx context.Context, in *GetStatusIssueCatalogRequest, opts ...grpc.CallOption) (*GetStatusIssueCatalogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetStatusIssueCatalogResponse)
+	err := c.cc.Invoke(ctx, AgentService_GetStatusIssueCatalog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
 type AgentServiceServer interface {
 	GetAgentStatus(context.Context, *GetAgentStatusRequest) (*GetAgentStatusResponse, error)
+	GetStatusIssueCatalog(context.Context, *GetStatusIssueCatalogRequest) (*GetStatusIssueCatalogResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -1073,6 +1124,9 @@ type UnimplementedAgentServiceServer struct{}
 
 func (UnimplementedAgentServiceServer) GetAgentStatus(context.Context, *GetAgentStatusRequest) (*GetAgentStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAgentStatus not implemented")
+}
+func (UnimplementedAgentServiceServer) GetStatusIssueCatalog(context.Context, *GetStatusIssueCatalogRequest) (*GetStatusIssueCatalogResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetStatusIssueCatalog not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -1113,6 +1167,24 @@ func _AgentService_GetAgentStatus_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_GetStatusIssueCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStatusIssueCatalogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).GetStatusIssueCatalog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_GetStatusIssueCatalog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).GetStatusIssueCatalog(ctx, req.(*GetStatusIssueCatalogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1124,13 +1196,18 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetAgentStatus",
 			Handler:    _AgentService_GetAgentStatus_Handler,
 		},
+		{
+			MethodName: "GetStatusIssueCatalog",
+			Handler:    _AgentService_GetStatusIssueCatalog_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "arbiter/v1/service.proto",
 }
 
 const (
-	ControlService_GetControlStatus_FullMethodName = "/arbiter.v1.ControlService/GetControlStatus"
+	ControlService_GetControlStatus_FullMethodName      = "/arbiter.v1.ControlService/GetControlStatus"
+	ControlService_GetStatusIssueCatalog_FullMethodName = "/arbiter.v1.ControlService/GetStatusIssueCatalog"
 )
 
 // ControlServiceClient is the client API for ControlService service.
@@ -1138,6 +1215,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ControlServiceClient interface {
 	GetControlStatus(ctx context.Context, in *GetControlStatusRequest, opts ...grpc.CallOption) (*GetControlStatusResponse, error)
+	GetStatusIssueCatalog(ctx context.Context, in *GetStatusIssueCatalogRequest, opts ...grpc.CallOption) (*GetStatusIssueCatalogResponse, error)
 }
 
 type controlServiceClient struct {
@@ -1158,11 +1236,22 @@ func (c *controlServiceClient) GetControlStatus(ctx context.Context, in *GetCont
 	return out, nil
 }
 
+func (c *controlServiceClient) GetStatusIssueCatalog(ctx context.Context, in *GetStatusIssueCatalogRequest, opts ...grpc.CallOption) (*GetStatusIssueCatalogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetStatusIssueCatalogResponse)
+	err := c.cc.Invoke(ctx, ControlService_GetStatusIssueCatalog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ControlServiceServer is the server API for ControlService service.
 // All implementations must embed UnimplementedControlServiceServer
 // for forward compatibility.
 type ControlServiceServer interface {
 	GetControlStatus(context.Context, *GetControlStatusRequest) (*GetControlStatusResponse, error)
+	GetStatusIssueCatalog(context.Context, *GetStatusIssueCatalogRequest) (*GetStatusIssueCatalogResponse, error)
 	mustEmbedUnimplementedControlServiceServer()
 }
 
@@ -1175,6 +1264,9 @@ type UnimplementedControlServiceServer struct{}
 
 func (UnimplementedControlServiceServer) GetControlStatus(context.Context, *GetControlStatusRequest) (*GetControlStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetControlStatus not implemented")
+}
+func (UnimplementedControlServiceServer) GetStatusIssueCatalog(context.Context, *GetStatusIssueCatalogRequest) (*GetStatusIssueCatalogResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetStatusIssueCatalog not implemented")
 }
 func (UnimplementedControlServiceServer) mustEmbedUnimplementedControlServiceServer() {}
 func (UnimplementedControlServiceServer) testEmbeddedByValue()                        {}
@@ -1215,6 +1307,24 @@ func _ControlService_GetControlStatus_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ControlService_GetStatusIssueCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStatusIssueCatalogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServiceServer).GetStatusIssueCatalog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlService_GetStatusIssueCatalog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServiceServer).GetStatusIssueCatalog(ctx, req.(*GetStatusIssueCatalogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ControlService_ServiceDesc is the grpc.ServiceDesc for ControlService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1225,6 +1335,10 @@ var ControlService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetControlStatus",
 			Handler:    _ControlService_GetControlStatus_Handler,
+		},
+		{
+			MethodName: "GetStatusIssueCatalog",
+			Handler:    _ControlService_GetStatusIssueCatalog_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

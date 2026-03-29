@@ -141,6 +141,23 @@ func TestStatusHandlerExposesHealthReadinessAndStatus(t *testing.T) {
 	if syncBundles, _ := syncStatus["bundles"].([]any); len(syncBundles) != len(bundles) {
 		t.Fatalf("expected sync bundles to mirror top-level bundles, got %d vs %d", len(syncBundles), len(bundles))
 	}
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/status/issues", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/status/issues code = %d", rr.Code)
+	}
+	var definitions []statusview.Definition
+	if err := json.Unmarshal(rr.Body.Bytes(), &definitions); err != nil {
+		t.Fatalf("decode status issues: %v", err)
+	}
+	if len(definitions) == 0 || definitions[0].Code == "" {
+		t.Fatalf("expected issue definitions, got %+v", definitions)
+	}
+	for _, item := range definitions {
+		if item.Code == statusview.CodeFirstTickIncomplete {
+			t.Fatalf("unexpected runtime-only code in agent catalog: %+v", item)
+		}
+	}
 	for _, key := range []string{
 		"bundle_watch_connected",
 		"override_configured",

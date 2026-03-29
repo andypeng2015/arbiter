@@ -525,6 +525,10 @@ class RuntimeClient {
   getRuntimeStatus(metadata = undefined) {
     return unary(this.client, "GetRuntimeStatus", {}, this._createMetadata, this._retry, metadata);
   }
+
+  getStatusIssueCatalog(metadata = undefined) {
+    return unary(this.client, "GetStatusIssueCatalog", {}, this._createMetadata, this._retry, metadata);
+  }
 }
 
 class AgentClient {
@@ -548,6 +552,10 @@ class AgentClient {
   getAgentStatus(metadata = undefined) {
     return unary(this.client, "GetAgentStatus", {}, this._createMetadata, this._retry, metadata);
   }
+
+  getStatusIssueCatalog(metadata = undefined) {
+    return unary(this.client, "GetStatusIssueCatalog", {}, this._createMetadata, this._retry, metadata);
+  }
 }
 
 class ControlClient {
@@ -570,6 +578,10 @@ class ControlClient {
 
   getControlStatus(metadata = undefined) {
     return unary(this.client, "GetControlStatus", {}, this._createMetadata, this._retry, metadata);
+  }
+
+  getStatusIssueCatalog(metadata = undefined) {
+    return unary(this.client, "GetStatusIssueCatalog", {}, this._createMetadata, this._retry, metadata);
   }
 }
 

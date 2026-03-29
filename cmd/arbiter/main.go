@@ -18,6 +18,7 @@
 //	arbiter runtime-status <target> [--json] [--fail-on-issues] — inspect one runtime's status surface over gRPC
 //	arbiter agent-status <target> [--json] [--fail-on-issues] — inspect one agent's status surface over gRPC
 //	arbiter control-status <target> [--json] [--fail-on-issues] — inspect one hosted control plane's status surface over gRPC
+//	arbiter status-issues [--surface runtime|agent|control] [--json] — inspect the canonical status-issue vocabulary
 //	arbiter serve [--grpc :8081] [--status 127.0.0.1:8082] [--audit-file decisions.jsonl] [--bundle-file bundles.json] [--overrides-file overrides.json] — start gRPC API
 package main
 
@@ -49,6 +50,7 @@ import (
 	"github.com/odvcencio/arbiter/format"
 	"github.com/odvcencio/arbiter/grpcserver"
 	"github.com/odvcencio/arbiter/internal/grpcutil"
+	"github.com/odvcencio/arbiter/internal/statusview"
 	"github.com/odvcencio/arbiter/observability"
 	"github.com/odvcencio/arbiter/overrides"
 	"github.com/prometheus/client_golang/prometheus"
@@ -60,7 +62,7 @@ import (
 )
 
 const (
-	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, runtime-status, agent-status, control-status, serve"
+	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, runtime-status, agent-status, control-status, status-issues, serve"
 	rootUsage   = "Usage: arbiter <command> <file>\nCommands: " + commandList
 )
 
@@ -85,6 +87,7 @@ var commandHandlers = map[string]func([]string) error{
 	"runtime-status":       runRuntimeStatus,
 	"agent-status":         runAgentStatus,
 	"control-status":       runControlStatus,
+	"status-issues":        runStatusIssues,
 	"serve":                runServe,
 }
 
@@ -317,6 +320,26 @@ func runControlStatus(args []string) error {
 		return usageError("Usage: arbiter control-status <target> [--json] [--fail-on-issues] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
 	return controlStatusCmd(parseRemoteInspectConfig(args))
+}
+
+func runStatusIssues(args []string) error {
+	jsonOut := false
+	surface := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOut = true
+		case "--surface":
+			if i+1 >= len(args) {
+				return usageError("Usage: arbiter status-issues [--surface runtime|agent|control] [--json]")
+			}
+			surface = strings.TrimSpace(args[i+1])
+			i++
+		default:
+			return usageError("Usage: arbiter status-issues [--surface runtime|agent|control] [--json]")
+		}
+	}
+	return statusIssuesCmd(surface, jsonOut)
 }
 
 func runExplore(args []string) error {
@@ -987,7 +1010,7 @@ func serveCmd(cfg serveConfig) error {
 	if cfg.statusAddr != "" {
 		reg := prometheus.NewRegistry()
 		grpcserver.RegisterMetrics(reg)
-		statusSrv = grpcserver.NewHTTPServerWithStatusAndReadiness(
+		statusSrv = grpcserver.NewHTTPServerWithStatusAndReadinessAndCatalog(
 			cfg.statusAddr,
 			reg,
 			func() any {
@@ -996,6 +1019,9 @@ func serveCmd(cfg serveConfig) error {
 			func() (bool, string) {
 				payload := statusSource.Payload()
 				return payload.Readiness.Ready, payload.Readiness.Reason
+			},
+			func() any {
+				return statusview.DefinitionsForSurface(statusview.SurfaceControl)
 			},
 		)
 		statusSrv.ReadHeaderTimeout = 5 * time.Second
@@ -1164,6 +1190,32 @@ func controlStatusCmd(cfg remoteInspectConfig) error {
 
 	printControlStatus(resp)
 	return failOnBlockingIssues("control status", cfg.failOnIssues, resp.GetIssues())
+}
+
+func statusIssuesCmd(surface string, jsonOut bool) error {
+	var items []statusview.Definition
+	switch strings.TrimSpace(surface) {
+	case "":
+		items = statusview.Definitions()
+	case string(statusview.SurfaceRuntime):
+		items = statusview.DefinitionsForSurface(statusview.SurfaceRuntime)
+	case string(statusview.SurfaceAgent):
+		items = statusview.DefinitionsForSurface(statusview.SurfaceAgent)
+	case string(statusview.SurfaceControl):
+		items = statusview.DefinitionsForSurface(statusview.SurfaceControl)
+	default:
+		return fmt.Errorf("unknown status surface %q", surface)
+	}
+	if jsonOut {
+		data, err := json.MarshalIndent(items, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal status issues: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+	printStatusIssueDefinitions(items, surface)
+	return nil
 }
 
 func printRuntimeCapabilities(resp *arbiterv1.GetRuntimeCapabilitiesResponse) {
@@ -1417,6 +1469,26 @@ func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
 		if ts := formatProtoTimestamp(audit.GetLastErrorAt()); ts != "" {
 			fmt.Printf("  last_error_at=%s\n", ts)
 		}
+	}
+}
+
+func printStatusIssueDefinitions(items []statusview.Definition, surface string) {
+	title := "status issue catalog"
+	if trimmed := strings.TrimSpace(surface); trimmed != "" {
+		title = fmt.Sprintf("%s (%s)", title, trimmed)
+	}
+	fmt.Println(title)
+	if len(items) == 0 {
+		fmt.Println("  - none")
+		return
+	}
+	for _, item := range items {
+		surfaces := make([]string, 0, len(item.Surfaces))
+		for _, surface := range item.Surfaces {
+			surfaces = append(surfaces, string(surface))
+		}
+		fmt.Printf("  - code=%s severity=%s scope=%s blocking=%t surfaces=%s\n", item.Code, item.Severity, item.Scope, item.Blocking, strings.Join(surfaces, ","))
+		fmt.Printf("    description=%s\n", item.Description)
 	}
 }
 

@@ -620,7 +620,7 @@ Use `--auth-token`, `--auth-token-file`, `--tls-cert`, `--tls-key`, and optional
 
 Add `--fail-on-issues` to `runtime-status`, `agent-status`, or `control-status` when you want scripts or CI to exit non-zero on blocking issues instead of only printing them.
 
-Issue codes are treated as part of the operator contract. See [docs/status-issues.md](docs/status-issues.md) for the canonical vocabulary and blocking semantics.
+Issue codes are treated as part of the operator contract. Use `arbiter status-issues [--surface runtime|agent|control]` for the local catalog, `GetStatusIssueCatalog` from runtime, agent, or control gRPC clients for the RPC form, or `/status/issues` on the self-hosted HTTP status surfaces when you want the scoped JSON catalog directly from a running process. See [docs/status-issues.md](docs/status-issues.md) for the canonical vocabulary and blocking semantics.
 
 ### Self-Hosted Profile
 

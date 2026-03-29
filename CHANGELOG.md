@@ -24,12 +24,15 @@
 - **Canonical issue lists** — runtime, agent, and hosted control status now all expose an explicit `issues` surface with shared `severity`, `scope`, `subject`, `code`, `message`, and `blocking` fields, so operators and SDKs can inspect concrete failures and insecure transport posture without reconstructing them from mixed booleans and free-form reasons.
 - **CLI issue gating** — `arbiter runtime-status`, `arbiter agent-status`, and `arbiter control-status` now accept `--fail-on-issues`, so automation can fail fast on blocking status issues without scraping terminal output.
 - **Issue-code contract** — the status issue vocabulary is now centralized and documented, so `issues.code` is an explicit operator-facing contract instead of a scattered implementation detail.
+- **Issue catalog surfaces** — the canonical status-issue vocabulary now carries explicit runtime/agent/control surface membership and is exposed directly through `arbiter status-issues` plus `GetStatusIssueCatalog` on runtime, agent, and control gRPC services.
+- **HTTP issue catalogs** — runtime, agent, and hosted control now also expose scoped `GET /status/issues` JSON catalogs, so HTTP-first operators can inspect the same issue contract without gRPC tooling.
 
 ### SDKs
 
 - **SDK surface parity** — the shipped Node, Python, and Rust clients now track the current gRPC control-plane surface instead of lagging behind it. Strategy evaluation, strategy-candidate override mutation, structured `TraceStep` fields, and explicit `kill_switch_state` now flow through the vendored SDK contracts as well.
 - **Runtime and agent status clients** — the shipped Node, Python, and Rust wrappers now expose runtime-status and agent-status RPCs alongside runtime-capability introspection, so embedders do not need to scrape HTTP `/status`.
 - **Hosted control-status clients** — the shipped Node, Python, and Rust wrappers now also expose `ControlService.GetControlStatus`, so hosted control-plane introspection is not Go-only.
+- **Status-issue catalog clients** — the shipped Node, Python, and Rust wrappers now also expose `GetStatusIssueCatalog`, so automation can inspect the issue vocabulary itself instead of hardcoding string lists.
 - **Capability-service mirrors** — the Node, Python, and Rust SDK trees now mirror the runtime capability proto as well, so embedders can implement source/sink/worker plugins in those languages instead of being limited to Go interfaces.
 - **Capability server helpers** — Node and Python now ship `CapabilityServer` helpers, and Rust ships `CapabilityPlugin` plus handler traits, so SDK authors can register source/sink/worker behavior without hand-writing raw gRPC service plumbing.
 

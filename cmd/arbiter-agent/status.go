@@ -61,6 +61,11 @@ func newStatusHandler(syncer *dataplane.Agent, policy readinessPolicy, transport
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(newAgentStatusPayload(status, reason, policy, transport))
 	})
+	mux.HandleFunc("/status/issues", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(statusview.DefinitionsForSurface(statusview.SurfaceAgent))
+	})
 	return mux
 }
 
