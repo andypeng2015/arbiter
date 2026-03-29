@@ -18,6 +18,7 @@
 - **Canonical operator surfaces** — `arbiter-runtime /status`, `arbiter-agent /status`, and `arbiter runtime-capabilities` now use the same small inspection vocabulary and section order instead of mixing flat counters, ad hoc headings, and transport-specific nouns.
 - **Status over gRPC** — the canonical operator surfaces now travel over RPC too: `RuntimeService.GetRuntimeStatus` exposes `readiness -> transport -> capabilities -> activity`, `AgentService.GetAgentStatus` exposes `readiness -> transport -> sync`, `ControlService.GetControlStatus` exposes `readiness -> transport -> bundles -> overrides -> sessions -> audit`, and the CLI now ships `arbiter runtime-status`, `arbiter agent-status`, plus `arbiter control-status`.
 - **Hosted control-plane introspection** — `arbiter serve` now exposes real `/status` output instead of identity-only JSON, including listener auth/TLS posture, persisted bundle/override files, active bundle versions, live expert-session occupancy, and explicit audit posture (`jsonl` vs discard, durable vs non-durable).
+- **Audit health, not just audit config** — the hosted control-plane `audit` section now reports whether recording is currently healthy, plus write/error counters and the last successful or failed audit write timestamps, so operators can see when decision recording is configured but not actually succeeding.
 
 ### SDKs
 

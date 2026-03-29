@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
+	"github.com/odvcencio/arbiter/audit"
 	"github.com/odvcencio/arbiter/expert"
 	"github.com/odvcencio/arbiter/grpcserver"
 	"github.com/odvcencio/arbiter/overrides"
@@ -73,7 +76,7 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 		controlListenerTransport{Enabled: true, Address: "127.0.0.1:8081", AuthEnabled: true, TLSEnabled: true},
 		"/tmp/bundles.json",
 		"/tmp/overrides.json",
-		"/tmp/decisions.jsonl",
+		newControlAuditTracker(true, "jsonl", true, "/tmp/decisions.jsonl"),
 	)
 
 	if !payload.Readiness.Ready || payload.Readiness.Reason != "" {
@@ -100,7 +103,7 @@ func TestNewControlStatusPayloadExposesCanonicalSections(t *testing.T) {
 	if len(payload.Sessions.Bundles) != 1 || payload.Sessions.Bundles[0].Name != "checkout" || payload.Sessions.Bundles[0].Active != 1 {
 		t.Fatalf("unexpected session bundles: %+v", payload.Sessions.Bundles)
 	}
-	if !payload.Audit.Configured || payload.Audit.Kind != "jsonl" || !payload.Audit.Durable || payload.Audit.File != "/tmp/decisions.jsonl" {
+	if !payload.Audit.Configured || payload.Audit.Kind != "jsonl" || !payload.Audit.Durable || payload.Audit.File != "/tmp/decisions.jsonl" || !payload.Audit.Healthy {
 		t.Fatalf("unexpected audit status: %+v", payload.Audit)
 	}
 }
@@ -164,10 +167,16 @@ func TestProtoControlStatus(t *testing.T) {
 			}},
 		},
 		Audit: controlAuditStatus{
-			Configured: true,
-			Kind:       "jsonl",
-			Durable:    true,
-			File:       "/tmp/decisions.jsonl",
+			Configured:    true,
+			Kind:          "jsonl",
+			Durable:       true,
+			File:          "/tmp/decisions.jsonl",
+			Healthy:       false,
+			WritesTotal:   7,
+			ErrorsTotal:   2,
+			LastSuccessAt: time.Unix(1710000000, 0).UTC(),
+			LastError:     "disk full",
+			LastErrorAt:   time.Unix(1710000060, 0).UTC(),
 		},
 	}
 
@@ -199,6 +208,12 @@ func TestProtoControlStatus(t *testing.T) {
 	if !resp.GetAudit().GetConfigured() || resp.GetAudit().GetKind() != "jsonl" || !resp.GetAudit().GetDurable() || resp.GetAudit().GetFile() != "/tmp/decisions.jsonl" {
 		t.Fatalf("unexpected audit payload: %+v", resp.GetAudit())
 	}
+	if resp.GetAudit().GetHealthy() || resp.GetAudit().GetWritesTotal() != 7 || resp.GetAudit().GetErrorsTotal() != 2 || resp.GetAudit().GetLastError() != "disk full" {
+		t.Fatalf("unexpected audit health payload: %+v", resp.GetAudit())
+	}
+	if resp.GetAudit().GetLastSuccessAt() == nil || resp.GetAudit().GetLastErrorAt() == nil {
+		t.Fatalf("expected audit timestamps: %+v", resp.GetAudit())
+	}
 	if got := resp.GetTransport().GetControl().GetMutualTlsEnabled(); !got {
 		t.Fatalf("expected mutual TLS to survive proto conversion, got %+v", resp.GetTransport().GetControl())
 	}
@@ -207,5 +222,60 @@ func TestProtoControlStatus(t *testing.T) {
 	}
 	if _, ok := interface{}(resp).(*arbiterv1.GetControlStatusResponse); !ok {
 		t.Fatal("expected control status response type")
+	}
+}
+
+type auditSinkFunc func(context.Context, audit.DecisionEvent) error
+
+func (f auditSinkFunc) WriteDecision(ctx context.Context, event audit.DecisionEvent) error {
+	return f(ctx, event)
+}
+
+func TestTrackedAuditSinkHealthTransitions(t *testing.T) {
+	tracker := newControlAuditTracker(true, "jsonl", true, "/tmp/decisions.jsonl")
+	shouldFail := true
+	sink := newTrackedAuditSink(auditSinkFunc(func(context.Context, audit.DecisionEvent) error {
+		if shouldFail {
+			return errors.New("disk full")
+		}
+		return nil
+	}), tracker, nil)
+
+	err := sink.WriteDecision(context.Background(), audit.DecisionEvent{Kind: "rules"})
+	if err == nil {
+		t.Fatal("expected audit write to fail")
+	}
+	first := tracker.Snapshot()
+	if first.Healthy || first.ErrorsTotal != 1 || first.LastError != "disk full" || first.WritesTotal != 0 {
+		t.Fatalf("unexpected failed snapshot: %+v", first)
+	}
+
+	shouldFail = false
+	if err := sink.WriteDecision(context.Background(), audit.DecisionEvent{Kind: "rules"}); err != nil {
+		t.Fatalf("expected audit write to recover: %v", err)
+	}
+	second := tracker.Snapshot()
+	if !second.Healthy || second.ErrorsTotal != 1 || second.WritesTotal != 1 || second.LastSuccessAt.IsZero() {
+		t.Fatalf("unexpected recovered snapshot: %+v", second)
+	}
+	if second.LastErrorAt.IsZero() {
+		t.Fatalf("expected last error time to remain visible: %+v", second)
+	}
+}
+
+func TestTrackedAuditSinkDiscardModeStaysInspectable(t *testing.T) {
+	tracker := newControlAuditTracker(false, "discard", false, "")
+	sink := newTrackedAuditSink(audit.NopSink{}, tracker, nil)
+
+	if err := sink.WriteDecision(context.Background(), audit.DecisionEvent{Kind: "rules"}); err != nil {
+		t.Fatalf("WriteDecision: %v", err)
+	}
+
+	snapshot := tracker.Snapshot()
+	if snapshot.Configured || snapshot.Kind != "discard" || snapshot.Durable || !snapshot.Healthy {
+		t.Fatalf("unexpected discard snapshot: %+v", snapshot)
+	}
+	if snapshot.WritesTotal != 0 || snapshot.ErrorsTotal != 0 || !snapshot.LastSuccessAt.IsZero() || snapshot.LastError != "" || !snapshot.LastErrorAt.IsZero() {
+		t.Fatalf("discard mode should not surface write counters or timestamps: %+v", snapshot)
 	}
 }

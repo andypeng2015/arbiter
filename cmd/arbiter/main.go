@@ -896,6 +896,7 @@ func serveCmd(cfg serveConfig) error {
 
 	var sink audit.Sink = audit.NopSink{}
 	var closer interface{ Close() error }
+	auditTracker := newControlAuditTracker(false, "discard", false, "")
 	if cfg.auditFile != "" {
 		fileSink, err := audit.NewJSONLSink(cfg.auditFile)
 		if err != nil {
@@ -903,7 +904,9 @@ func serveCmd(cfg serveConfig) error {
 		}
 		sink = fileSink
 		closer = fileSink
+		auditTracker = newControlAuditTracker(true, "jsonl", true, cfg.auditFile)
 	}
+	sink = newTrackedAuditSink(sink, auditTracker, logger)
 	if closer != nil {
 		defer closer.Close()
 	}
@@ -935,7 +938,7 @@ func serveCmd(cfg serveConfig) error {
 		transport:     controlTransport,
 		bundleFile:    bundleFile,
 		overridesFile: overridesFile,
-		auditFile:     cfg.auditFile,
+		audit:         auditTracker,
 	}
 
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
@@ -1369,9 +1372,18 @@ func printControlStatus(resp *arbiterv1.GetControlStatusResponse) {
 
 	if audit := resp.GetAudit(); audit != nil {
 		fmt.Println("audit:")
-		fmt.Printf("  configured=%t kind=%s durable=%t\n", audit.GetConfigured(), audit.GetKind(), audit.GetDurable())
+		fmt.Printf("  configured=%t kind=%s durable=%t healthy=%t writes=%d errors=%d\n", audit.GetConfigured(), audit.GetKind(), audit.GetDurable(), audit.GetHealthy(), audit.GetWritesTotal(), audit.GetErrorsTotal())
 		if file := strings.TrimSpace(audit.GetFile()); file != "" {
 			fmt.Printf("  file=%s\n", file)
+		}
+		if ts := formatProtoTimestamp(audit.GetLastSuccessAt()); ts != "" {
+			fmt.Printf("  last_success_at=%s\n", ts)
+		}
+		if lastError := strings.TrimSpace(audit.GetLastError()); lastError != "" {
+			fmt.Printf("  last_error=%s\n", lastError)
+		}
+		if ts := formatProtoTimestamp(audit.GetLastErrorAt()); ts != "" {
+			fmt.Printf("  last_error_at=%s\n", ts)
 		}
 	}
 }

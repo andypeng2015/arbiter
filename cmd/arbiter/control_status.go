@@ -87,10 +87,16 @@ type controlSessionsStatus struct {
 }
 
 type controlAuditStatus struct {
-	Configured bool   `json:"configured"`
-	Kind       string `json:"kind"`
-	Durable    bool   `json:"durable"`
-	File       string `json:"file,omitempty"`
+	Configured    bool      `json:"configured"`
+	Kind          string    `json:"kind"`
+	Durable       bool      `json:"durable"`
+	File          string    `json:"file,omitempty"`
+	Healthy       bool      `json:"healthy"`
+	WritesTotal   uint64    `json:"writes_total"`
+	ErrorsTotal   uint64    `json:"errors_total"`
+	LastSuccessAt time.Time `json:"last_success_at,omitempty"`
+	LastError     string    `json:"last_error,omitempty"`
+	LastErrorAt   time.Time `json:"last_error_at,omitempty"`
 }
 
 type controlStatusPayload struct {
@@ -109,7 +115,7 @@ type controlStatusSource struct {
 	transport     controlListenerTransport
 	bundleFile    string
 	overridesFile string
-	auditFile     string
+	audit         *controlAuditTracker
 }
 
 func newControlListenerTransport(address string, tokens []string, tlsConfig *tls.Config) controlListenerTransport {
@@ -127,7 +133,7 @@ func newControlListenerTransport(address string, tokens []string, tlsConfig *tls
 }
 
 func (s controlStatusSource) Payload() controlStatusPayload {
-	return newControlStatusPayload(s.registry, s.store, s.sessions, s.transport, s.bundleFile, s.overridesFile, s.auditFile)
+	return newControlStatusPayload(s.registry, s.store, s.sessions, s.transport, s.bundleFile, s.overridesFile, s.audit)
 }
 
 func newControlStatusPayload(
@@ -137,7 +143,7 @@ func newControlStatusPayload(
 	transport controlListenerTransport,
 	bundleFile string,
 	overridesFile string,
-	auditFile string,
+	audit *controlAuditTracker,
 ) controlStatusPayload {
 	ready := registry != nil && store != nil && sessions != nil
 	reason := ""
@@ -153,24 +159,20 @@ func newControlStatusPayload(
 		Bundles:   controlBundlesPayload(registry, bundleFile),
 		Overrides: controlOverridesPayload(registry, store, overridesFile),
 		Sessions:  controlSessionsPayload(registry, sessions),
-		Audit:     controlAuditPayload(auditFile),
+		Audit:     controlAuditPayload(audit),
 	}
 }
 
-func controlAuditPayload(auditFile string) controlAuditStatus {
-	if auditFile == "" {
+func controlAuditPayload(audit *controlAuditTracker) controlAuditStatus {
+	if audit == nil {
 		return controlAuditStatus{
 			Configured: false,
 			Kind:       "discard",
 			Durable:    false,
+			Healthy:    true,
 		}
 	}
-	return controlAuditStatus{
-		Configured: true,
-		Kind:       "jsonl",
-		Durable:    true,
-		File:       auditFile,
-	}
+	return audit.Snapshot()
 }
 
 func controlBundlesPayload(registry *grpcserver.Registry, bundleFile string) controlBundlesStatus {
@@ -400,10 +402,16 @@ func protoControlStatus(payload controlStatusPayload) *arbiterv1.GetControlStatu
 			Bundles:     make([]*arbiterv1.ControlSessionBundleStatus, 0, len(payload.Sessions.Bundles)),
 		},
 		Audit: &arbiterv1.ControlAuditStatus{
-			Configured: payload.Audit.Configured,
-			Kind:       payload.Audit.Kind,
-			Durable:    payload.Audit.Durable,
-			File:       payload.Audit.File,
+			Configured:    payload.Audit.Configured,
+			Kind:          payload.Audit.Kind,
+			Durable:       payload.Audit.Durable,
+			File:          payload.Audit.File,
+			Healthy:       payload.Audit.Healthy,
+			WritesTotal:   payload.Audit.WritesTotal,
+			ErrorsTotal:   payload.Audit.ErrorsTotal,
+			LastSuccessAt: protoControlTimestamp(payload.Audit.LastSuccessAt),
+			LastError:     payload.Audit.LastError,
+			LastErrorAt:   protoControlTimestamp(payload.Audit.LastErrorAt),
 		},
 	}
 

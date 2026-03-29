@@ -480,10 +480,14 @@ func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
 				}},
 			},
 			Audit: &arbiterv1.ControlAuditStatus{
-				Configured: true,
-				Kind:       "jsonl",
-				Durable:    true,
-				File:       "/tmp/decisions.jsonl",
+				Configured:  true,
+				Kind:        "jsonl",
+				Durable:     true,
+				File:        "/tmp/decisions.jsonl",
+				Healthy:     false,
+				WritesTotal: 7,
+				ErrorsTotal: 2,
+				LastError:   "disk full",
 			},
 		})
 	})
@@ -503,7 +507,8 @@ func TestPrintControlStatusUsesCanonicalSections(t *testing.T) {
 		"sessions:",
 		"active=1 ttl_ms=1800000 max_count=100 max_per_owner=5",
 		"audit:",
-		"configured=true kind=jsonl durable=true",
+		"configured=true kind=jsonl durable=true healthy=false writes=7 errors=2",
+		"last_error=disk full",
 		"/tmp/decisions.jsonl",
 	} {
 		if !strings.Contains(out, fragment) {

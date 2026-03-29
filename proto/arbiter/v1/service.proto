@@ -428,6 +428,12 @@ message ControlAuditStatus {
   string kind = 2;
   bool durable = 3;
   string file = 4;
+  bool healthy = 5;
+  uint64 writes_total = 6;
+  uint64 errors_total = 7;
+  google.protobuf.Timestamp last_success_at = 8;
+  string last_error = 9;
+  google.protobuf.Timestamp last_error_at = 10;
 }
 
 message GetControlStatusResponse {
