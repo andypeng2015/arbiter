@@ -264,13 +264,20 @@ func (s *Session) retractLocked(factType, factKey string) error {
 
 // SyncFacts makes the session's external facts match the provided snapshot.
 // New or changed facts are asserted, and previously external facts missing from
-// the snapshot are retracted.
+// the snapshot are retracted. The string pool is rotated to prevent unbounded
+// growth from runtime-interned strings across ticks.
 func (s *Session) SyncFacts(facts []Fact) (SyncSummary, error) {
 	if s == nil {
 		return SyncSummary{}, fmt.Errorf("nil session")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Rotate the string pool to bound memory growth. Compile-time constants
+	// are re-seeded from the ruleset; runtime strings from prior ticks are
+	// released. This is safe because existing facts store field values as
+	// Go strings (map[string]any), not pool indices.
+	s.resetPool()
 
 	incoming, err := normalizeSyncFacts(facts)
 	if err != nil {
@@ -284,6 +291,18 @@ func (s *Session) SyncFacts(facts []Fact) (SyncSummary, error) {
 		return SyncSummary{}, err
 	}
 	return summary, nil
+}
+
+// resetPool recreates the string pool with only compile-time constants,
+// releasing any runtime-interned strings accumulated from prior evaluations.
+func (s *Session) resetPool() {
+	if s.program == nil || s.program.ruleset == nil {
+		return
+	}
+	s.pool = vm.NewStringPool(s.program.ruleset.Constants.Strings())
+	s.evaluator = vm.NewEvaluator(s.program.ruleset, s.pool)
+	s.dc = nil       // force DataContext rebuild on next eval
+	s.evalCtx = nil  // force context rebuild
 }
 
 func normalizeSyncFacts(facts []Fact) (map[string]map[string]Fact, error) {
@@ -394,6 +413,22 @@ func (s *Session) Checkpoint() Checkpoint {
 	return Checkpoint{
 		outcomeCount:    len(s.outcomes),
 		activationCount: len(s.activations),
+	}
+}
+
+// TrimHistory discards outcomes and activations that precede mark.
+// Call this after DeltaSince to bound memory growth in long-running sessions.
+func (s *Session) TrimHistory(mark Checkpoint) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if mark.outcomeCount > 0 && mark.outcomeCount <= len(s.outcomes) {
+		s.outcomes = s.outcomes[mark.outcomeCount:]
+	}
+	if mark.activationCount > 0 && mark.activationCount <= len(s.activations) {
+		s.activations = s.activations[mark.activationCount:]
 	}
 }
 

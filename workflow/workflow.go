@@ -236,6 +236,7 @@ func (w *Workflow) Run(ctx context.Context) (Result, error) {
 			return Result{}, fmt.Errorf("workflow arbiter %s run: %w", name, err)
 		}
 		delta := arb.session.DeltaSince(mark)
+		arb.session.TrimHistory(mark)
 		arb.checkpoint = arb.session.Checkpoint()
 		result.Arbiters[name] = ArbiterRun{
 			Sync:  syncSummary,
