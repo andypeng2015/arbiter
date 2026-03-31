@@ -13,6 +13,14 @@ _DEFAULT_RETRYABLE_CODES = (
     grpc.StatusCode.UNAVAILABLE,
     grpc.StatusCode.DEADLINE_EXCEEDED,
 )
+PRODUCT = "arbiter"
+OPERATOR_CONTRACT_VERSION = "operator.v1"
+
+
+class OperatorContractError(RuntimeError):
+    def __init__(self, report: dict[str, Any]) -> None:
+        super().__init__(operator_contract_message(report))
+        self.report = report
 
 
 def _to_struct(data: Mapping[str, Any] | None) -> struct_pb2.Struct:
@@ -47,6 +55,79 @@ def _normalize_metadata(
     for key, value in iterable:
         items.append((str(key), str(value)))
     return tuple(items)
+
+
+def _operator_source(source: Any) -> Any:
+    if hasattr(source, "operator"):
+        return source.operator
+    return source
+
+
+def inspect_operator_contract(
+    source: Any,
+    *,
+    expected_product: str = PRODUCT,
+    expected_operator_contract_version: str = OPERATOR_CONTRACT_VERSION,
+) -> dict[str, Any]:
+    operator = _operator_source(source)
+    product = str(getattr(operator, "product", "") or "")
+    build_version = str(getattr(operator, "build_version", "") or "")
+    operator_contract_version = str(getattr(operator, "operator_contract_version", "") or "")
+    report = {
+        "available": False,
+        "compatible": False,
+        "expected_product": expected_product,
+        "expected_operator_contract_version": expected_operator_contract_version,
+        "product": product,
+        "build_version": build_version,
+        "operator_contract_version": operator_contract_version,
+        "reason": "",
+    }
+    if not product and not build_version and not operator_contract_version:
+        report["reason"] = "operator identity unavailable"
+        return report
+    report["available"] = True
+    if product != expected_product:
+        report["reason"] = f"expected product={expected_product}, got product={product or '<empty>'}"
+        return report
+    if operator_contract_version != expected_operator_contract_version:
+        report["reason"] = (
+            f"expected operator_contract_version={expected_operator_contract_version}, "
+            f"got operator_contract_version={operator_contract_version or '<empty>'}"
+        )
+        return report
+    report["compatible"] = True
+    return report
+
+
+def operator_contract_message(report: Mapping[str, Any]) -> str:
+    if report.get("compatible"):
+        return (
+            f"operator contract compatible with "
+            f"{report.get('expected_product')}/{report.get('expected_operator_contract_version')}"
+        )
+    if report.get("reason"):
+        return str(report["reason"])
+    return (
+        f"expected product={report.get('expected_product')} "
+        f"operator_contract_version={report.get('expected_operator_contract_version')}"
+    )
+
+
+def assert_compatible_operator(
+    source: Any,
+    *,
+    expected_product: str = PRODUCT,
+    expected_operator_contract_version: str = OPERATOR_CONTRACT_VERSION,
+) -> dict[str, Any]:
+    report = inspect_operator_contract(
+        source,
+        expected_product=expected_product,
+        expected_operator_contract_version=expected_operator_contract_version,
+    )
+    if not report["compatible"]:
+        raise OperatorContractError(report)
+    return report
 
 
 class ArbiterClient:
@@ -365,6 +446,9 @@ class RuntimeClient:
         max_backoff: float = 1.0,
         backoff_multiplier: float = 2.0,
         retryable_status_codes: Sequence[grpc.StatusCode] = _DEFAULT_RETRYABLE_CODES,
+        require_operator_contract: bool = False,
+        expected_product: str = PRODUCT,
+        expected_operator_contract_version: str = OPERATOR_CONTRACT_VERSION,
     ) -> None:
         self._metadata = _normalize_metadata(metadata, token)
         self._retry_attempts = max(1, retry_attempts)
@@ -372,6 +456,9 @@ class RuntimeClient:
         self._max_backoff = max(self._initial_backoff, max_backoff)
         self._backoff_multiplier = max(1.0, backoff_multiplier)
         self._retryable_status_codes = tuple(retryable_status_codes)
+        self._require_operator_contract = require_operator_contract
+        self._expected_product = expected_product
+        self._expected_operator_contract_version = expected_operator_contract_version
         if channel is None:
             secure = secure if secure is not None else bool(
                 root_certificates or private_key or certificate_chain or server_name_override
@@ -418,22 +505,38 @@ class RuntimeClient:
                 backoff = min(self._max_backoff, backoff * self._backoff_multiplier)
         raise RuntimeError("exhausted retries")
 
+    def _enforce_operator_contract(self, response: Any) -> Any:
+        if self._require_operator_contract:
+            assert_compatible_operator(
+                response,
+                expected_product=self._expected_product,
+                expected_operator_contract_version=self._expected_operator_contract_version,
+            )
+        return response
+
     def get_runtime_capabilities(self) -> service_pb2.GetRuntimeCapabilitiesResponse:
-        return self._invoke(
+        return self._enforce_operator_contract(self._invoke(
             self.stub.GetRuntimeCapabilities,
             service_pb2.GetRuntimeCapabilitiesRequest(),
-        )
+        ))
 
     def get_runtime_status(self) -> service_pb2.GetRuntimeStatusResponse:
-        return self._invoke(
+        return self._enforce_operator_contract(self._invoke(
             self.stub.GetRuntimeStatus,
             service_pb2.GetRuntimeStatusRequest(),
-        )
+        ))
 
     def get_status_issue_catalog(self) -> service_pb2.GetStatusIssueCatalogResponse:
-        return self._invoke(
+        return self._enforce_operator_contract(self._invoke(
             self.stub.GetStatusIssueCatalog,
             service_pb2.GetStatusIssueCatalogRequest(),
+        ))
+
+    def inspect_operator_contract(self, source: Any) -> dict[str, Any]:
+        return inspect_operator_contract(
+            source,
+            expected_product=self._expected_product,
+            expected_operator_contract_version=self._expected_operator_contract_version,
         )
 
 
@@ -456,6 +559,9 @@ class AgentClient:
         max_backoff: float = 1.0,
         backoff_multiplier: float = 2.0,
         retryable_status_codes: Sequence[grpc.StatusCode] = _DEFAULT_RETRYABLE_CODES,
+        require_operator_contract: bool = False,
+        expected_product: str = PRODUCT,
+        expected_operator_contract_version: str = OPERATOR_CONTRACT_VERSION,
     ) -> None:
         self._metadata = _normalize_metadata(metadata, token)
         self._retry_attempts = max(1, retry_attempts)
@@ -463,6 +569,9 @@ class AgentClient:
         self._max_backoff = max(self._initial_backoff, max_backoff)
         self._backoff_multiplier = max(1.0, backoff_multiplier)
         self._retryable_status_codes = tuple(retryable_status_codes)
+        self._require_operator_contract = require_operator_contract
+        self._expected_product = expected_product
+        self._expected_operator_contract_version = expected_operator_contract_version
         if channel is None:
             secure = secure if secure is not None else bool(
                 root_certificates or private_key or certificate_chain or server_name_override
@@ -509,16 +618,32 @@ class AgentClient:
                 backoff = min(self._max_backoff, backoff * self._backoff_multiplier)
         raise RuntimeError("exhausted retries")
 
+    def _enforce_operator_contract(self, response: Any) -> Any:
+        if self._require_operator_contract:
+            assert_compatible_operator(
+                response,
+                expected_product=self._expected_product,
+                expected_operator_contract_version=self._expected_operator_contract_version,
+            )
+        return response
+
     def get_agent_status(self) -> service_pb2.GetAgentStatusResponse:
-        return self._invoke(
+        return self._enforce_operator_contract(self._invoke(
             self.stub.GetAgentStatus,
             service_pb2.GetAgentStatusRequest(),
-        )
+        ))
 
     def get_status_issue_catalog(self) -> service_pb2.GetStatusIssueCatalogResponse:
-        return self._invoke(
+        return self._enforce_operator_contract(self._invoke(
             self.stub.GetStatusIssueCatalog,
             service_pb2.GetStatusIssueCatalogRequest(),
+        ))
+
+    def inspect_operator_contract(self, source: Any) -> dict[str, Any]:
+        return inspect_operator_contract(
+            source,
+            expected_product=self._expected_product,
+            expected_operator_contract_version=self._expected_operator_contract_version,
         )
 
 
@@ -541,6 +666,9 @@ class ControlClient:
         max_backoff: float = 1.0,
         backoff_multiplier: float = 2.0,
         retryable_status_codes: Sequence[grpc.StatusCode] = _DEFAULT_RETRYABLE_CODES,
+        require_operator_contract: bool = False,
+        expected_product: str = PRODUCT,
+        expected_operator_contract_version: str = OPERATOR_CONTRACT_VERSION,
     ) -> None:
         self._metadata = _normalize_metadata(metadata, token)
         self._retry_attempts = max(1, retry_attempts)
@@ -548,6 +676,9 @@ class ControlClient:
         self._max_backoff = max(self._initial_backoff, max_backoff)
         self._backoff_multiplier = max(1.0, backoff_multiplier)
         self._retryable_status_codes = tuple(retryable_status_codes)
+        self._require_operator_contract = require_operator_contract
+        self._expected_product = expected_product
+        self._expected_operator_contract_version = expected_operator_contract_version
         if channel is None:
             secure = secure if secure is not None else bool(
                 root_certificates or private_key or certificate_chain or server_name_override
@@ -594,14 +725,30 @@ class ControlClient:
                 backoff = min(self._max_backoff, backoff * self._backoff_multiplier)
         raise RuntimeError("exhausted retries")
 
+    def _enforce_operator_contract(self, response: Any) -> Any:
+        if self._require_operator_contract:
+            assert_compatible_operator(
+                response,
+                expected_product=self._expected_product,
+                expected_operator_contract_version=self._expected_operator_contract_version,
+            )
+        return response
+
     def get_control_status(self) -> service_pb2.GetControlStatusResponse:
-        return self._invoke(
+        return self._enforce_operator_contract(self._invoke(
             self.stub.GetControlStatus,
             service_pb2.GetControlStatusRequest(),
-        )
+        ))
 
     def get_status_issue_catalog(self) -> service_pb2.GetStatusIssueCatalogResponse:
-        return self._invoke(
+        return self._enforce_operator_contract(self._invoke(
             self.stub.GetStatusIssueCatalog,
             service_pb2.GetStatusIssueCatalogRequest(),
+        ))
+
+    def inspect_operator_contract(self, source: Any) -> dict[str, Any]:
+        return inspect_operator_contract(
+            source,
+            expected_product=self._expected_product,
+            expected_operator_contract_version=self._expected_operator_contract_version,
         )

@@ -225,6 +225,7 @@ message GetRuntimeCapabilitiesResponse {
   repeated RuntimePluginInfo plugins = 4;
   RuntimeControlTransport control_transport = 5;
   RuntimeCapabilityTransport capability_transport = 6;
+  OperatorIdentity operator = 7;
 }
 
 message RuntimeTransportStatus {

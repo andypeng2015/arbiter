@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.5.0
+
 ### Runtime Capability Plugins
 
 - **Custom sink and worker kinds** — arbiter handler clauses and worker runtime clauses now accept host-registered identifiers instead of only the built-in transport list. `chain` and `worker` remain reserved runtime kinds, while `chain://...` and `worker://...` remain runtime-owned source schemes.
@@ -27,7 +29,7 @@
 - **Issue catalog surfaces** — the canonical status-issue vocabulary now carries explicit runtime/agent/control surface membership and is exposed directly through `arbiter status-issues` plus `GetStatusIssueCatalog` on runtime, agent, and control gRPC services.
 - **HTTP issue catalogs** — runtime, agent, and hosted control now also expose scoped `GET /status/issues` JSON catalogs, so HTTP-first operators can inspect the same issue contract without gRPC tooling.
 - **Remote CLI issue catalogs** — `arbiter status-issues` now accepts a live target plus auth/TLS flags, auto-detects runtime vs agent vs control surfaces, and prints the remote-advertised issue catalog instead of assuming the local CLI build matches the running process.
-- **Versioned operator identity** — runtime, agent, hosted control, and issue-catalog surfaces now advertise `operator.product`, `operator.build_version`, and `operator.operator_contract_version`, so tooling can verify build and operator-contract compatibility directly from a live process.
+- **Versioned operator identity** — runtime capability/status, agent status, hosted control status, and issue-catalog surfaces now advertise `operator.product`, `operator.build_version`, and `operator.operator_contract_version`; the CLI prints that contract stamp on every remote inspection command and can fail on mismatches via `--fail-on-contract-mismatch`, so tooling can verify build and operator-contract compatibility directly from a live process.
 
 ### SDKs
 
@@ -35,6 +37,7 @@
 - **Runtime and agent status clients** — the shipped Node, Python, and Rust wrappers now expose runtime-status and agent-status RPCs alongside runtime-capability introspection, so embedders do not need to scrape HTTP `/status`.
 - **Hosted control-status clients** — the shipped Node, Python, and Rust wrappers now also expose `ControlService.GetControlStatus`, so hosted control-plane introspection is not Go-only.
 - **Status-issue catalog clients** — the shipped Node, Python, and Rust wrappers now also expose `GetStatusIssueCatalog`, so automation can inspect the issue vocabulary itself instead of hardcoding string lists.
+- **SDK operator contract guards** — the Node, Python, and Rust clients now expose operator-contract inspection helpers plus optional strict compatibility enforcement on runtime-capability, runtime-status, agent-status, control-status, and status-issue catalog RPCs.
 - **Capability-service mirrors** — the Node, Python, and Rust SDK trees now mirror the runtime capability proto as well, so embedders can implement source/sink/worker plugins in those languages instead of being limited to Go interfaces.
 - **Capability server helpers** — Node and Python now ship `CapabilityServer` helpers, and Rust ships `CapabilityPlugin` plus handler traits, so SDK authors can register source/sink/worker behavior without hand-writing raw gRPC service plumbing.
 

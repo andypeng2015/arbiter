@@ -11,6 +11,8 @@ const DEFAULT_RETRY = Object.freeze({
   retryableStatusCodes: [grpc.status.UNAVAILABLE, grpc.status.DEADLINE_EXCEEDED],
 });
 
+const PRODUCT = "arbiter";
+const OPERATOR_CONTRACT_VERSION = "operator.v1";
 const serviceProtoPath = path.join(__dirname, "..", "proto", "arbiter", "v1", "service.proto");
 const capabilityProtoPath = path.join(__dirname, "..", "proto", "arbiter", "v1", "capability.proto");
 const packageDefinition = protoLoader.loadSync([serviceProtoPath, capabilityProtoPath], {
@@ -69,6 +71,14 @@ function normalizeRetryOptions(retryOptions = {}) {
     ? merged.retryableStatusCodes
     : DEFAULT_RETRY.retryableStatusCodes;
   return merged;
+}
+
+function normalizeOperatorContractOptions(options = {}) {
+  return {
+    expectedProduct: options.expectedProduct || PRODUCT,
+    expectedOperatorContractVersion: options.expectedOperatorContractVersion || OPERATOR_CONTRACT_VERSION,
+    requireOperatorContract: Boolean(options.requireOperatorContract),
+  };
 }
 
 function resolveTarget(target, secureHint) {
@@ -177,6 +187,80 @@ function grpcError(code, details) {
   const err = new Error(details);
   err.code = code;
   return err;
+}
+
+class OperatorContractError extends Error {
+  constructor(report) {
+    super(operatorContractMessage(report));
+    this.name = "OperatorContractError";
+    this.report = report;
+  }
+}
+
+function operatorContractSource(source) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+  if (source.operator && typeof source.operator === "object") {
+    return source.operator;
+  }
+  return source;
+}
+
+function inspectOperatorContract(source, options = {}) {
+  const expectation = normalizeOperatorContractOptions(options);
+  const operator = operatorContractSource(source) || {};
+  const report = {
+    available: false,
+    compatible: false,
+    expectedProduct: expectation.expectedProduct,
+    expectedOperatorContractVersion: expectation.expectedOperatorContractVersion,
+    product: operator.product || "",
+    buildVersion: operator.buildVersion || operator.build_version || "",
+    operatorContractVersion: operator.operatorContractVersion || operator.operator_contract_version || "",
+    reason: "",
+  };
+  if (!report.product && !report.buildVersion && !report.operatorContractVersion) {
+    report.reason = "operator identity unavailable";
+    return report;
+  }
+  report.available = true;
+  if (report.product !== report.expectedProduct) {
+    report.reason = `expected product=${report.expectedProduct}, got product=${report.product || "<empty>"}`;
+    return report;
+  }
+  if (report.operatorContractVersion !== report.expectedOperatorContractVersion) {
+    report.reason = `expected operator_contract_version=${report.expectedOperatorContractVersion}, got operator_contract_version=${report.operatorContractVersion || "<empty>"}`;
+    return report;
+  }
+  report.compatible = true;
+  return report;
+}
+
+function operatorContractMessage(report) {
+  if (report.compatible) {
+    return `operator contract compatible with ${report.expectedProduct}/${report.expectedOperatorContractVersion}`;
+  }
+  if (report.reason) {
+    return report.reason;
+  }
+  return `expected product=${report.expectedProduct} operator_contract_version=${report.expectedOperatorContractVersion}`;
+}
+
+function assertCompatibleOperator(source, options = {}) {
+  const report = inspectOperatorContract(source, options);
+  if (!report.compatible) {
+    throw new OperatorContractError(report);
+  }
+  return report;
+}
+
+function maybeRequireCompatibleOperator(source, options = {}) {
+  const expectation = normalizeOperatorContractOptions(options);
+  if (expectation.requireOperatorContract) {
+    assertCompatibleOperator(source, expectation);
+  }
+  return source;
 }
 
 function toFactList(result) {
@@ -511,6 +595,7 @@ class RuntimeClient {
     }
     this._createMetadata = createMetadataFactory(options);
     this._retry = normalizeRetryOptions(options.retry);
+    this._operatorContract = normalizeOperatorContractOptions(options);
     this.client = new proto.RuntimeService(normalizedTarget, credentials, channelOptions);
   }
 
@@ -519,15 +604,22 @@ class RuntimeClient {
   }
 
   getRuntimeCapabilities(metadata = undefined) {
-    return unary(this.client, "GetRuntimeCapabilities", {}, this._createMetadata, this._retry, metadata);
+    return unary(this.client, "GetRuntimeCapabilities", {}, this._createMetadata, this._retry, metadata)
+      .then(response => maybeRequireCompatibleOperator(response, this._operatorContract));
   }
 
   getRuntimeStatus(metadata = undefined) {
-    return unary(this.client, "GetRuntimeStatus", {}, this._createMetadata, this._retry, metadata);
+    return unary(this.client, "GetRuntimeStatus", {}, this._createMetadata, this._retry, metadata)
+      .then(response => maybeRequireCompatibleOperator(response, this._operatorContract));
   }
 
   getStatusIssueCatalog(metadata = undefined) {
-    return unary(this.client, "GetStatusIssueCatalog", {}, this._createMetadata, this._retry, metadata);
+    return unary(this.client, "GetStatusIssueCatalog", {}, this._createMetadata, this._retry, metadata)
+      .then(response => maybeRequireCompatibleOperator(response, this._operatorContract));
+  }
+
+  inspectOperatorContract(source, options = {}) {
+    return inspectOperatorContract(source, { ...this._operatorContract, ...options });
   }
 }
 
@@ -542,6 +634,7 @@ class AgentClient {
     }
     this._createMetadata = createMetadataFactory(options);
     this._retry = normalizeRetryOptions(options.retry);
+    this._operatorContract = normalizeOperatorContractOptions(options);
     this.client = new proto.AgentService(normalizedTarget, credentials, channelOptions);
   }
 
@@ -550,11 +643,17 @@ class AgentClient {
   }
 
   getAgentStatus(metadata = undefined) {
-    return unary(this.client, "GetAgentStatus", {}, this._createMetadata, this._retry, metadata);
+    return unary(this.client, "GetAgentStatus", {}, this._createMetadata, this._retry, metadata)
+      .then(response => maybeRequireCompatibleOperator(response, this._operatorContract));
   }
 
   getStatusIssueCatalog(metadata = undefined) {
-    return unary(this.client, "GetStatusIssueCatalog", {}, this._createMetadata, this._retry, metadata);
+    return unary(this.client, "GetStatusIssueCatalog", {}, this._createMetadata, this._retry, metadata)
+      .then(response => maybeRequireCompatibleOperator(response, this._operatorContract));
+  }
+
+  inspectOperatorContract(source, options = {}) {
+    return inspectOperatorContract(source, { ...this._operatorContract, ...options });
   }
 }
 
@@ -569,6 +668,7 @@ class ControlClient {
     }
     this._createMetadata = createMetadataFactory(options);
     this._retry = normalizeRetryOptions(options.retry);
+    this._operatorContract = normalizeOperatorContractOptions(options);
     this.client = new proto.ControlService(normalizedTarget, credentials, channelOptions);
   }
 
@@ -577,11 +677,17 @@ class ControlClient {
   }
 
   getControlStatus(metadata = undefined) {
-    return unary(this.client, "GetControlStatus", {}, this._createMetadata, this._retry, metadata);
+    return unary(this.client, "GetControlStatus", {}, this._createMetadata, this._retry, metadata)
+      .then(response => maybeRequireCompatibleOperator(response, this._operatorContract));
   }
 
   getStatusIssueCatalog(metadata = undefined) {
-    return unary(this.client, "GetStatusIssueCatalog", {}, this._createMetadata, this._retry, metadata);
+    return unary(this.client, "GetStatusIssueCatalog", {}, this._createMetadata, this._retry, metadata)
+      .then(response => maybeRequireCompatibleOperator(response, this._operatorContract));
+  }
+
+  inspectOperatorContract(source, options = {}) {
+    return inspectOperatorContract(source, { ...this._operatorContract, ...options });
   }
 }
 
@@ -590,7 +696,12 @@ module.exports = {
   ArbiterClient,
   CapabilityServer,
   ControlClient,
+  OperatorContractError,
+  PRODUCT,
+  OPERATOR_CONTRACT_VERSION,
   RuntimeClient,
+  assertCompatibleOperator,
   capabilityProtoPath,
+  inspectOperatorContract,
   serviceProtoPath,
 };

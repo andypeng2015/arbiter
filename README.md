@@ -829,7 +829,7 @@ Imported declarations are accessed via namespace: `requires scoring.BaseRule`, `
 # arbiter.toml
 [project]
 name = "acme-fraud"
-version = "1.4.0"
+version = "1.5.0"
 ```
 
 ### Input Schemas
@@ -1349,7 +1349,7 @@ expert rule EmitDetermination priority 90 {
 
 ## Status
 
-**v1.4.0** — language contract frozen, compiler and VM stable, full IDE experience.
+**v1.5.0** — language contract frozen, compiler and VM stable, full IDE experience.
 
 What you can rely on:
 

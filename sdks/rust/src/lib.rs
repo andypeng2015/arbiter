@@ -1,4 +1,4 @@
-use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
+use std::{collections::HashMap, error::Error as StdError, fmt, future::Future, sync::Arc, time::Duration};
 
 use prost_types::{value::Kind, Struct, Value};
 use serde_json::Value as JsonValue;
@@ -29,9 +29,10 @@ use arbiter::v1::{
     GetCapabilitiesRequest, GetCapabilitiesResponse, GetControlStatusRequest,
     GetControlStatusResponse, GetOverridesRequest, GetOverridesResponse,
     GetRuntimeCapabilitiesRequest, GetRuntimeCapabilitiesResponse, GetRuntimeStatusRequest,
-    GetSessionTraceRequest, GetSessionTraceResponse, GetStatusIssueCatalogRequest,
-    GetStatusIssueCatalogResponse, ListBundlesRequest, ListBundlesResponse, LoadSourceRequest,
-    LoadSourceResponse, OverrideEvent, PublishBundleRequest, PublishBundleResponse,
+    GetRuntimeStatusResponse, GetSessionTraceRequest, GetSessionTraceResponse,
+    GetStatusIssueCatalogRequest, GetStatusIssueCatalogResponse, ListBundlesRequest,
+    ListBundlesResponse, LoadSourceRequest, LoadSourceResponse, OperatorIdentity, OverrideEvent,
+    PublishBundleRequest, PublishBundleResponse,
     ResolveFlagRequest, ResolveFlagResponse, RetractFactsRequest, RetractFactsResponse,
     RollbackBundleRequest, RollbackBundleResponse, RunSessionRequest, RunSessionResponse,
     SetFlagOverrideRequest, SetFlagOverrideResponse, SetFlagRuleOverrideRequest,
@@ -40,6 +41,9 @@ use arbiter::v1::{
     StartSessionRequest, StartSessionResponse, WatchBundlesRequest, WatchOverridesRequest,
     WorkerCapability, WorkerSpec,
 };
+
+pub const PRODUCT: &str = "arbiter";
+pub const OPERATOR_CONTRACT_VERSION: &str = "operator.v1";
 
 #[derive(Clone, Debug)]
 pub struct RetryPolicy {
@@ -60,6 +64,173 @@ impl Default for RetryPolicy {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OperatorContractExpectation {
+    pub expected_product: String,
+    pub expected_operator_contract_version: String,
+    pub require_operator_contract: bool,
+}
+
+impl Default for OperatorContractExpectation {
+    fn default() -> Self {
+        Self {
+            expected_product: PRODUCT.to_string(),
+            expected_operator_contract_version: OPERATOR_CONTRACT_VERSION.to_string(),
+            require_operator_contract: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OperatorContractReport {
+    pub available: bool,
+    pub compatible: bool,
+    pub expected_product: String,
+    pub expected_operator_contract_version: String,
+    pub product: String,
+    pub build_version: String,
+    pub operator_contract_version: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OperatorContractError {
+    pub report: OperatorContractReport,
+}
+
+impl fmt::Display for OperatorContractError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", operator_contract_message(&self.report))
+    }
+}
+
+impl StdError for OperatorContractError {}
+
+pub trait OperatorIdentityView {
+    fn operator_identity(&self) -> Option<&OperatorIdentity>;
+}
+
+impl OperatorIdentityView for OperatorIdentity {
+    fn operator_identity(&self) -> Option<&OperatorIdentity> {
+        Some(self)
+    }
+}
+
+impl OperatorIdentityView for GetRuntimeCapabilitiesResponse {
+    fn operator_identity(&self) -> Option<&OperatorIdentity> {
+        self.operator.as_ref()
+    }
+}
+
+impl OperatorIdentityView for GetRuntimeStatusResponse {
+    fn operator_identity(&self) -> Option<&OperatorIdentity> {
+        self.operator.as_ref()
+    }
+}
+
+impl OperatorIdentityView for GetStatusIssueCatalogResponse {
+    fn operator_identity(&self) -> Option<&OperatorIdentity> {
+        self.operator.as_ref()
+    }
+}
+
+impl OperatorIdentityView for GetAgentStatusResponse {
+    fn operator_identity(&self) -> Option<&OperatorIdentity> {
+        self.operator.as_ref()
+    }
+}
+
+impl OperatorIdentityView for GetControlStatusResponse {
+    fn operator_identity(&self) -> Option<&OperatorIdentity> {
+        self.operator.as_ref()
+    }
+}
+
+pub fn inspect_operator_contract<T: OperatorIdentityView>(
+    source: &T,
+    expectation: &OperatorContractExpectation,
+) -> OperatorContractReport {
+    let operator = source.operator_identity();
+    let product = operator.map(|item| item.product.clone()).unwrap_or_default();
+    let build_version = operator
+        .map(|item| item.build_version.clone())
+        .unwrap_or_default();
+    let operator_contract_version = operator
+        .map(|item| item.operator_contract_version.clone())
+        .unwrap_or_default();
+    let mut report = OperatorContractReport {
+        available: false,
+        compatible: false,
+        expected_product: expectation.expected_product.clone(),
+        expected_operator_contract_version: expectation.expected_operator_contract_version.clone(),
+        product,
+        build_version,
+        operator_contract_version,
+        reason: String::new(),
+    };
+    if report.product.is_empty()
+        && report.build_version.is_empty()
+        && report.operator_contract_version.is_empty()
+    {
+        report.reason = "operator identity unavailable".to_string();
+        return report;
+    }
+    report.available = true;
+    if report.product != report.expected_product {
+        report.reason = format!(
+            "expected product={}, got product={}",
+            report.expected_product,
+            if report.product.is_empty() {
+                "<empty>"
+            } else {
+                &report.product
+            }
+        );
+        return report;
+    }
+    if report.operator_contract_version != report.expected_operator_contract_version {
+        report.reason = format!(
+            "expected operator_contract_version={}, got operator_contract_version={}",
+            report.expected_operator_contract_version,
+            if report.operator_contract_version.is_empty() {
+                "<empty>"
+            } else {
+                &report.operator_contract_version
+            }
+        );
+        return report;
+    }
+    report.compatible = true;
+    report
+}
+
+pub fn operator_contract_message(report: &OperatorContractReport) -> String {
+    if report.compatible {
+        return format!(
+            "operator contract compatible with {}/{}",
+            report.expected_product, report.expected_operator_contract_version
+        );
+    }
+    if !report.reason.is_empty() {
+        return report.reason.clone();
+    }
+    format!(
+        "expected product={} operator_contract_version={}",
+        report.expected_product, report.expected_operator_contract_version
+    )
+}
+
+pub fn assert_compatible_operator<T: OperatorIdentityView>(
+    source: &T,
+    expectation: &OperatorContractExpectation,
+) -> Result<OperatorContractReport, OperatorContractError> {
+    let report = inspect_operator_contract(source, expectation);
+    if !report.compatible {
+        return Err(OperatorContractError { report });
+    }
+    Ok(report)
+}
+
 #[derive(Clone)]
 pub struct ArbiterClient {
     inner: ArbiterServiceClient<Channel>,
@@ -74,6 +245,7 @@ pub struct RuntimeClient {
     auth_token: Option<String>,
     metadata: Vec<(String, String)>,
     retry_policy: RetryPolicy,
+    operator_contract: OperatorContractExpectation,
 }
 
 #[derive(Clone)]
@@ -82,6 +254,7 @@ pub struct AgentClient {
     auth_token: Option<String>,
     metadata: Vec<(String, String)>,
     retry_policy: RetryPolicy,
+    operator_contract: OperatorContractExpectation,
 }
 
 #[derive(Clone)]
@@ -90,6 +263,7 @@ pub struct ControlClient {
     auth_token: Option<String>,
     metadata: Vec<(String, String)>,
     retry_policy: RetryPolicy,
+    operator_contract: OperatorContractExpectation,
 }
 
 impl RuntimeClient {
@@ -101,6 +275,7 @@ impl RuntimeClient {
             auth_token: None,
             metadata: Vec::new(),
             retry_policy: RetryPolicy::default(),
+            operator_contract: OperatorContractExpectation::default(),
         })
     }
 
@@ -119,6 +294,24 @@ impl RuntimeClient {
         self
     }
 
+    pub fn with_expected_product(mut self, product: impl Into<String>) -> Self {
+        self.operator_contract.expected_product = product.into();
+        self
+    }
+
+    pub fn with_expected_operator_contract_version(
+        mut self,
+        version: impl Into<String>,
+    ) -> Self {
+        self.operator_contract.expected_operator_contract_version = version.into();
+        self
+    }
+
+    pub fn require_operator_contract(mut self) -> Self {
+        self.operator_contract.require_operator_contract = true;
+        self
+    }
+
     pub async fn get_runtime_capabilities(
         &self,
     ) -> Result<GetRuntimeCapabilitiesResponse, tonic::Status> {
@@ -127,6 +320,7 @@ impl RuntimeClient {
             |mut client, request| async move { client.get_runtime_capabilities(request).await },
         )
         .await
+        .and_then(|response| self.enforce_operator_contract(response))
     }
 
     pub async fn get_runtime_status(
@@ -137,6 +331,7 @@ impl RuntimeClient {
             |mut client, request| async move { client.get_runtime_status(request).await },
         )
         .await
+        .and_then(|response| self.enforce_operator_contract(response))
     }
 
     pub async fn get_status_issue_catalog(
@@ -147,6 +342,7 @@ impl RuntimeClient {
             |mut client, request| async move { client.get_status_issue_catalog(request).await },
         )
         .await
+        .and_then(|response| self.enforce_operator_contract(response))
     }
 
     async fn unary_with_retry<Req, Resp, F, Fut>(
@@ -196,6 +392,14 @@ impl RuntimeClient {
         }
         Ok(request)
     }
+
+    fn enforce_operator_contract<T: OperatorIdentityView>(&self, response: T) -> Result<T, Status> {
+        if self.operator_contract.require_operator_contract {
+            assert_compatible_operator(&response, &self.operator_contract)
+                .map_err(|err| Status::failed_precondition(err.to_string()))?;
+        }
+        Ok(response)
+    }
 }
 
 impl AgentClient {
@@ -207,6 +411,7 @@ impl AgentClient {
             auth_token: None,
             metadata: Vec::new(),
             retry_policy: RetryPolicy::default(),
+            operator_contract: OperatorContractExpectation::default(),
         })
     }
 
@@ -225,11 +430,30 @@ impl AgentClient {
         self
     }
 
+    pub fn with_expected_product(mut self, product: impl Into<String>) -> Self {
+        self.operator_contract.expected_product = product.into();
+        self
+    }
+
+    pub fn with_expected_operator_contract_version(
+        mut self,
+        version: impl Into<String>,
+    ) -> Self {
+        self.operator_contract.expected_operator_contract_version = version.into();
+        self
+    }
+
+    pub fn require_operator_contract(mut self) -> Self {
+        self.operator_contract.require_operator_contract = true;
+        self
+    }
+
     pub async fn get_agent_status(&self) -> Result<GetAgentStatusResponse, tonic::Status> {
         self.unary_with_retry(GetAgentStatusRequest {}, |mut client, request| async move {
             client.get_agent_status(request).await
         })
         .await
+        .and_then(|response| self.enforce_operator_contract(response))
     }
 
     pub async fn get_status_issue_catalog(
@@ -240,6 +464,7 @@ impl AgentClient {
             |mut client, request| async move { client.get_status_issue_catalog(request).await },
         )
         .await
+        .and_then(|response| self.enforce_operator_contract(response))
     }
 
     async fn unary_with_retry<Req, Resp, F, Fut>(
@@ -289,6 +514,14 @@ impl AgentClient {
         }
         Ok(request)
     }
+
+    fn enforce_operator_contract<T: OperatorIdentityView>(&self, response: T) -> Result<T, Status> {
+        if self.operator_contract.require_operator_contract {
+            assert_compatible_operator(&response, &self.operator_contract)
+                .map_err(|err| Status::failed_precondition(err.to_string()))?;
+        }
+        Ok(response)
+    }
 }
 
 impl ControlClient {
@@ -300,6 +533,7 @@ impl ControlClient {
             auth_token: None,
             metadata: Vec::new(),
             retry_policy: RetryPolicy::default(),
+            operator_contract: OperatorContractExpectation::default(),
         })
     }
 
@@ -318,12 +552,31 @@ impl ControlClient {
         self
     }
 
+    pub fn with_expected_product(mut self, product: impl Into<String>) -> Self {
+        self.operator_contract.expected_product = product.into();
+        self
+    }
+
+    pub fn with_expected_operator_contract_version(
+        mut self,
+        version: impl Into<String>,
+    ) -> Self {
+        self.operator_contract.expected_operator_contract_version = version.into();
+        self
+    }
+
+    pub fn require_operator_contract(mut self) -> Self {
+        self.operator_contract.require_operator_contract = true;
+        self
+    }
+
     pub async fn get_control_status(&self) -> Result<GetControlStatusResponse, tonic::Status> {
         self.unary_with_retry(
             GetControlStatusRequest {},
             |mut client, request| async move { client.get_control_status(request).await },
         )
         .await
+        .and_then(|response| self.enforce_operator_contract(response))
     }
 
     pub async fn get_status_issue_catalog(
@@ -334,6 +587,7 @@ impl ControlClient {
             |mut client, request| async move { client.get_status_issue_catalog(request).await },
         )
         .await
+        .and_then(|response| self.enforce_operator_contract(response))
     }
 
     async fn unary_with_retry<Req, Resp, F, Fut>(
@@ -382,6 +636,14 @@ impl ControlClient {
             request.metadata_mut().insert(key, value);
         }
         Ok(request)
+    }
+
+    fn enforce_operator_contract<T: OperatorIdentityView>(&self, response: T) -> Result<T, Status> {
+        if self.operator_contract.require_operator_contract {
+            assert_compatible_operator(&response, &self.operator_contract)
+                .map_err(|err| Status::failed_precondition(err.to_string()))?;
+        }
+        Ok(response)
     }
 }
 
@@ -1227,4 +1489,38 @@ fn is_reserved_handler_kind(kind: &str) -> bool {
 
 fn should_retry(status: &Status) -> bool {
     matches!(status.code(), Code::Unavailable | Code::DeadlineExceeded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inspect_operator_contract_accepts_matching_identity() {
+        let report = inspect_operator_contract(
+            &OperatorIdentity {
+                product: PRODUCT.to_string(),
+                build_version: "1.4.0".to_string(),
+                operator_contract_version: OPERATOR_CONTRACT_VERSION.to_string(),
+            },
+            &OperatorContractExpectation::default(),
+        );
+        assert!(report.available);
+        assert!(report.compatible);
+    }
+
+    #[test]
+    fn inspect_operator_contract_rejects_mismatched_contract() {
+        let report = inspect_operator_contract(
+            &OperatorIdentity {
+                product: PRODUCT.to_string(),
+                build_version: "1.4.0".to_string(),
+                operator_contract_version: "operator.v999".to_string(),
+            },
+            &OperatorContractExpectation::default(),
+        );
+        assert!(report.available);
+        assert!(!report.compatible);
+        assert!(report.reason.contains("expected operator_contract_version"));
+    }
 }

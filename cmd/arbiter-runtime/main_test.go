@@ -220,6 +220,9 @@ func TestProtoRuntimeCapabilities(t *testing.T) {
 		ServerName:  "plugin.internal",
 	})
 
+	if resp.GetOperator().GetBuildVersion() != buildinfo.Version || resp.GetOperator().GetOperatorContractVersion() != buildinfo.OperatorContractVersion {
+		t.Fatalf("unexpected operator info: %+v", resp.GetOperator())
+	}
 	if len(resp.GetSources()) != 1 || resp.GetSources()[0].GetScheme() != "kafka" {
 		t.Fatalf("unexpected proto sources: %+v", resp.GetSources())
 	}

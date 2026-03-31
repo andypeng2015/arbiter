@@ -298,7 +298,7 @@ func runImport(args []string) error {
 
 func runRuntimeCapabilities(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter runtime-capabilities <target> [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+		return usageError("Usage: arbiter runtime-capabilities <target> [--json] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
 	cfg := parseRemoteInspectConfig(args)
 	return runtimeCapabilitiesCmd(cfg)
@@ -306,21 +306,21 @@ func runRuntimeCapabilities(args []string) error {
 
 func runRuntimeStatus(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter runtime-status <target> [--json] [--fail-on-issues] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+		return usageError("Usage: arbiter runtime-status <target> [--json] [--fail-on-issues] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
 	return runtimeStatusCmd(parseRemoteInspectConfig(args))
 }
 
 func runAgentStatus(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter agent-status <target> [--json] [--fail-on-issues] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+		return usageError("Usage: arbiter agent-status <target> [--json] [--fail-on-issues] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
 	return agentStatusCmd(parseRemoteInspectConfig(args))
 }
 
 func runControlStatus(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter control-status <target> [--json] [--fail-on-issues] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+		return usageError("Usage: arbiter control-status <target> [--json] [--fail-on-issues] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 	}
 	return controlStatusCmd(parseRemoteInspectConfig(args))
 }
@@ -332,27 +332,29 @@ func runStatusIssues(args []string) error {
 		switch args[i] {
 		case "--json":
 			cfg.jsonOut = true
+		case "--fail-on-contract-mismatch":
+			cfg.failOnContractMismatch = true
 		case "--surface":
 			if i+1 >= len(args) {
-				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 			}
 			surface = strings.TrimSpace(args[i+1])
 			i++
 		case "--token":
 			if i+1 >= len(args) {
-				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 			}
 			cfg.token = args[i+1]
 			i++
 		case "--ca-file":
 			if i+1 >= len(args) {
-				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 			}
 			cfg.caFile = args[i+1]
 			i++
 		case "--server-name":
 			if i+1 >= len(args) {
-				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 			}
 			cfg.serverName = args[i+1]
 			i++
@@ -360,10 +362,10 @@ func runStatusIssues(args []string) error {
 			cfg.forceInsecure = true
 		default:
 			if strings.HasPrefix(args[i], "--") {
-				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 			}
 			if cfg.target != "" {
-				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
+				return usageError("Usage: arbiter status-issues [target] [--surface runtime|agent|control] [--json] [--fail-on-contract-mismatch] [--token <token>] [--ca-file <pem>] [--server-name <name>] [--plaintext]")
 			}
 			cfg.target = args[i]
 		}
@@ -410,6 +412,7 @@ type remoteInspectConfig struct {
 	forceInsecure bool
 	jsonOut       bool
 	failOnIssues  bool
+	failOnContractMismatch bool
 }
 
 func parseRemoteInspectConfig(args []string) remoteInspectConfig {
@@ -420,6 +423,8 @@ func parseRemoteInspectConfig(args []string) remoteInspectConfig {
 			cfg.jsonOut = true
 		case "--fail-on-issues":
 			cfg.failOnIssues = true
+		case "--fail-on-contract-mismatch":
+			cfg.failOnContractMismatch = true
 		case "--token":
 			if i+1 < len(args) {
 				cfg.token = args[i+1]
@@ -1115,11 +1120,11 @@ func runtimeCapabilitiesCmd(cfg remoteInspectConfig) error {
 			return fmt.Errorf("marshal runtime capabilities: %w", err)
 		}
 		fmt.Println(string(data))
-		return nil
+		return maybeWarnOrFailOperatorContract("runtime capabilities", cfg, protoOperatorInfo(resp.GetOperator()))
 	}
 
 	printRuntimeCapabilities(resp)
-	return nil
+	return maybeWarnOrFailOperatorContract("runtime capabilities", cfg, protoOperatorInfo(resp.GetOperator()))
 }
 
 func runtimeStatusCmd(cfg remoteInspectConfig) error {
@@ -1148,10 +1153,16 @@ func runtimeStatusCmd(cfg remoteInspectConfig) error {
 			return fmt.Errorf("marshal runtime status: %w", err)
 		}
 		fmt.Println(string(data))
+		if err := maybeWarnOrFailOperatorContract("runtime status", cfg, protoOperatorInfo(resp.GetOperator())); err != nil {
+			return err
+		}
 		return failOnBlockingIssues("runtime status", cfg.failOnIssues, resp.GetIssues())
 	}
 
 	printRuntimeStatus(resp)
+	if err := maybeWarnOrFailOperatorContract("runtime status", cfg, protoOperatorInfo(resp.GetOperator())); err != nil {
+		return err
+	}
 	return failOnBlockingIssues("runtime status", cfg.failOnIssues, resp.GetIssues())
 }
 
@@ -1181,10 +1192,16 @@ func agentStatusCmd(cfg remoteInspectConfig) error {
 			return fmt.Errorf("marshal agent status: %w", err)
 		}
 		fmt.Println(string(data))
+		if err := maybeWarnOrFailOperatorContract("agent status", cfg, protoOperatorInfo(resp.GetOperator())); err != nil {
+			return err
+		}
 		return failOnBlockingIssues("agent status", cfg.failOnIssues, resp.GetIssues())
 	}
 
 	printAgentStatus(resp)
+	if err := maybeWarnOrFailOperatorContract("agent status", cfg, protoOperatorInfo(resp.GetOperator())); err != nil {
+		return err
+	}
 	return failOnBlockingIssues("agent status", cfg.failOnIssues, resp.GetIssues())
 }
 
@@ -1214,10 +1231,16 @@ func controlStatusCmd(cfg remoteInspectConfig) error {
 			return fmt.Errorf("marshal control status: %w", err)
 		}
 		fmt.Println(string(data))
+		if err := maybeWarnOrFailOperatorContract("control status", cfg, protoOperatorInfo(resp.GetOperator())); err != nil {
+			return err
+		}
 		return failOnBlockingIssues("control status", cfg.failOnIssues, resp.GetIssues())
 	}
 
 	printControlStatus(resp)
+	if err := maybeWarnOrFailOperatorContract("control status", cfg, protoOperatorInfo(resp.GetOperator())); err != nil {
+		return err
+	}
 	return failOnBlockingIssues("control status", cfg.failOnIssues, resp.GetIssues())
 }
 
@@ -1248,10 +1271,10 @@ func statusIssuesCmd(cfg remoteInspectConfig, surface string) error {
 			return fmt.Errorf("marshal status issues: %w", err)
 		}
 		fmt.Println(string(data))
-		return nil
+		return maybeWarnOrFailOperatorContract("status issue catalog", cfg, catalog.Operator)
 	}
 	printStatusIssueCatalog(catalog)
-	return nil
+	return maybeWarnOrFailOperatorContract("status issue catalog", cfg, catalog.Operator)
 }
 
 func normalizeStatusSurface(surface string) (statusview.Surface, error) {
@@ -1370,6 +1393,7 @@ func protoOperatorInfo(operator *arbiterv1.OperatorIdentity) buildinfo.OperatorI
 
 func printRuntimeCapabilities(resp *arbiterv1.GetRuntimeCapabilitiesResponse) {
 	fmt.Println("runtime surface")
+	printOperatorBlock(protoOperatorInfo(resp.GetOperator()))
 	fmt.Println("transport:")
 	if control := resp.GetControlTransport(); control != nil {
 		printRuntimeControlTransport("  control:", control)
@@ -1648,11 +1672,49 @@ func printStatusIssueCatalog(catalog statusview.Catalog) {
 
 func printOperatorBlock(operator buildinfo.OperatorInfo) {
 	fmt.Println("operator:")
-	if strings.TrimSpace(operator.Product) == "" && strings.TrimSpace(operator.BuildVersion) == "" && strings.TrimSpace(operator.OperatorContractVersion) == "" {
+	report := buildinfo.CheckOperator(operator)
+	if !report.Available {
 		fmt.Println("  unavailable")
-		return
+	} else {
+		fmt.Printf("  product=%s build_version=%s operator_contract_version=%s\n", operator.Product, operator.BuildVersion, operator.OperatorContractVersion)
 	}
-	fmt.Printf("  product=%s build_version=%s operator_contract_version=%s\n", operator.Product, operator.BuildVersion, operator.OperatorContractVersion)
+	status := "compatible"
+	if !report.Available {
+		status = "unknown"
+	}
+	if report.Available && !report.Compatible {
+		status = "mismatch"
+	}
+	fmt.Printf("  contract=%s expected_product=%s expected_operator_contract_version=%s\n", status, report.ExpectedProduct, report.ExpectedOperatorContractVersion)
+	if !report.Compatible {
+		fmt.Printf("  note=%s\n", operatorCompatibilityMessage(report))
+	}
+}
+
+func maybeWarnOrFailOperatorContract(subject string, cfg remoteInspectConfig, operator buildinfo.OperatorInfo) error {
+	report := buildinfo.CheckOperator(operator)
+	if report.Compatible {
+		return nil
+	}
+	message := fmt.Sprintf("%s operator compatibility: %s", strings.TrimSpace(subject), operatorCompatibilityMessage(report))
+	if cfg.failOnContractMismatch {
+		return errors.New(message)
+	}
+	fmt.Fprintf(os.Stderr, "warning: %s\n", message)
+	return nil
+}
+
+func operatorCompatibilityMessage(report buildinfo.OperatorCompatibility) string {
+	switch {
+	case !report.Available:
+		return fmt.Sprintf("operator identity unavailable; expected product=%s operator_contract_version=%s", report.ExpectedProduct, report.ExpectedOperatorContractVersion)
+	case report.Product != report.ExpectedProduct:
+		return fmt.Sprintf("expected product=%s, got product=%s", report.ExpectedProduct, report.Product)
+	case report.OperatorContractVersion != report.ExpectedOperatorContractVersion:
+		return fmt.Sprintf("expected operator_contract_version=%s, got operator_contract_version=%s", report.ExpectedOperatorContractVersion, report.OperatorContractVersion)
+	default:
+		return "compatible"
+	}
 }
 
 func printStatusIssues(issues []*arbiterv1.StatusIssue) {

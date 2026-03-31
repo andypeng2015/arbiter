@@ -62,6 +62,7 @@ func protoRuntimeCapabilities(surface workflow.CapabilitySurface, manifest *capa
 		Plugins:             capabilities.GetPlugins(),
 		ControlTransport:    transport.GetControl(),
 		CapabilityTransport: transport.GetCapability(),
+		Operator:            statusview.ProtoOperator(),
 	}
 	return resp
 }

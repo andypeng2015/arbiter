@@ -57,16 +57,17 @@ func TestFormatCLIErrorPrefixesGenericErrors(t *testing.T) {
 	}
 }
 
-func TestParseRemoteInspectConfigSupportsFailOnIssues(t *testing.T) {
+func TestParseRemoteInspectConfigSupportsFailFlags(t *testing.T) {
 	cfg := parseRemoteInspectConfig([]string{
 		"grpcs://arbiter.internal:7443",
 		"--json",
 		"--fail-on-issues",
+		"--fail-on-contract-mismatch",
 		"--token", "secret",
 		"--ca-file", "/tmp/ca.pem",
 		"--server-name", "arbiter.internal",
 	})
-	if cfg.target != "grpcs://arbiter.internal:7443" || !cfg.jsonOut || !cfg.failOnIssues || cfg.token != "secret" || cfg.caFile != "/tmp/ca.pem" || cfg.serverName != "arbiter.internal" {
+	if cfg.target != "grpcs://arbiter.internal:7443" || !cfg.jsonOut || !cfg.failOnIssues || !cfg.failOnContractMismatch || cfg.token != "secret" || cfg.caFile != "/tmp/ca.pem" || cfg.serverName != "arbiter.internal" {
 		t.Fatalf("unexpected remote inspect config: %+v", cfg)
 	}
 }
@@ -176,6 +177,24 @@ func TestStatusIssuesCmdDetectsControlServiceRemotely(t *testing.T) {
 	}
 	if strings.Contains(out, "code=first_tick_incomplete") || strings.Contains(out, "code=upstream_error") {
 		t.Fatalf("did not expect runtime/agent codes in control remote catalog, got %s", out)
+	}
+}
+
+func TestStatusIssuesCmdFailsOnOperatorContractMismatch(t *testing.T) {
+	target := newStatusCatalogTestTargetWithContract(t, "runtime", "operator.v999")
+	err := statusIssuesCmd(remoteInspectConfig{
+		target:                 "grpc://" + target,
+		failOnContractMismatch: true,
+	}, "")
+	if err == nil || !strings.Contains(err.Error(), "expected operator_contract_version="+buildinfo.OperatorContractVersion) {
+		t.Fatalf("unexpected contract mismatch error: %v", err)
+	}
+}
+
+func TestMaybeWarnOrFailOperatorContractRejectsMissingIdentityWhenConfigured(t *testing.T) {
+	err := maybeWarnOrFailOperatorContract("runtime status", remoteInspectConfig{failOnContractMismatch: true}, buildinfo.OperatorInfo{})
+	if err == nil || !strings.Contains(err.Error(), "operator identity unavailable") {
+		t.Fatalf("unexpected missing identity error: %v", err)
 	}
 }
 
@@ -360,6 +379,11 @@ test "shipping applies" {
 func TestPrintRuntimeCapabilitiesUsesCanonicalSections(t *testing.T) {
 	out := captureStdout(t, func() {
 		printRuntimeCapabilities(&arbiterv1.GetRuntimeCapabilitiesResponse{
+			Operator: &arbiterv1.OperatorIdentity{
+				Product:                 buildinfo.Product,
+				BuildVersion:            buildinfo.Version,
+				OperatorContractVersion: buildinfo.OperatorContractVersion,
+			},
 			ControlTransport: &arbiterv1.RuntimeControlTransport{
 				Enabled:          true,
 				Address:          "127.0.0.1:7081",
@@ -398,6 +422,9 @@ func TestPrintRuntimeCapabilitiesUsesCanonicalSections(t *testing.T) {
 
 	for _, fragment := range []string{
 		"runtime surface",
+		"operator:",
+		"product=arbiter build_version=" + buildinfo.Version + " operator_contract_version=" + buildinfo.OperatorContractVersion,
+		"contract=compatible expected_product=arbiter expected_operator_contract_version=" + buildinfo.OperatorContractVersion,
 		"transport:",
 		"  control:",
 		"  capability:",
@@ -717,29 +744,48 @@ func writeCLIFile(t *testing.T, dir, name, contents string) string {
 
 type runtimeStatusCatalogTestServer struct {
 	arbiterv1.UnimplementedRuntimeServiceServer
+	operator *arbiterv1.OperatorIdentity
 }
 
-func (*runtimeStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
-	return statusview.ProtoCatalog(statusview.SurfaceRuntime), nil
+func (s *runtimeStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
+	resp := statusview.ProtoCatalog(statusview.SurfaceRuntime)
+	if s != nil && s.operator != nil {
+		resp.Operator = s.operator
+	}
+	return resp, nil
 }
 
 type agentStatusCatalogTestServer struct {
 	arbiterv1.UnimplementedAgentServiceServer
+	operator *arbiterv1.OperatorIdentity
 }
 
-func (*agentStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
-	return statusview.ProtoCatalog(statusview.SurfaceAgent), nil
+func (s *agentStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
+	resp := statusview.ProtoCatalog(statusview.SurfaceAgent)
+	if s != nil && s.operator != nil {
+		resp.Operator = s.operator
+	}
+	return resp, nil
 }
 
 type controlStatusCatalogTestServer struct {
 	arbiterv1.UnimplementedControlServiceServer
+	operator *arbiterv1.OperatorIdentity
 }
 
-func (*controlStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
-	return statusview.ProtoCatalog(statusview.SurfaceControl), nil
+func (s *controlStatusCatalogTestServer) GetStatusIssueCatalog(context.Context, *arbiterv1.GetStatusIssueCatalogRequest) (*arbiterv1.GetStatusIssueCatalogResponse, error) {
+	resp := statusview.ProtoCatalog(statusview.SurfaceControl)
+	if s != nil && s.operator != nil {
+		resp.Operator = s.operator
+	}
+	return resp, nil
 }
 
 func newStatusCatalogTestTarget(t *testing.T, surface string) string {
+	return newStatusCatalogTestTargetWithContract(t, surface, buildinfo.OperatorContractVersion)
+}
+
+func newStatusCatalogTestTargetWithContract(t *testing.T, surface string, contractVersion string) string {
 	t.Helper()
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -747,13 +793,18 @@ func newStatusCatalogTestTarget(t *testing.T, surface string) string {
 		t.Fatalf("listen: %v", err)
 	}
 	srv := grpc.NewServer()
+	operator := &arbiterv1.OperatorIdentity{
+		Product:                 buildinfo.Product,
+		BuildVersion:            buildinfo.Version,
+		OperatorContractVersion: contractVersion,
+	}
 	switch surface {
 	case "runtime":
-		arbiterv1.RegisterRuntimeServiceServer(srv, &runtimeStatusCatalogTestServer{})
+		arbiterv1.RegisterRuntimeServiceServer(srv, &runtimeStatusCatalogTestServer{operator: operator})
 	case "agent":
-		arbiterv1.RegisterAgentServiceServer(srv, &agentStatusCatalogTestServer{})
+		arbiterv1.RegisterAgentServiceServer(srv, &agentStatusCatalogTestServer{operator: operator})
 	case "control":
-		arbiterv1.RegisterControlServiceServer(srv, &controlStatusCatalogTestServer{})
+		arbiterv1.RegisterControlServiceServer(srv, &controlStatusCatalogTestServer{operator: operator})
 	default:
 		t.Fatalf("unknown test surface %q", surface)
 	}
