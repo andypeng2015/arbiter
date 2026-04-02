@@ -33,14 +33,14 @@ type Outcome struct {
 
 // Activation records one expert-rule firing attempt.
 type Activation struct {
-	Round   int                `json:"round"`
-	Rule    string             `json:"rule"`
-	Kind    ActionKind         `json:"kind"`
-	Target  string             `json:"target"`
-	Params  map[string]any     `json:"params,omitempty"`
-	Changed bool               `json:"changed"`
-	Detail  string             `json:"detail,omitempty"`
-	Trace   []govern.TraceStep `json:"trace,omitempty"`
+	Round     int                    `json:"round"`
+	Rule      string                 `json:"rule"`
+	Kind      ActionKind             `json:"kind"`
+	Target    string                 `json:"target"`
+	Params    map[string]any         `json:"params,omitempty"`
+	Changed   bool                   `json:"changed"`
+	Detail    string                 `json:"detail,omitempty"`
+	Arbitrace []govern.ArbitraceStep `json:"arbitrace,omitempty"`
 }
 
 // StopReason describes why a session stopped.
@@ -64,12 +64,14 @@ type Options struct {
 
 // Result is the final state of an expert session run.
 type Result struct {
-	Outcomes    []Outcome    `json:"outcomes,omitempty"`
-	Facts       []Fact       `json:"facts,omitempty"`
-	Activations []Activation `json:"activations,omitempty"`
-	Rounds      int          `json:"rounds"`
-	Mutations   int          `json:"mutations"`
-	StopReason  StopReason   `json:"stop_reason"`
+	Outcomes        []Outcome    `json:"outcomes,omitempty"`
+	Facts           []Fact       `json:"facts,omitempty"`
+	Activations     []Activation `json:"activations,omitempty"`
+	Rounds          int          `json:"rounds"`
+	Mutations       int          `json:"mutations"`
+	StopReason      StopReason   `json:"stop_reason"`
+	StableDeferred  bool         `json:"stable_deferred,omitempty"`
+	TemporalPending bool         `json:"temporal_pending,omitempty"`
 }
 
 // SyncSummary describes one external-fact synchronization pass.
@@ -301,8 +303,8 @@ func (s *Session) resetPool() {
 	}
 	s.pool = vm.NewStringPool(s.program.ruleset.Constants.Strings())
 	s.evaluator = vm.NewEvaluator(s.program.ruleset, s.pool)
-	s.dc = nil       // force DataContext rebuild on next eval
-	s.evalCtx = nil  // force context rebuild
+	s.dc = nil      // force DataContext rebuild on next eval
+	s.evalCtx = nil // force context rebuild
 }
 
 func normalizeSyncFacts(facts []Fact) (map[string]map[string]Fact, error) {
@@ -377,8 +379,8 @@ func (s *Session) Facts() []Fact {
 	return s.sortedFacts()
 }
 
-// Trace returns the recorded expert activations.
-func (s *Session) Trace() []Activation {
+// Arbitrace returns the recorded expert activations.
+func (s *Session) Arbitrace() []Activation {
 	if s == nil {
 		return nil
 	}
@@ -390,14 +392,14 @@ func (s *Session) Trace() []Activation {
 	out := make([]Activation, len(s.activations))
 	for i, activation := range s.activations {
 		out[i] = Activation{
-			Round:   activation.Round,
-			Rule:    activation.Rule,
-			Kind:    activation.Kind,
-			Target:  activation.Target,
-			Params:  cloneMap(activation.Params),
-			Changed: activation.Changed,
-			Detail:  activation.Detail,
-			Trace:   append([]govern.TraceStep(nil), activation.Trace...),
+			Round:     activation.Round,
+			Rule:      activation.Rule,
+			Kind:      activation.Kind,
+			Target:    activation.Target,
+			Params:    cloneMap(activation.Params),
+			Changed:   activation.Changed,
+			Detail:    activation.Detail,
+			Arbitrace: append([]govern.ArbitraceStep(nil), activation.Arbitrace...),
 		}
 	}
 	return out
@@ -441,12 +443,14 @@ func (s *Session) DeltaSince(mark Checkpoint) Result {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return Result{
-		Outcomes:    cloneOutcomes(s.outcomes, mark.outcomeCount),
-		Facts:       s.sortedFacts(),
-		Activations: cloneActivations(s.activations, mark.activationCount),
-		Rounds:      s.rounds,
-		Mutations:   s.mutations,
-		StopReason:  s.stopReason,
+		Outcomes:        cloneOutcomes(s.outcomes, mark.outcomeCount),
+		Facts:           s.sortedFacts(),
+		Activations:     cloneActivations(s.activations, mark.activationCount),
+		Rounds:          s.rounds,
+		Mutations:       s.mutations,
+		StopReason:      s.stopReason,
+		StableDeferred:  s.stablePending,
+		TemporalPending: s.hasTemporalPending(),
 	}
 }
 
@@ -458,7 +462,7 @@ type roundExecution struct {
 	ruleChanges     map[string]struct{}
 }
 
-func (s *Session) applyAssert(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep) (bool, string, string, error) {
+func (s *Session) applyAssert(round int, rule Rule, match vm.MatchedRule, trace []govern.ArbitraceStep) (bool, string, string, error) {
 	keyValue, ok := match.Params["key"]
 	if !ok {
 		return false, "", "", fmt.Errorf("expert rule %s assert %s: missing key param", rule.Name, rule.Target)
@@ -491,19 +495,19 @@ func (s *Session) applyAssert(round int, rule Rule, match vm.MatchedRule, trace 
 		detail += " no-op"
 	}
 	s.activations = append(s.activations, Activation{
-		Round:   round,
-		Rule:    rule.Name,
-		Kind:    rule.Kind,
-		Target:  rule.Target,
-		Params:  cloneMap(match.Params),
-		Changed: changed,
-		Detail:  detail,
-		Trace:   append([]govern.TraceStep(nil), trace...),
+		Round:     round,
+		Rule:      rule.Name,
+		Kind:      rule.Kind,
+		Target:    rule.Target,
+		Params:    cloneMap(match.Params),
+		Changed:   changed,
+		Detail:    detail,
+		Arbitrace: append([]govern.ArbitraceStep(nil), trace...),
 	})
 	return changed, detail, instance, nil
 }
 
-func (s *Session) applyEmit(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep) (bool, error) {
+func (s *Session) applyEmit(round int, rule Rule, match vm.MatchedRule, trace []govern.ArbitraceStep) (bool, error) {
 	params, err := s.program.validateOutcomeFields(rule.Target, match.Params)
 	if err != nil {
 		return false, fmt.Errorf("expert rule %s emit %s: %w", rule.Name, rule.Target, err)
@@ -520,19 +524,19 @@ func (s *Session) applyEmit(round int, rule Rule, match vm.MatchedRule, trace []
 		s.outcomes = append(s.outcomes, outcome)
 	}
 	s.activations = append(s.activations, Activation{
-		Round:   round,
-		Rule:    rule.Name,
-		Kind:    rule.Kind,
-		Target:  rule.Target,
-		Params:  cloneMap(match.Params),
-		Changed: !existed,
-		Detail:  fmt.Sprintf("emit %s", rule.Target),
-		Trace:   append([]govern.TraceStep(nil), trace...),
+		Round:     round,
+		Rule:      rule.Name,
+		Kind:      rule.Kind,
+		Target:    rule.Target,
+		Params:    cloneMap(match.Params),
+		Changed:   !existed,
+		Detail:    fmt.Sprintf("emit %s", rule.Target),
+		Arbitrace: append([]govern.ArbitraceStep(nil), trace...),
 	})
 	return !existed, nil
 }
 
-func (s *Session) applyRetract(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep) (bool, string, string, error) {
+func (s *Session) applyRetract(round int, rule Rule, match vm.MatchedRule, trace []govern.ArbitraceStep) (bool, string, string, error) {
 	key, _, err := splitMutationParams(match.Params)
 	if err != nil {
 		return false, "", "", fmt.Errorf("expert rule %s retract %s: %w", rule.Name, rule.Target, err)
@@ -547,19 +551,19 @@ func (s *Session) applyRetract(round int, rule Rule, match vm.MatchedRule, trace
 		detail += " no-op"
 	}
 	s.activations = append(s.activations, Activation{
-		Round:   round,
-		Rule:    rule.Name,
-		Kind:    rule.Kind,
-		Target:  rule.Target,
-		Params:  map[string]any{"key": key},
-		Changed: changed,
-		Detail:  detail,
-		Trace:   append([]govern.TraceStep(nil), trace...),
+		Round:     round,
+		Rule:      rule.Name,
+		Kind:      rule.Kind,
+		Target:    rule.Target,
+		Params:    map[string]any{"key": key},
+		Changed:   changed,
+		Detail:    detail,
+		Arbitrace: append([]govern.ArbitraceStep(nil), trace...),
 	})
 	return changed, detail, instance, nil
 }
 
-func (s *Session) applyModify(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep) (bool, string, string, error) {
+func (s *Session) applyModify(round int, rule Rule, match vm.MatchedRule, trace []govern.ArbitraceStep) (bool, string, string, error) {
 	key, setFields, err := splitMutationParams(match.Params)
 	if err != nil {
 		return false, "", "", fmt.Errorf("expert rule %s modify %s: %w", rule.Name, rule.Target, err)
@@ -582,14 +586,14 @@ func (s *Session) applyModify(round int, rule Rule, match vm.MatchedRule, trace 
 		params["set"] = cloneMap(setFields)
 	}
 	s.activations = append(s.activations, Activation{
-		Round:   round,
-		Rule:    rule.Name,
-		Kind:    rule.Kind,
-		Target:  rule.Target,
-		Params:  params,
-		Changed: changed,
-		Detail:  detail,
-		Trace:   append([]govern.TraceStep(nil), trace...),
+		Round:     round,
+		Rule:      rule.Name,
+		Kind:      rule.Kind,
+		Target:    rule.Target,
+		Params:    params,
+		Changed:   changed,
+		Detail:    detail,
+		Arbitrace: append([]govern.ArbitraceStep(nil), trace...),
 	})
 	return changed, detail, instance, nil
 }
@@ -1145,7 +1149,7 @@ func (s *Session) removeModification(record modifyRecord) {
 	}
 }
 
-func (s *Session) runRound(firstPass bool, dirtyFacts map[string]struct{}, dirtySources map[string]map[string]struct{}) ([]vm.MatchedRule, map[string][]govern.TraceStep, map[string]struct{}, map[string]struct{}, bool, bool, error) {
+func (s *Session) runRound(firstPass bool, dirtyFacts map[string]struct{}, dirtySources map[string]map[string]struct{}) ([]vm.MatchedRule, map[string][]govern.ArbitraceStep, map[string]struct{}, map[string]struct{}, bool, bool, error) {
 	s.refreshContextView(firstPass, dirtyFacts)
 	state := s.newRoundState()
 
@@ -1177,7 +1181,7 @@ func (s *Session) runRound(firstPass bool, dirtyFacts map[string]struct{}, dirty
 		}
 		state.rc.RecordRuleResult(rule.Name, result)
 		if len(ruleTrace) > 0 {
-			state.traces[rule.Name] = append([]govern.TraceStep(nil), ruleTrace...)
+			state.traces[rule.Name] = append([]govern.ArbitraceStep(nil), ruleTrace...)
 		} else {
 			delete(state.traces, rule.Name)
 		}
@@ -1193,7 +1197,7 @@ type roundState struct {
 	current          map[string]bool
 	ruleChanges      map[string]struct{}
 	matched          []vm.MatchedRule
-	traces           map[string][]govern.TraceStep
+	traces           map[string][]govern.ArbitraceStep
 	evaluated        map[string]struct{}
 	stableDeferred   bool
 	forceStableRound bool
@@ -1212,7 +1216,7 @@ func (s *Session) newRoundState() roundState {
 		current:          current,
 		ruleChanges:      make(map[string]struct{}),
 		matched:          make([]vm.MatchedRule, 0),
-		traces:           make(map[string][]govern.TraceStep),
+		traces:           make(map[string][]govern.ArbitraceStep),
 		evaluated:        make(map[string]struct{}),
 		stableDeferred:   s.stablePending && s.lastRoundMutations > 0,
 		forceStableRound: s.stablePending && s.rounds > 1 && s.lastRoundMutations == 0,
@@ -1249,7 +1253,7 @@ func (s *Session) ruleEvalInputs(rule Rule, current map[string]bool, rc *govern.
 	return tempDC, ruleRC, nil
 }
 
-func (s *Session) evaluateRuleMatches(rule Rule, header compiler.RuleHeader, dc vm.DataContext, rc *govern.RequestCache) (bool, bool, []vm.MatchedRule, []govern.TraceStep, error) {
+func (s *Session) evaluateRuleMatches(rule Rule, header compiler.RuleHeader, dc vm.DataContext, rc *govern.RequestCache) (bool, bool, []vm.MatchedRule, []govern.ArbitraceStep, error) {
 	result, pending, mr, ruleTrace, err := s.evalRule(rule, header, s.evaluator, dc, rc)
 	if err != nil || !result {
 		return result, pending, nil, ruleTrace, err
@@ -1315,8 +1319,8 @@ func (s *Session) buildSingleFactContext(factType string, fact Fact) map[string]
 	return ctx
 }
 
-func (s *Session) evalRule(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, dc vm.DataContext, rc *govern.RequestCache) (bool, bool, vm.MatchedRule, []govern.TraceStep, error) {
-	trace := &govern.Trace{}
+func (s *Session) evalRule(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, dc vm.DataContext, rc *govern.RequestCache) (bool, bool, vm.MatchedRule, []govern.ArbitraceStep, error) {
+	trace := &govern.Arbitrace{}
 	if !s.ruleAllowedByGovernance(rule, header, rc, trace) {
 		return false, false, vm.MatchedRule{}, trace.Steps, nil
 	}
@@ -1340,27 +1344,27 @@ func (s *Session) evalRule(rule Rule, header compiler.RuleHeader, evaluator *vm.
 	return true, false, match, trace.Steps, nil
 }
 
-func (s *Session) ruleAllowedByGovernance(rule Rule, header compiler.RuleHeader, rc *govern.RequestCache, trace *govern.Trace) bool {
-	if effectiveRuleKillSwitch(header, rule, s.opts.BundleID, s.opts.Overrides).RecordScoped(trace, govern.TraceScopeExpertRule, rule.Name, "kill_switch") {
+func (s *Session) ruleAllowedByGovernance(rule Rule, header compiler.RuleHeader, rc *govern.RequestCache, trace *govern.Arbitrace) bool {
+	if effectiveRuleKillSwitch(header, rule, s.opts.BundleID, s.opts.Overrides).RecordScoped(trace, govern.ArbitraceScopeExpertRule, rule.Name, "kill_switch") {
 		return false
 	}
-	if !rc.CheckPrerequisitesFor(govern.TraceScopeExpertRule, rule.Name, rule.Prereqs, trace) {
+	if !rc.CheckPrerequisitesFor(govern.ArbitraceScopeExpertRule, rule.Name, rule.Prereqs, trace) {
 		return false
 	}
-	return rc.CheckExclusionsFor(govern.TraceScopeExpertRule, rule.Name, rule.Excludes, trace)
+	return rc.CheckExclusionsFor(govern.ArbitraceScopeExpertRule, rule.Name, rule.Excludes, trace)
 }
 
-func ruleMatchesSegment(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, rc *govern.RequestCache, trace *govern.Trace) bool {
+func ruleMatchesSegment(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, rc *govern.RequestCache, trace *govern.Arbitrace) bool {
 	if !header.HasSegment {
 		return true
 	}
 	segName := evaluator.String(header.SegmentNameIdx)
 	segOK, _ := rc.EvalSegment(segName)
-	trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeExpertRule, rule.Name, govern.TraceKindSegment, segName, "", segOK, fmt.Sprintf("segment %s -> %v", segName, segOK))
+	trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeExpertRule, rule.Name, govern.ArbitraceKindSegment, segName, "", segOK, fmt.Sprintf("segment %s -> %v", segName, segOK))
 	return segOK
 }
 
-func (s *Session) ruleConditionMatches(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, dc vm.DataContext, trace *govern.Trace) (bool, bool, error) {
+func (s *Session) ruleConditionMatches(rule Rule, header compiler.RuleHeader, evaluator *vm.Evaluator, dc vm.DataContext, trace *govern.Arbitrace) (bool, bool, error) {
 	condOK, err := evaluator.EvalRuleCondition(header, dc)
 	if err != nil {
 		return false, false, fmt.Errorf("expert rule %s: %w", rule.Name, err)
@@ -1370,7 +1374,7 @@ func (s *Session) ruleConditionMatches(rule Rule, header compiler.RuleHeader, ev
 	if detail == "" {
 		detail = "expert rule condition"
 	}
-	trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeExpertRule, rule.Name, govern.TraceKindCondition, "", "", condOK, detail)
+	trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeExpertRule, rule.Name, govern.ArbitraceKindCondition, "", "", condOK, detail)
 	return condOK, s.ruleHasTemporalPending(rule), nil
 }
 
@@ -1483,13 +1487,13 @@ func (s *Session) hasTemporalPending() bool {
 	return false
 }
 
-func (s *Session) ruleAllowedByRollout(rule Rule, header compiler.RuleHeader, rc *govern.RequestCache, trace *govern.Trace) bool {
+func (s *Session) ruleAllowedByRollout(rule Rule, header compiler.RuleHeader, rc *govern.RequestCache, trace *govern.Arbitrace) bool {
 	spec := effectiveRuleRollout(header, rule, s.program.ruleset, s.opts.BundleID, s.opts.Overrides)
 	if spec == nil {
 		return true
 	}
 	decision := govern.DecidePercentRollout(*spec, rc.Context())
-	trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeExpertRule, rule.Name, govern.TraceKindRollout, spec.Namespace, spec.CheckLabel(), decision.Allowed, decision.Detail())
+	trace.AppendScoped(govern.ArbitracePhaseGovernance, govern.ArbitraceScopeExpertRule, rule.Name, govern.ArbitraceKindRollout, spec.Namespace, spec.CheckLabel(), decision.Allowed, decision.Detail())
 	return decision.Allowed
 }
 
@@ -1827,12 +1831,14 @@ func (s *Session) sortedFacts() []Fact {
 
 func (s *Session) snapshot() Result {
 	return Result{
-		Outcomes:    cloneOutcomes(s.outcomes, 0),
-		Facts:       s.sortedFacts(),
-		Activations: cloneActivations(s.activations, 0),
-		Rounds:      s.rounds,
-		Mutations:   s.mutations,
-		StopReason:  s.stopReason,
+		Outcomes:        cloneOutcomes(s.outcomes, 0),
+		Facts:           s.sortedFacts(),
+		Activations:     cloneActivations(s.activations, 0),
+		Rounds:          s.rounds,
+		Mutations:       s.mutations,
+		StopReason:      s.stopReason,
+		StableDeferred:  s.stablePending,
+		TemporalPending: s.hasTemporalPending(),
 	}
 }
 
@@ -1864,14 +1870,14 @@ func cloneActivations(src []Activation, start int) []Activation {
 	out := make([]Activation, len(src)-start)
 	for i, activation := range src[start:] {
 		out[i] = Activation{
-			Round:   activation.Round,
-			Rule:    activation.Rule,
-			Kind:    activation.Kind,
-			Target:  activation.Target,
-			Params:  cloneMap(activation.Params),
-			Changed: activation.Changed,
-			Detail:  activation.Detail,
-			Trace:   append([]govern.TraceStep(nil), activation.Trace...),
+			Round:     activation.Round,
+			Rule:      activation.Rule,
+			Kind:      activation.Kind,
+			Target:    activation.Target,
+			Params:    cloneMap(activation.Params),
+			Changed:   activation.Changed,
+			Detail:    activation.Detail,
+			Arbitrace: append([]govern.ArbitraceStep(nil), activation.Arbitrace...),
 		}
 	}
 	return out

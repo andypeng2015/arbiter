@@ -109,10 +109,10 @@ class ArbiterServiceStub(object):
                 request_serializer=arbiter_dot_v1_dot_service__pb2.RetractFactsRequest.SerializeToString,
                 response_deserializer=arbiter_dot_v1_dot_service__pb2.RetractFactsResponse.FromString,
                 _registered_method=True)
-        self.GetSessionTrace = channel.unary_unary(
-                '/arbiter.v1.ArbiterService/GetSessionTrace',
-                request_serializer=arbiter_dot_v1_dot_service__pb2.GetSessionTraceRequest.SerializeToString,
-                response_deserializer=arbiter_dot_v1_dot_service__pb2.GetSessionTraceResponse.FromString,
+        self.GetSessionArbitrace = channel.unary_unary(
+                '/arbiter.v1.ArbiterService/GetSessionArbitrace',
+                request_serializer=arbiter_dot_v1_dot_service__pb2.GetSessionArbitraceRequest.SerializeToString,
+                response_deserializer=arbiter_dot_v1_dot_service__pb2.GetSessionArbitraceResponse.FromString,
                 _registered_method=True)
         self.CloseSession = channel.unary_unary(
                 '/arbiter.v1.ArbiterService/CloseSession',
@@ -234,7 +234,7 @@ class ArbiterServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetSessionTrace(self, request, context):
+    def GetSessionArbitrace(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -348,10 +348,10 @@ def add_ArbiterServiceServicer_to_server(servicer, server):
                     request_deserializer=arbiter_dot_v1_dot_service__pb2.RetractFactsRequest.FromString,
                     response_serializer=arbiter_dot_v1_dot_service__pb2.RetractFactsResponse.SerializeToString,
             ),
-            'GetSessionTrace': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetSessionTrace,
-                    request_deserializer=arbiter_dot_v1_dot_service__pb2.GetSessionTraceRequest.FromString,
-                    response_serializer=arbiter_dot_v1_dot_service__pb2.GetSessionTraceResponse.SerializeToString,
+            'GetSessionArbitrace': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSessionArbitrace,
+                    request_deserializer=arbiter_dot_v1_dot_service__pb2.GetSessionArbitraceRequest.FromString,
+                    response_serializer=arbiter_dot_v1_dot_service__pb2.GetSessionArbitraceResponse.SerializeToString,
             ),
             'CloseSession': grpc.unary_unary_rpc_method_handler(
                     servicer.CloseSession,
@@ -795,7 +795,7 @@ class ArbiterService(object):
             _registered_method=True)
 
     @staticmethod
-    def GetSessionTrace(request,
+    def GetSessionArbitrace(request,
             target,
             options=(),
             channel_credentials=None,
@@ -808,9 +808,9 @@ class ArbiterService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/arbiter.v1.ArbiterService/GetSessionTrace',
-            arbiter_dot_v1_dot_service__pb2.GetSessionTraceRequest.SerializeToString,
-            arbiter_dot_v1_dot_service__pb2.GetSessionTraceResponse.FromString,
+            '/arbiter.v1.ArbiterService/GetSessionArbitrace',
+            arbiter_dot_v1_dot_service__pb2.GetSessionArbitraceRequest.SerializeToString,
+            arbiter_dot_v1_dot_service__pb2.GetSessionArbitraceResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -19,9 +19,9 @@ type Request struct {
 
 // Decision is the result of one authorization evaluation.
 type Decision struct {
-	Allowed bool
-	Matched []vm.MatchedRule
-	Trace   []govern.TraceStep
+	Allowed   bool
+	Matched   []vm.MatchedRule
+	Arbitrace []govern.ArbitraceStep
 }
 
 // BuildContext constructs the canonical authz evaluation context.
@@ -50,9 +50,9 @@ func Evaluate(compiled *arbiter.CompileResult, req Request) (Decision, error) {
 		return Decision{}, err
 	}
 	return Decision{
-		Allowed: hasAllowMatch(matched),
-		Matched: matched,
-		Trace:   trace.Steps,
+		Allowed:   hasAllowMatch(matched),
+		Matched:   matched,
+		Arbitrace: trace.Steps,
 	}, nil
 }
 

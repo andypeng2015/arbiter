@@ -539,8 +539,8 @@ class ArbiterClient {
     return unary(this.client, "RetractFacts", { sessionId, facts }, this._createMetadata, this._retry, metadata);
   }
 
-  getSessionTrace({ sessionId }, metadata = undefined) {
-    return unary(this.client, "GetSessionTrace", { sessionId }, this._createMetadata, this._retry, metadata);
+  getSessionArbitrace({ sessionId }, metadata = undefined) {
+    return unary(this.client, "GetSessionArbitrace", { sessionId }, this._createMetadata, this._retry, metadata);
   }
 
   closeSession({ sessionId }, metadata = undefined) {

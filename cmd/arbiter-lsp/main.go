@@ -382,7 +382,7 @@ func keywordCompletions() []map[string]any {
 		"rule", "expert", "strategy", "flag", "segment", "const",
 		"fact", "outcome", "feature", "worker", "arbiter", "include",
 		"when", "then", "otherwise", "assert", "emit", "retract", "modify",
-		"requires", "excludes", "kill_switch", "rollout", "priority",
+		"requires", "excludes", "kill_switch", "active_from", "active_until", "rollout", "priority",
 		"any", "all", "none", "in", "and", "or", "not", "on", "off",
 		"true", "false", "null",
 	}

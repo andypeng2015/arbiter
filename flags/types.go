@@ -62,17 +62,21 @@ type VariantDef struct {
 
 // FlagRule is one targeting rule within a flag.
 type FlagRule struct {
-	SegmentName      string                  // reference to a named segment, or ""
-	InlineExpr       string                  // inline condition source (if no segment name)
-	CompiledInline   *govern.CompiledSegment // precompiled inline condition (nil if segment ref)
-	Variant          string                  // variant name to serve if matched
-	HasRollout       bool
-	RolloutBps       uint16 // 0..10000 basis points
-	RolloutSubject   string
-	RolloutNamespace string
-	Split            []SplitBand
-	SplitSubject     string
-	SplitNamespace   string
+	SegmentName         string                  // reference to a named segment, or ""
+	InlineExpr          string                  // inline condition source (if no segment name)
+	CompiledInline      *govern.CompiledSegment // precompiled inline condition (nil if segment ref)
+	HasActiveFrom       bool
+	ActiveFromUnixNano  int64
+	HasActiveUntil      bool
+	ActiveUntilUnixNano int64
+	Variant             string // variant name to serve if matched
+	HasRollout          bool
+	RolloutBps          uint16 // 0..10000 basis points
+	RolloutSubject      string
+	RolloutNamespace    string
+	Split               []SplitBand
+	SplitSubject        string
+	SplitNamespace      string
 }
 
 // SplitBand is one weighted variant assignment band.
@@ -175,16 +179,16 @@ func (v ServedVariant) Decode(dst any) error {
 	return json.Unmarshal(b, dst)
 }
 
-// FlagEvaluation is the rich result of evaluating a flag with full trace.
+// FlagEvaluation is the rich result of evaluating a flag with full arbitrace.
 type FlagEvaluation struct {
-	Flag      string        `json:"flag"`
-	Variant   ServedVariant `json:"variant"`
-	IsDefault bool          `json:"is_default"`
-	Reason    string        `json:"reason"`
-	Trace     []TraceStep   `json:"trace"`
-	Metadata  FlagMetadata  `json:"metadata"`
-	Elapsed   time.Duration `json:"elapsed"`
+	Flag      string          `json:"flag"`
+	Variant   ServedVariant   `json:"variant"`
+	IsDefault bool            `json:"is_default"`
+	Reason    string          `json:"reason"`
+	Arbitrace []ArbitraceStep `json:"arbitrace"`
+	Metadata  FlagMetadata    `json:"metadata"`
+	Elapsed   time.Duration   `json:"elapsed"`
 }
 
-// TraceStep records one check in the evaluation.
-type TraceStep = govern.TraceStep
+// ArbitraceStep records one check in Arbiter-native terminology.
+type ArbitraceStep = govern.ArbitraceStep

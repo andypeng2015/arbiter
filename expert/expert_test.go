@@ -431,10 +431,10 @@ expert rule DisabledSeed {
 	if result.Facts[0].Key != "allowed" {
 		t.Fatalf("unexpected fact: %+v", result.Facts[0])
 	}
-	if len(result.Activations) != 1 || len(result.Activations[0].Trace) < 2 {
+	if len(result.Activations) != 1 || len(result.Activations[0].Arbitrace) < 2 {
 		t.Fatalf("expected activation trace on expert result, got %+v", result.Activations)
 	}
-	if step := result.Activations[0].Trace[0]; step.Scope != govern.TraceScopeExpertRule || step.Subject != "DisabledSeed" || step.Kind != govern.TraceKindKillSwitch {
+	if step := result.Activations[0].Arbitrace[0]; step.Scope != govern.ArbitraceScopeExpertRule || step.Subject != "DisabledSeed" || step.Kind != govern.ArbitraceKindKillSwitch {
 		t.Fatalf("unexpected expert kill_switch trace semantics: %#v", step)
 	}
 }
@@ -888,6 +888,47 @@ expert rule DeriveSecondaryFlag {
 	}
 	if len(result.Facts) != 1 || result.Facts[0].Type != "RiskFlag" {
 		t.Fatalf("unexpected facts at mutation cutoff: %+v", result.Facts)
+	}
+}
+
+func TestSessionSurfacesStableDeferredState(t *testing.T) {
+	src := []byte(`
+expert rule SeedMarker {
+	when { true }
+	then assert Marker {
+		key: "marker"
+		active: true
+	}
+}
+
+expert rule SettledDecision {
+	stable
+	when {
+		any marker in facts.Marker { marker.active == true }
+	}
+	then emit Ready {
+		state: "settled",
+	}
+}
+`)
+
+	program, err := expert.Compile(src)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	result, err := expert.NewSession(program, nil, nil, expert.Options{MaxRounds: 1}).Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.StopReason != expert.StopMaxRounds {
+		t.Fatalf("expected max_rounds stop, got %+v", result)
+	}
+	if !result.StableDeferred {
+		t.Fatalf("expected stable deferral to be surfaced, got %+v", result)
+	}
+	if result.TemporalPending {
+		t.Fatalf("did not expect temporal pending alongside stable deferral, got %+v", result)
 	}
 }
 
@@ -1460,6 +1501,41 @@ expert rule ConfirmedTrend {
 	}
 	if len(result.Outcomes) != 1 || result.Outcomes[0].Name != "DryAlert" {
 		t.Fatalf("expected DryAlert after 3 stable cycles, got %+v", result.Outcomes)
+	}
+}
+
+func TestSessionSurfacesTemporalPendingState(t *testing.T) {
+	src := []byte(`
+expert rule ConfirmedTrend {
+	when { input.dry == true } stable_for 3 cycles
+	then emit DryAlert {
+		level: "confirmed",
+	}
+}
+`)
+
+	program, err := expert.Compile(src)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+
+	result, err := expert.NewSession(program, map[string]any{
+		"input": map[string]any{"dry": true},
+	}, nil, expert.Options{MaxRounds: 1}).Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.StopReason != expert.StopMaxRounds {
+		t.Fatalf("expected max_rounds stop, got %+v", result)
+	}
+	if !result.TemporalPending {
+		t.Fatalf("expected temporal pending to be surfaced, got %+v", result)
+	}
+	if result.StableDeferred {
+		t.Fatalf("did not expect stable deferral for pure temporal gating, got %+v", result)
+	}
+	if len(result.Outcomes) != 0 {
+		t.Fatalf("expected no outcome before temporal condition matures, got %+v", result.Outcomes)
 	}
 }
 

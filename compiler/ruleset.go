@@ -39,6 +39,10 @@ type RuleHeader struct {
 	ActionIdx           uint16 // index into Actions table
 	FallbackIdx         uint16 // 0 = none
 	KillSwitch          ir.KillSwitchState
+	HasActiveFrom       bool
+	ActiveFromUnixNano  int64
+	HasActiveUntil      bool
+	ActiveUntilUnixNano int64
 	HasRollout          bool
 	RolloutBps          uint16
 	RolloutSubjectIdx   uint16

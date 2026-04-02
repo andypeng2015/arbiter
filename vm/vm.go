@@ -133,9 +133,13 @@ func EvalWithTagFilter(rs *compiler.CompiledRuleset, dc DataContext, sp *StringP
 
 	vm := newVM(rs, sp)
 	var matched []MatchedRule
+	evalTime := resolveEvalTime(dc)
 
 	for _, rule := range rs.Rules {
 		if !rs.RuleMatchesTags(rule, tags) {
+			continue
+		}
+		if !ruleWithinActiveWindow(rule, evalTime) {
 			continue
 		}
 		vm.sp = 0 // reset stack per rule
@@ -206,9 +210,16 @@ func EvalDebugWithTagFilter(rs *compiler.CompiledRuleset, dc DataContext, sp *St
 	start := time.Now()
 	vm := newVM(rs, sp)
 	var result DebugResult
+	evalTime := resolveEvalTime(dc)
 
 	for _, rule := range rs.Rules {
 		if !rs.RuleMatchesTags(rule, tags) {
+			continue
+		}
+		if !ruleWithinActiveWindow(rule, evalTime) {
+			result.Failed = append(result.Failed, FailedRule{
+				Name: vm.strPool.Get(rule.NameIdx),
+			})
 			continue
 		}
 		vm.sp = 0
@@ -252,6 +263,50 @@ func EvalDebugWithTagFilter(rs *compiler.CompiledRuleset, dc DataContext, sp *St
 
 	result.Elapsed = time.Since(start)
 	return result
+}
+
+func ruleWithinActiveWindow(rule compiler.RuleHeader, evalTime time.Time) bool {
+	nowUnixNano := evalTime.UTC().UnixNano()
+	if rule.HasActiveFrom && nowUnixNano < rule.ActiveFromUnixNano {
+		return false
+	}
+	if rule.HasActiveUntil && nowUnixNano >= rule.ActiveUntilUnixNano {
+		return false
+	}
+	return true
+}
+
+func resolveEvalTime(dc DataContext) time.Time {
+	if dc != nil {
+		if now, ok := valueAsEvalTime(dc.Get("__now")); ok {
+			return now
+		}
+	}
+	return time.Now().UTC()
+}
+
+func valueAsEvalTime(v Value) (time.Time, bool) {
+	switch v.Typ {
+	case TypeNumber:
+		if math.IsNaN(v.Num) || math.IsInf(v.Num, 0) {
+			return time.Time{}, false
+		}
+		seconds, frac := math.Modf(v.Num)
+		return time.Unix(int64(seconds), int64(frac*float64(time.Second))).UTC(), true
+	case TypeString:
+		text, _ := v.Any.(string)
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return time.Time{}, false
+		}
+		if ts, err := time.Parse(time.RFC3339Nano, text); err == nil {
+			return ts.UTC(), true
+		}
+		if n, err := strconv.ParseFloat(text, 64); err == nil {
+			return valueAsEvalTime(NumVal(n))
+		}
+	}
+	return time.Time{}, false
 }
 
 func (vm *VM) evalCondition(instrs []byte, off, length uint32, dc DataContext) bool {

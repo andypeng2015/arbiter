@@ -430,7 +430,7 @@ func TestLD_Explain(t *testing.T) {
 	client := connect(t)
 	bundle := publishLD(t, client)
 
-	t.Run("trace shows prerequisite check", func(t *testing.T) {
+	t.Run("arbitrace shows prerequisite check", func(t *testing.T) {
 		s, _ := structpb.NewStruct(map[string]any{
 			"user": map[string]any{"email": "free@gmail.com", "plan": "free", "cohort": "stable", "country": "US", "lifetime_spend": float64(0)},
 		})
@@ -443,14 +443,14 @@ func TestLD_Explain(t *testing.T) {
 			t.Fatalf("resolve: %v", err)
 		}
 
-		// Should have trace steps showing prerequisite failure
-		if len(resp.Trace) == 0 {
-			t.Fatal("expected trace steps")
+		// Should have arbitrace steps showing prerequisite failure
+		if len(resp.Arbitrace) == 0 {
+			t.Fatal("expected arbitrace steps")
 		}
 
 		foundPrereq := false
-		for _, step := range resp.Trace {
-			t.Logf("trace: %s = %v (%s)", step.Check, step.Result, step.Detail)
+		for _, step := range resp.Arbitrace {
+			t.Logf("arbitrace: %s = %v (%s)", step.Check, step.Result, step.Detail)
 			if step.Check == "requires payments_enabled" {
 				foundPrereq = true
 				if step.Result {
@@ -459,11 +459,11 @@ func TestLD_Explain(t *testing.T) {
 			}
 		}
 		if !foundPrereq {
-			t.Error("expected prerequisite trace step")
+			t.Error("expected prerequisite arbitrace step")
 		}
 	})
 
-	t.Run("trace shows segment match", func(t *testing.T) {
+	t.Run("arbitrace shows segment match", func(t *testing.T) {
 		s, _ := structpb.NewStruct(map[string]any{
 			"user": map[string]any{"email": "dev@m31labs.dev", "plan": "enterprise", "cohort": "stable", "country": "US", "lifetime_spend": float64(0)},
 		})
@@ -479,8 +479,8 @@ func TestLD_Explain(t *testing.T) {
 		requireVariant(t, resp, "multi_step_upsell")
 
 		foundSegment := false
-		for _, step := range resp.Trace {
-			t.Logf("trace: %s = %v (%s)", step.Check, step.Result, step.Detail)
+		for _, step := range resp.Arbitrace {
+			t.Logf("arbitrace: %s = %v (%s)", step.Check, step.Result, step.Detail)
 			if step.Check == "segment internal_users" {
 				foundSegment = true
 				if !step.Result {
@@ -489,7 +489,7 @@ func TestLD_Explain(t *testing.T) {
 			}
 		}
 		if !foundSegment {
-			t.Error("expected segment trace step")
+			t.Error("expected segment arbitrace step")
 		}
 	})
 }

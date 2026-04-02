@@ -674,7 +674,7 @@ expert rule Ready {
 		for i := 0; i < 100; i++ {
 			mark := session.Checkpoint()
 			_ = session.DeltaSince(mark)
-			_ = session.Trace()
+			_ = session.Arbitrace()
 			_ = session.Facts()
 			_ = session.Snapshot()
 		}

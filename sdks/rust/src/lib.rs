@@ -29,7 +29,7 @@ use arbiter::v1::{
     GetCapabilitiesRequest, GetCapabilitiesResponse, GetControlStatusRequest,
     GetControlStatusResponse, GetOverridesRequest, GetOverridesResponse,
     GetRuntimeCapabilitiesRequest, GetRuntimeCapabilitiesResponse, GetRuntimeStatusRequest,
-    GetRuntimeStatusResponse, GetSessionTraceRequest, GetSessionTraceResponse,
+    GetRuntimeStatusResponse, GetSessionArbitraceRequest, GetSessionArbitraceResponse,
     GetStatusIssueCatalogRequest, GetStatusIssueCatalogResponse, ListBundlesRequest,
     ListBundlesResponse, LoadSourceRequest, LoadSourceResponse, OperatorIdentity, OverrideEvent,
     PublishBundleRequest, PublishBundleResponse,
@@ -1000,15 +1000,15 @@ impl ArbiterClient {
         .await
     }
 
-    pub async fn get_session_trace(
+    pub async fn get_session_arbitrace(
         &self,
         session_id: impl Into<String>,
-    ) -> Result<GetSessionTraceResponse, tonic::Status> {
+    ) -> Result<GetSessionArbitraceResponse, tonic::Status> {
         self.unary_with_retry(
-            GetSessionTraceRequest {
+            GetSessionArbitraceRequest {
                 session_id: session_id.into(),
             },
-            |mut client, request| async move { client.get_session_trace(request).await },
+            |mut client, request| async move { client.get_session_arbitrace(request).await },
         )
         .await
     }

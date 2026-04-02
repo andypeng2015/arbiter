@@ -56,12 +56,14 @@ type ConstantSummary struct {
 }
 
 type RuleSummary struct {
-	Name       string             `json:"name"`
-	Tags       []string           `json:"tags,omitempty"`
-	Priority   int                `json:"priority"`
-	Segment    string             `json:"segment,omitempty"`
-	KillSwitch ir.KillSwitchState `json:"kill_switch,omitempty"`
-	Action     string             `json:"action"`
+	Name        string             `json:"name"`
+	Tags        []string           `json:"tags,omitempty"`
+	Priority    int                `json:"priority"`
+	Segment     string             `json:"segment,omitempty"`
+	KillSwitch  ir.KillSwitchState `json:"kill_switch,omitempty"`
+	ActiveFrom  string             `json:"active_from,omitempty"`
+	ActiveUntil string             `json:"active_until,omitempty"`
+	Action      string             `json:"action"`
 }
 
 type ExpertRuleSummary struct {
@@ -89,12 +91,14 @@ type StrategySummary struct {
 }
 
 type StrategyCandidateSummary struct {
-	Label      string             `json:"label"`
-	Condition  string             `json:"condition,omitempty"`
-	Segment    string             `json:"segment,omitempty"`
-	KillSwitch ir.KillSwitchState `json:"kill_switch,omitempty"`
-	Rollout    string             `json:"rollout,omitempty"`
-	Else       bool               `json:"else,omitempty"`
+	Label       string             `json:"label"`
+	Condition   string             `json:"condition,omitempty"`
+	Segment     string             `json:"segment,omitempty"`
+	KillSwitch  ir.KillSwitchState `json:"kill_switch,omitempty"`
+	ActiveFrom  string             `json:"active_from,omitempty"`
+	ActiveUntil string             `json:"active_until,omitempty"`
+	Rollout     string             `json:"rollout,omitempty"`
+	Else        bool               `json:"else,omitempty"`
 }
 
 type WorkerSummary struct {
@@ -197,12 +201,14 @@ func BuildSummary(program *ir.Program) *Summary {
 	}
 	for _, rule := range program.Rules {
 		summary.Rules = append(summary.Rules, RuleSummary{
-			Name:       rule.Name,
-			Tags:       append([]string(nil), rule.Tags...),
-			Priority:   int(rule.Priority),
-			Segment:    rule.Segment,
-			KillSwitch: rule.KillSwitch,
-			Action:     rule.Action.Name,
+			Name:        rule.Name,
+			Tags:        append([]string(nil), rule.Tags...),
+			Priority:    int(rule.Priority),
+			Segment:     rule.Segment,
+			KillSwitch:  rule.KillSwitch,
+			ActiveFrom:  activeFrom(rule.ActiveWindow),
+			ActiveUntil: activeUntil(rule.ActiveWindow),
+			Action:      rule.Action.Name,
 		})
 	}
 	for _, rule := range program.Expert {
@@ -342,10 +348,12 @@ func summarizeStrategy(program *ir.Program, strategy ir.Strategy) StrategySummar
 	}
 	for _, candidate := range strategy.Candidates {
 		item := StrategyCandidateSummary{
-			Label:      candidate.Label,
-			Segment:    candidate.Segment,
-			KillSwitch: candidate.KillSwitch,
-			Else:       candidate.IsElse,
+			Label:       candidate.Label,
+			Segment:     candidate.Segment,
+			KillSwitch:  candidate.KillSwitch,
+			ActiveFrom:  activeFrom(candidate.ActiveWindow),
+			ActiveUntil: activeUntil(candidate.ActiveWindow),
+			Else:        candidate.IsElse,
 		}
 		if candidate.HasCondition {
 			item.Condition = ir.RenderExpr(program, candidate.Condition)
@@ -435,6 +443,20 @@ func formatRollout(rollout *ir.Rollout) string {
 		out += fmt.Sprintf(" namespace %q", rollout.Namespace)
 	}
 	return out
+}
+
+func activeFrom(window ir.ActiveWindow) string {
+	if !window.HasFrom {
+		return ""
+	}
+	return window.From
+}
+
+func activeUntil(window ir.ActiveWindow) string {
+	if !window.HasUntil {
+		return ""
+	}
+	return window.Until
 }
 
 func collectUsedUnits(program *ir.Program) []DimensionUnits {

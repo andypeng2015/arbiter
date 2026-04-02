@@ -33,7 +33,7 @@
 
 ### SDKs
 
-- **SDK surface parity** — the shipped Node, Python, and Rust clients now track the current gRPC control-plane surface instead of lagging behind it. Strategy evaluation, strategy-candidate override mutation, structured `TraceStep` fields, and explicit `kill_switch_state` now flow through the vendored SDK contracts as well.
+- **SDK surface parity** — the shipped Node, Python, and Rust clients now track the current gRPC control-plane surface instead of lagging behind it. Strategy evaluation, strategy-candidate override mutation, structured `ArbitraceStep` fields, and explicit `kill_switch_state` now flow through the vendored SDK contracts as well.
 - **Runtime and agent status clients** — the shipped Node, Python, and Rust wrappers now expose runtime-status and agent-status RPCs alongside runtime-capability introspection, so embedders do not need to scrape HTTP `/status`.
 - **Hosted control-status clients** — the shipped Node, Python, and Rust wrappers now also expose `ControlService.GetControlStatus`, so hosted control-plane introspection is not Go-only.
 - **Status-issue catalog clients** — the shipped Node, Python, and Rust wrappers now also expose `GetStatusIssueCatalog`, so automation can inspect the issue vocabulary itself instead of hardcoding string lists.
@@ -53,7 +53,7 @@
 - **Explicit kill-switch state** — `kill_switch on` and `kill_switch off` are preserved through compile, bundle, runtime, hover, explain, and explore surfaces. Kill-switch state is no longer collapsed to a single bool.
 - **Typed declaration family** — `input`, `feature`, `fact`, `outcome`, and `table` are now documented and surfaced as one typed-data family in inspection output.
 - **Authoring doctrine** — the README now recommends a canonical `.arb` file shape, modality choice doctrine, and module split strategy for readable bundles.
-- **Structured observability vocabulary** — governed traces now carry shared `phase`, `scope`, `subject`, `kind`, `check`, `result`, and `detail` semantics across rules, flags, and strategies; the same structured `TraceStep` shape now flows through gRPC responses; and expert activations include their own per-firing trace in both API and audit surfaces.
+- **Structured observability vocabulary** — governed arbitraces now carry shared `phase`, `scope`, `subject`, `kind`, `check`, `result`, and `detail` semantics across rules, flags, and strategies; the same structured `ArbitraceStep` shape now flows through gRPC responses; and expert activations include their own per-firing arbitrace in both API and audit surfaces.
 - **Explicit override kill-switch state** — override snapshots, watch events, and audit override mutations now expose canonical `kill_switch_state` (`on`, `off`, or unset) instead of forcing operators to reconstruct intent from paired bool fields.
 
 ### VM / Runtime
@@ -178,7 +178,7 @@
 
 ### Language Specification (Frozen Contract)
 
-- **SPEC.md** — formal language reference with two-tier freeze. Frozen: rule/strategy/flag/expert evaluation semantics, schema/type behavior, decimal/unit rules, governance algorithm, trace shape guarantees, `.test.arb` assertions, bytecode format, conformance matrix. Provisional: runtime surface beyond poll, worker transport breadth, LSP completeness, SDK ergonomics, packaging/module story.
+- **SPEC.md** — formal language reference with two-tier freeze. Frozen: rule/strategy/flag/expert evaluation semantics, schema/type behavior, decimal/unit rules, governance algorithm, arbitrace shape guarantees, `.test.arb` assertions, bytecode format, conformance matrix. Provisional: runtime surface beyond poll, worker transport breadth, LSP completeness, SDK ergonomics, packaging/module story.
 
 ### Formatter
 
@@ -245,7 +245,7 @@
 
 ### Corrections
 
-- gRPC expert sessions (StartSession, RunSession, AssertFacts, RetractFacts, GetSessionTrace, CloseSession) were already fully implemented in `grpcserver/expert.go`. All 22 proto methods are live. Previous evaluation incorrectly reported them as missing.
+- gRPC expert sessions (StartSession, RunSession, AssertFacts, RetractFacts, GetSessionArbitrace, CloseSession) were already fully implemented in `grpcserver/expert.go`. All 22 proto methods are live. Previous evaluation incorrectly reported them as missing.
 
 ---
 
@@ -344,7 +344,7 @@
 ### Strategy
 
 - **Native `strategy` primitive** — Arbiter now supports `strategy` declarations for deterministic, stateless governed routing over recognized decision shapes in current facts and state.
-- **Recognition plus selection semantics** — strategies recognize one of a closed set of declared state shapes, require an explicit fallback, and select exactly one governed path with typed results and explainable traces.
+- **Recognition plus selection semantics** — strategies recognize one of a closed set of declared state shapes, require an explicit fallback, and select exactly one governed path with typed results and explainable arbitraces.
 - **Shared runtime, not a parallel VM** — strategy candidates compile into synthetic governed rulesets so the primitive reuses the existing compiler, governance machinery, and evaluation runtime instead of introducing a separate execution model.
 
 ### Language And Tooling
@@ -352,7 +352,7 @@
 - **End-to-end language support** — grammar, lowering, validation, syntax highlighting, and package APIs now understand strategies as a first-class language feature.
 - **Shared compile/eval surface** — strategy compilation is now integrated into the common compile path, with root helpers for loading and evaluating compiled strategies alongside the rest of the bundle.
 - **CLI and introspection support** — `arbiter strategy` evaluates a named strategy directly, and `arbiter explore` summaries now include strategy declarations and candidate structure.
-- **Semantics hardening** — validation and tests now lock in required `else` behavior, duplicate-label rejection, kill-switch handling, malformed `else` defense-in-depth checks, and stable trace structure.
+- **Semantics hardening** — validation and tests now lock in required `else` behavior, duplicate-label rejection, kill-switch handling, malformed `else` defense-in-depth checks, and stable arbitrace structure.
 
 ### Product Direction
 
@@ -529,7 +529,7 @@
 ### Examples
 
 - **Greenhouse plant management** — 17 expert rules demonstrating sensor-driven inference with soil moisture, nutrition, humidity, temperature, CO2 monitoring, two-phase gating for all-clear detection, and `excludes` for conditional action suppression.
-- **LaunchDarkly-equivalent flag suite** — 7 flags across 9 segments covering boolean flags, multivariate flags, progressive rollouts, prerequisites, kill switches, variant payloads, segment+inline combos, runtime overrides, explain traces, and edge cases. 30 test scenarios.
+- **LaunchDarkly-equivalent flag suite** — 7 flags across 9 segments covering boolean flags, multivariate flags, progressive rollouts, prerequisites, kill switches, variant payloads, segment+inline combos, runtime overrides, explain arbitraces, and edge cases. 30 test scenarios.
 - **CI governance gateway** — webhook handler that evaluates `.arb` rules against GitHub Actions billing data to govern workflow runs by budget, branch, time, and rate limits.
 - **Fraud detection** — 8 stateless rules with segments for high-risk geo, trusted accounts, new accounts, velocity checks, and currency mismatch detection.
 
@@ -584,7 +584,7 @@ Initial release.
 
 - Segments compiled to bytecode, evaluated once per request via `RequestCache` memoization.
 - Deterministic rollout bucketing: `SHA256(userID)[:4] % 100`.
-- Kill switches, prerequisites with cycle detection, explainability traces.
+- Kill switches, prerequisites with cycle detection, explainability arbitraces.
 - Runtime overrides for kill switches and rollout percentages without recompiling.
 
 ### Flags
@@ -598,10 +598,10 @@ Initial release.
 
 ### Serving
 
-- gRPC API: `PublishBundle`, `ListBundles`, `ActivateBundle`, `RollbackBundle`, `EvaluateRules`, `ResolveFlag`, `StartSession`, `RunSession`, `AssertFacts`, `RetractFacts`, `GetSessionTrace`, `CloseSession`, `SetRuleOverride`, `SetFlagOverride`, `SetFlagRuleOverride`.
+- gRPC API: `PublishBundle`, `ListBundles`, `ActivateBundle`, `RollbackBundle`, `EvaluateRules`, `ResolveFlag`, `StartSession`, `RunSession`, `AssertFacts`, `RetractFacts`, `GetSessionArbitrace`, `CloseSession`, `SetRuleOverride`, `SetFlagOverride`, `SetFlagRuleOverride`.
 - Bundle versioning with per-name history, activation, and rollback. SHA256 checksums. File-backed persistence.
 - Session store with 30-minute TTL, LRU eviction at 10K sessions, per-session mutexes.
-- Audit sink interface with JSONL default. Every decision logged with full context, trace, and timestamps.
+- Audit sink interface with JSONL default. Every decision logged with full context, arbitrace, and timestamps.
 
 ### Transpilation
 

@@ -421,6 +421,11 @@ func (l *lowerer) lowerRule(n *gotreesitter.Node) (Rule, error) {
 		rule.Name = l.text(nameNode)
 	}
 	rule.KillSwitch = l.lowerKillSwitch(n.ChildByFieldName("kill_switch", l.lang))
+	window, err := l.lowerActiveWindow(n)
+	if err != nil {
+		return Rule{}, fmt.Errorf("rule %s: %w", rule.Name, err)
+	}
+	rule.ActiveWindow = window
 
 	for i := 0; i < int(n.NamedChildCount()); i++ {
 		child := n.NamedChild(i)
@@ -542,6 +547,11 @@ func (l *lowerer) lowerStrategyWhenCandidate(n *gotreesitter.Node) (StrategyCand
 		Span:       spanForNode(n),
 		KillSwitch: l.lowerKillSwitch(n.ChildByFieldName("kill_switch", l.lang)),
 	}
+	window, err := l.lowerActiveWindow(n)
+	if err != nil {
+		return StrategyCandidate{}, err
+	}
+	candidate.ActiveWindow = window
 	if labelNode := n.ChildByFieldName("action_name", l.lang); labelNode != nil {
 		candidate.Label = l.text(labelNode)
 	}
@@ -666,6 +676,11 @@ func (l *lowerer) lowerFlagRule(n *gotreesitter.Node) (FlagRule, error) {
 		Span:   spanForNode(n),
 		IsElse: hasLeadingLiteral(n, l.source, "else"),
 	}
+	window, err := l.lowerActiveWindow(n)
+	if err != nil {
+		return FlagRule{}, err
+	}
+	rule.ActiveWindow = window
 
 	conditionNode := n.ChildByFieldName("condition", l.lang)
 	if segmentNode := n.ChildByFieldName("segment", l.lang); segmentNode != nil {
@@ -722,6 +737,41 @@ func (l *lowerer) lowerFlagSplit(n *gotreesitter.Node) *FlagSplit {
 		})
 	}
 	return split
+}
+
+func (l *lowerer) lowerActiveWindow(n *gotreesitter.Node) (ActiveWindow, error) {
+	window := ActiveWindow{}
+	if n == nil {
+		return window, nil
+	}
+	for i := 0; i < int(n.NamedChildCount()); i++ {
+		child := n.NamedChild(i)
+		switch child.Type(l.lang) {
+		case "active_from_clause":
+			if window.HasFrom {
+				return ActiveWindow{}, fmt.Errorf("duplicate active_from")
+			}
+			valueNode := child.ChildByFieldName("value", l.lang)
+			if valueNode == nil {
+				continue
+			}
+			window.From = l.text(valueNode)
+			window.HasFrom = true
+			window.FromSpan = spanForNode(valueNode)
+		case "active_until_clause":
+			if window.HasUntil {
+				return ActiveWindow{}, fmt.Errorf("duplicate active_until")
+			}
+			valueNode := child.ChildByFieldName("value", l.lang)
+			if valueNode == nil {
+				continue
+			}
+			window.Until = l.text(valueNode)
+			window.HasUntil = true
+			window.UntilSpan = spanForNode(valueNode)
+		}
+	}
+	return window, nil
 }
 
 func (l *lowerer) lowerVariant(n *gotreesitter.Node) Variant {

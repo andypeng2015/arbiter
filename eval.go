@@ -145,18 +145,18 @@ func EvalDebug(prog *Program, dc vm.DataContext, opts ...EvalOption) vm.DebugRes
 }
 
 // EvalGoverned evaluates a compiled program with rule governance enabled.
-func EvalGoverned(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any, opts ...EvalOption) ([]vm.MatchedRule, *govern.Trace, error) {
+func EvalGoverned(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any, opts ...EvalOption) ([]vm.MatchedRule, *govern.Arbitrace, error) {
 	return EvalGovernedWithOverrides(prog, dc, segments, ctx, "", nil, opts...)
 }
 
 // EvalGovernedWithOverrides evaluates a program while applying runtime overrides.
-func EvalGovernedWithOverrides(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View, opts ...EvalOption) ([]vm.MatchedRule, *govern.Trace, error) {
+func EvalGovernedWithOverrides(prog *Program, dc vm.DataContext, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View, opts ...EvalOption) ([]vm.MatchedRule, *govern.Arbitrace, error) {
 	if prog == nil {
-		return nil, &govern.Trace{}, fmt.Errorf("nil program")
+		return nil, &govern.Arbitrace{}, fmt.Errorf("nil program")
 	}
 	rs := prog.Ruleset
 	if rs == nil {
-		return nil, &govern.Trace{}, fmt.Errorf("nil ruleset")
+		return nil, &govern.Arbitrace{}, fmt.Errorf("nil ruleset")
 	}
 	evalOpts := applyEvalOptions(opts)
 	conditionSources := ruleConditionSources(prog)
@@ -237,12 +237,12 @@ func compileSegmentRuleset(program *ir.Program, segment *ir.Segment) (*compiler.
 	return compiler.CompileIR(synthetic)
 }
 
-func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *vm.StringPool, conditionSources map[string]string, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View, tags []string) ([]vm.MatchedRule, *govern.Trace, error) {
+func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *vm.StringPool, conditionSources map[string]string, segments *govern.SegmentSet, ctx map[string]any, bundleID string, view overrides.View, tags []string) ([]vm.MatchedRule, *govern.Arbitrace, error) {
 	if rs == nil {
-		return nil, &govern.Trace{}, fmt.Errorf("nil ruleset")
+		return nil, &govern.Arbitrace{}, fmt.Errorf("nil ruleset")
 	}
 
-	trace := &govern.Trace{}
+	trace := &govern.Arbitrace{}
 	rc := govern.NewRequestCache(segments, ctx)
 	evaluator := vm.NewEvaluator(rs, sp)
 	var matched []vm.MatchedRule
@@ -266,17 +266,22 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 		}
 
 		killSwitch := govern.ResolveKillSwitch(rule.KillSwitch.IsSet(), rule.KillSwitch.Enabled(), killSwitchOverride)
-		if killSwitch.RecordScoped(trace, govern.TraceScopeRule, ruleName, "kill_switch") {
+		if killSwitch.RecordScoped(trace, govern.ArbitraceScopeRule, ruleName, "kill_switch") {
 			rc.RecordRuleResult(ruleName, false)
 			continue
 		}
 
-		if !rc.CheckPrerequisitesFor(govern.TraceScopeRule, ruleName, resolvePrereqs(rs, rule, evaluator), trace) {
+		if !govern.RecordActiveWindow(trace, rc.EvalTime(), govern.ArbitraceScopeRule, ruleName, "", rule.HasActiveFrom, rule.ActiveFromUnixNano, rule.HasActiveUntil, rule.ActiveUntilUnixNano) {
 			rc.RecordRuleResult(ruleName, false)
 			continue
 		}
 
-		if !rc.CheckExclusionsFor(govern.TraceScopeRule, ruleName, resolveExcludes(rs, rule, evaluator), trace) {
+		if !rc.CheckPrerequisitesFor(govern.ArbitraceScopeRule, ruleName, resolvePrereqs(rs, rule, evaluator), trace) {
+			rc.RecordRuleResult(ruleName, false)
+			continue
+		}
+
+		if !rc.CheckExclusionsFor(govern.ArbitraceScopeRule, ruleName, resolveExcludes(rs, rule, evaluator), trace) {
 			rc.RecordRuleResult(ruleName, false)
 			continue
 		}
@@ -284,7 +289,7 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 		if rule.HasSegment {
 			segName := evaluator.String(rule.SegmentNameIdx)
 			segOK, detail := rc.EvalSegment(segName)
-			trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeRule, ruleName, govern.TraceKindSegment, segName, "", segOK, detail)
+			trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeRule, ruleName, govern.ArbitraceKindSegment, segName, "", segOK, detail)
 			if !segOK {
 				rc.RecordRuleResult(ruleName, false)
 				continue
@@ -299,7 +304,7 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 		if conditionDetail == "" {
 			conditionDetail = "compiled rule condition"
 		}
-		trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeRule, ruleName, govern.TraceKindCondition, "", "", condOK, conditionDetail)
+		trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeRule, ruleName, govern.ArbitraceKindCondition, "", "", condOK, conditionDetail)
 		if !condOK {
 			rc.RecordRuleResult(ruleName, false)
 			if evaluator.HasFallback(rule) {
@@ -307,7 +312,7 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 				if err != nil {
 					return nil, trace, fmt.Errorf("rule %s fallback %s: %w", ruleName, mr.Action, err)
 				}
-				trace.AppendScoped(govern.TracePhaseEffect, govern.TraceScopeRule, ruleName, govern.TraceKindFallback, "", "fallback", true, "otherwise arm selected")
+				trace.AppendScoped(govern.ArbitracePhaseEffect, govern.ArbitraceScopeRule, ruleName, govern.ArbitraceKindFallback, "", "fallback", true, "otherwise arm selected")
 				matched = append(matched, mr)
 			}
 			continue
@@ -315,7 +320,7 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 
 		if spec := effectiveRuleRollout(rule, rs, ruleName, bundleID, rolloutOverride); spec != nil {
 			decision := govern.DecidePercentRollout(*spec, rc.Context())
-			trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeRule, ruleName, govern.TraceKindRollout, spec.Namespace, spec.CheckLabel(), decision.Allowed, decision.Detail())
+			trace.AppendScoped(govern.ArbitracePhaseGovernance, govern.ArbitraceScopeRule, ruleName, govern.ArbitraceKindRollout, spec.Namespace, spec.CheckLabel(), decision.Allowed, decision.Detail())
 			if !decision.Allowed {
 				rc.RecordRuleResult(ruleName, false)
 				continue

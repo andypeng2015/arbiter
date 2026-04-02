@@ -157,6 +157,7 @@ type Rule struct {
 	Tags         []string
 	Priority     int32
 	KillSwitch   KillSwitchState
+	ActiveWindow ActiveWindow
 	Prereqs      []string
 	Excludes     []string
 	Segment      string
@@ -185,6 +186,7 @@ type StrategyCandidate struct {
 	Condition    ExprID
 	HasCondition bool
 	KillSwitch   KillSwitchState
+	ActiveWindow ActiveWindow
 	Rollout      *Rollout
 	Params       []ActionParam
 	IsElse       bool
@@ -236,10 +238,26 @@ type FlagRule struct {
 	Segment      string
 	Condition    ExprID
 	HasCondition bool
+	ActiveWindow ActiveWindow
 	Rollout      *Rollout
 	Variant      string
 	Split        *FlagSplit
 	IsElse       bool
+}
+
+// ActiveWindow is one stateless temporal eligibility window.
+type ActiveWindow struct {
+	From      string
+	Until     string
+	HasFrom   bool
+	HasUntil  bool
+	FromSpan  Span
+	UntilSpan Span
+}
+
+// Enabled reports whether either active window bound was declared.
+func (w ActiveWindow) Enabled() bool {
+	return w.HasFrom || w.HasUntil
 }
 
 // FlagSplit is one weighted variant split block.

@@ -12,7 +12,7 @@ func EvalTyped[T any](prog *Program, facts T, opts ...EvalOption) ([]vm.MatchedR
 }
 
 // EvalGovernedTyped evaluates with governance against a typed struct.
-func EvalGovernedTyped[T any](prog *Program, facts T, segments *govern.SegmentSet, ctx map[string]any, opts ...EvalOption) ([]vm.MatchedRule, *govern.Trace, error) {
+func EvalGovernedTyped[T any](prog *Program, facts T, segments *govern.SegmentSet, ctx map[string]any, opts ...EvalOption) ([]vm.MatchedRule, *govern.Arbitrace, error) {
 	dc := DataFromStruct(facts, prog)
 	return EvalGoverned(prog, dc, segments, ctx, opts...)
 }

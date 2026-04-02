@@ -427,6 +427,9 @@ func (v *programValidator) validateRule(rule *ir.Rule) error {
 	if rule == nil {
 		return nil
 	}
+	if err := validateActiveWindow(rule.ActiveWindow, "rule "+rule.Name); err != nil {
+		return err
+	}
 	env, err := v.validateLets(rule.Lets, newValidationEnv())
 	if err != nil {
 		return err
@@ -474,7 +477,7 @@ func (v *programValidator) validateStrategy(strategy *ir.Strategy) error {
 			if i != len(strategy.Candidates)-1 {
 				return spanError(candidate.Span, "strategy %s: else arm must be last", strategy.Name)
 			}
-			if candidate.HasCondition || len(candidate.Lets) > 0 || candidate.Segment != "" || candidate.KillSwitch.IsSet() || candidate.Rollout != nil {
+			if candidate.HasCondition || len(candidate.Lets) > 0 || candidate.Segment != "" || candidate.KillSwitch.IsSet() || candidate.ActiveWindow.Enabled() || candidate.Rollout != nil {
 				return spanError(candidate.Span, "strategy %s candidate %s: else arm cannot declare conditions or governance", strategy.Name, candidate.Label)
 			}
 			sawElse = true
@@ -483,6 +486,9 @@ func (v *programValidator) validateStrategy(strategy *ir.Strategy) error {
 				return spanError(candidate.Span, "strategy %s: when arms cannot appear after else", strategy.Name)
 			}
 			whenCount++
+		}
+		if err := validateActiveWindow(candidate.ActiveWindow, "strategy "+strategy.Name+" candidate "+candidate.Label); err != nil {
+			return err
 		}
 		env, err := v.validateLets(candidate.Lets, newValidationEnv())
 		if err != nil {
@@ -529,7 +535,10 @@ func (v *programValidator) validateFlag(flag *ir.Flag) error {
 			}
 		}
 	}
-	for _, rule := range flag.Rules {
+	for i, rule := range flag.Rules {
+		if err := validateActiveWindow(rule.ActiveWindow, fmt.Sprintf("flag %s rule %d", flag.Name, i)); err != nil {
+			return err
+		}
 		if rule.HasCondition {
 			if err := v.validateCondition(rule.Condition, newValidationEnv(), "flag "+flag.Name); err != nil {
 				return err
@@ -618,6 +627,34 @@ func validateExpertTemporalRule(rule *ir.ExpertRule) error {
 		reason = `both define conflicting deadlines`
 	}
 	return spanError(rule.Span, `expert rule %s: cannot combine %q and %q - %s`, rule.Name, first, second, reason)
+}
+
+func validateActiveWindow(window ir.ActiveWindow, scope string) error {
+	if !window.Enabled() {
+		return nil
+	}
+	var (
+		fromTime  time.Time
+		untilTime time.Time
+	)
+	if window.HasFrom {
+		parsed, err := time.Parse(time.RFC3339Nano, window.From)
+		if err != nil {
+			return spanError(window.FromSpan, "%s: invalid active_from %q", scope, window.From)
+		}
+		fromTime = parsed.UTC()
+	}
+	if window.HasUntil {
+		parsed, err := time.Parse(time.RFC3339Nano, window.Until)
+		if err != nil {
+			return spanError(window.UntilSpan, "%s: invalid active_until %q", scope, window.Until)
+		}
+		untilTime = parsed.UTC()
+	}
+	if window.HasFrom && window.HasUntil && !fromTime.Before(untilTime) {
+		return spanError(window.UntilSpan, "%s: active_from must be earlier than active_until", scope)
+	}
+	return nil
 }
 
 func (v *programValidator) validateArbiter(arb *ir.Arbiter) error {

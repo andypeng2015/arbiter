@@ -78,7 +78,7 @@ rule EnhancedRiskCheck priority 1 {
 	}
 	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
 
-	matched, trace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
+	matched, arbitrace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}
@@ -91,7 +91,7 @@ rule EnhancedRiskCheck priority 1 {
 
 	var sawPrereq bool
 	var sawSegment bool
-	for _, step := range trace.Steps {
+	for _, step := range arbitrace.Steps {
 		if step.Check == "requires BasicRiskCheck" && step.Result {
 			sawPrereq = true
 		}
@@ -100,10 +100,10 @@ rule EnhancedRiskCheck priority 1 {
 		}
 	}
 	if !sawPrereq {
-		t.Fatal("expected successful prerequisite trace step")
+		t.Fatal("expected successful prerequisite arbitrace step")
 	}
 	if !sawSegment {
-		t.Fatal("expected successful segment trace step")
+		t.Fatal("expected successful segment arbitrace step")
 	}
 }
 
@@ -130,7 +130,7 @@ rule WithFallback {
 
 	ctx := map[string]any{}
 	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
-	matched, trace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
+	matched, arbitrace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}
@@ -142,13 +142,13 @@ rule WithFallback {
 	}
 
 	var sawKillSwitch bool
-	for _, step := range trace.Steps {
+	for _, step := range arbitrace.Steps {
 		if step.Check == "kill_switch" && step.Result {
 			sawKillSwitch = true
 		}
 	}
 	if !sawKillSwitch {
-		t.Fatal("expected kill_switch trace step")
+		t.Fatal("expected kill_switch arbitrace step")
 	}
 }
 
@@ -168,7 +168,7 @@ rule ExplicitlyEnabled {
 
 	ctx := map[string]any{}
 	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
-	matched, trace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
+	matched, arbitrace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}
@@ -177,22 +177,61 @@ rule ExplicitlyEnabled {
 	}
 
 	found := false
-	for _, step := range trace.Steps {
+	for _, step := range arbitrace.Steps {
 		if step.Check == "kill_switch" {
 			found = true
 			if step.Result {
-				t.Fatalf("expected kill_switch off trace to be false, got %#v", step)
+				t.Fatalf("expected kill_switch off arbitrace to be false, got %#v", step)
 			}
 			if step.Detail != "kill_switch declared off" {
 				t.Fatalf("unexpected kill_switch detail: %#v", step)
 			}
-			if step.Phase != govern.TracePhaseGovernance || step.Scope != govern.TraceScopeRule || step.Subject != "ExplicitlyEnabled" || step.Kind != govern.TraceKindKillSwitch {
+			if step.Phase != govern.ArbitracePhaseGovernance || step.Scope != govern.ArbitraceScopeRule || step.Subject != "ExplicitlyEnabled" || step.Kind != govern.ArbitraceKindKillSwitch {
 				t.Fatalf("unexpected kill_switch semantics: %#v", step)
 			}
 		}
 	}
 	if !found {
-		t.Fatal("expected explicit kill_switch off trace step")
+		t.Fatal("expected explicit kill_switch off arbitrace step")
+	}
+}
+
+func TestEvalGovernedActiveWindowTracesTemporalEligibility(t *testing.T) {
+	src := []byte(`
+rule Windowed {
+	active_from 2026-01-10T00:00:00Z
+	active_until 2026-01-20T00:00:00Z
+	when { true }
+	then Allow {}
+}
+`)
+
+	result, err := CompileFull(src)
+	if err != nil {
+		t.Fatalf("CompileFull: %v", err)
+	}
+
+	ctx := map[string]any{"__now": "2026-01-09T23:59:59Z"}
+	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
+	matched, arbitrace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
+	if err != nil {
+		t.Fatalf("EvalGoverned: %v", err)
+	}
+	if len(matched) != 0 {
+		t.Fatalf("expected inactive rule before active_from, got %+v", matched)
+	}
+	if len(arbitrace.Steps) == 0 {
+		t.Fatal("expected active window arbitrace step")
+	}
+	step := arbitrace.Steps[0]
+	if step.Kind != govern.ArbitraceKindActiveFrom || step.Result {
+		t.Fatalf("unexpected active_from arbitrace step: %#v", step)
+	}
+	if step.Target != "2026-01-10T00:00:00Z" {
+		t.Fatalf("unexpected active_from target: %#v", step)
+	}
+	if step.Phase != govern.ArbitracePhaseGovernance || step.Scope != govern.ArbitraceScopeRule || step.Subject != "Windowed" {
+		t.Fatalf("unexpected active_from semantics: %#v", step)
 	}
 }
 
@@ -225,21 +264,71 @@ rule SlowRoll {
 
 	ctx := map[string]any{"user.id": blockedUser}
 	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
-	matched, trace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
+	matched, arbitrace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
 	if err != nil {
 		t.Fatalf("EvalGoverned: %v", err)
 	}
 	if len(matched) != 0 {
 		t.Fatalf("expected rollout to block match, got %+v", matched)
 	}
-	if len(trace.Steps) == 0 {
-		t.Fatal("expected rollout trace step")
+	if len(arbitrace.Steps) == 0 {
+		t.Fatal("expected rollout arbitrace step")
 	}
-	last := trace.Steps[len(trace.Steps)-1]
+	last := arbitrace.Steps[len(arbitrace.Steps)-1]
 	if !strings.Contains(last.Check, `rollout percent 1 by user.id namespace "arbiter:rule:SlowRoll"`) || last.Result {
-		t.Fatalf("unexpected rollout trace: %+v", last)
+		t.Fatalf("unexpected rollout arbitrace: %+v", last)
 	}
 	if !strings.Contains(last.Detail, blockedUser) || !strings.Contains(last.Detail, "threshold=100") || !strings.Contains(last.Detail, "resolution=10000") {
 		t.Fatalf("expected rollout detail to mention subject and threshold, got %q", last.Detail)
+	}
+}
+
+func TestEvalGovernedExcludesUsesDeferredDisposition(t *testing.T) {
+	src := []byte(`
+rule First {
+	excludes Second
+	when { true }
+	then Allow {}
+}
+
+rule Second {
+	when { true }
+	then Review {}
+}
+`)
+
+	result, err := CompileFull(src)
+	if err != nil {
+		t.Fatalf("CompileFull: %v", err)
+	}
+
+	ctx := map[string]any{}
+	dc := DataFromMap(ctx, &Program{Ruleset: result.Ruleset, Segments: result.Segments})
+	matched, arbitrace, err := EvalGoverned(&Program{Ruleset: result.Ruleset, Segments: result.Segments}, dc, result.Segments, ctx)
+	if err != nil {
+		t.Fatalf("EvalGoverned: %v", err)
+	}
+	if len(matched) != 1 || matched[0].Name != "Second" {
+		t.Fatalf("expected only Second to match after conservative deferral, got %+v", matched)
+	}
+
+	var deferred *govern.ArbitraceStep
+	for i := range arbitrace.Steps {
+		if arbitrace.Steps[i].Check == "excludes Second" {
+			deferred = &arbitrace.Steps[i]
+			break
+		}
+	}
+	if deferred == nil {
+		t.Fatalf("expected deferred excludes step in arbitrace, got %+v", arbitrace.Steps)
+	}
+	if deferred.Result {
+		t.Fatalf("expected deferred step result to remain false for compatibility, got %+v", deferred)
+	}
+	if deferred.Disposition != govern.ArbitraceDispositionDeferred {
+		t.Fatalf("expected deferred disposition, got %+v", deferred)
+	}
+	if deferred.Kind != govern.ArbitraceKindExcludes || deferred.Phase != govern.ArbitracePhaseGovernance {
+		t.Fatalf("unexpected deferred step semantics: %+v", deferred)
 	}
 }

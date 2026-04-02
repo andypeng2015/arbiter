@@ -309,7 +309,7 @@ func displayValue(v any, redact bool) any {
 	return fmt.Sprintf("secret(%q)", sv.Ref)
 }
 
-// Explain evaluates a flag and returns a rich trace of the evaluation.
+// Explain evaluates a flag and returns a rich arbitrace of the evaluation.
 func (f *Flags) Explain(flag string, ctx map[string]any) FlagEvaluation {
 	start := time.Now()
 
@@ -327,7 +327,7 @@ func (f *Flags) Explain(flag string, ctx map[string]any) FlagEvaluation {
 		}
 	}
 
-	trace := &govern.Trace{}
+	trace := &govern.Arbitrace{}
 	rc := govern.NewRequestCache(f.segments, ctx)
 	name := f.evalVariantName(def, rc, trace, "", nil)
 
@@ -338,7 +338,7 @@ func (f *Flags) Explain(flag string, ctx map[string]any) FlagEvaluation {
 		Variant:   f.resolveVariantRedacted(def, name),
 		IsDefault: name == def.Default,
 		Reason:    reason,
-		Trace:     trace.Steps,
+		Arbitrace: trace.Steps,
 		Metadata:  def.Metadata,
 		Elapsed:   time.Since(start),
 	}
@@ -374,7 +374,7 @@ func (f *Flags) ExplainWithOverrides(bundleID, flag string, ctx map[string]any, 
 		}
 	}
 
-	trace := &govern.Trace{}
+	trace := &govern.Arbitrace{}
 	rc := govern.NewRequestCache(f.segments, ctx)
 	name := f.evalVariantName(def, rc, trace, bundleID, view)
 
@@ -383,7 +383,7 @@ func (f *Flags) ExplainWithOverrides(bundleID, flag string, ctx map[string]any, 
 		Variant:   f.resolveVariantRedacted(def, name),
 		IsDefault: name == def.Default,
 		Reason:    buildReason(def, name, trace.Steps),
-		Trace:     trace.Steps,
+		Arbitrace: trace.Steps,
 		Metadata:  def.Metadata,
 		Elapsed:   time.Since(start),
 	}
@@ -421,7 +421,7 @@ func (f *Flags) Handler() http.Handler {
 	return mux
 }
 
-func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *govern.Trace, bundleID string, view overrides.View) string {
+func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *govern.Arbitrace, bundleID string, view overrides.View) string {
 	if cached, ok := rc.FlagVariant(def.Key); ok {
 		return cached
 	}
@@ -432,7 +432,7 @@ func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *go
 	}()
 
 	if rc.HasCycle(def.Key) {
-		trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeFlag, def.Key, govern.TraceKindCycle, def.Key, "cycle detection", false,
+		trace.AppendScoped(govern.ArbitracePhaseGovernance, govern.ArbitraceScopeFlag, def.Key, govern.ArbitraceKindCycle, def.Key, "cycle detection", false,
 			fmt.Sprintf("prerequisite cycle detected involving %s", def.Key))
 		return result
 	}
@@ -440,7 +440,7 @@ func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *go
 	rc.Enter(def.Key)
 	defer rc.Leave(def.Key)
 
-	if f.effectiveFlagKillSwitch(def, bundleID, view).RecordScoped(trace, govern.TraceScopeFlag, def.Key, "kill_switch") {
+	if f.effectiveFlagKillSwitch(def, bundleID, view).RecordScoped(trace, govern.ArbitraceScopeFlag, def.Key, "kill_switch") {
 		return result
 	}
 
@@ -466,10 +466,10 @@ func (f *Flags) evalVariantName(def *FlagDef, rc *govern.RequestCache, trace *go
 	return result
 }
 
-func (f *Flags) prerequisitesMet(def *FlagDef, rc *govern.RequestCache, trace *govern.Trace, bundleID string, view overrides.View) bool {
+func (f *Flags) prerequisitesMet(def *FlagDef, rc *govern.RequestCache, trace *govern.Arbitrace, bundleID string, view overrides.View) bool {
 	for _, prereq := range def.Prerequisites {
 		passed := f.prerequisitePassed(prereq, rc, bundleID, view)
-		trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeFlag, def.Key, govern.TraceKindRequires, prereq, "", passed, fmt.Sprintf("%s -> %v", prereq, passed))
+		trace.AppendScoped(govern.ArbitracePhaseGovernance, govern.ArbitraceScopeFlag, def.Key, govern.ArbitraceKindRequires, prereq, "", passed, fmt.Sprintf("%s -> %v", prereq, passed))
 		if !passed {
 			return false
 		}
@@ -493,38 +493,41 @@ func (f *Flags) prerequisitePassed(name string, rc *govern.RequestCache, bundleI
 	return prereqVariant != prereqDef.Default
 }
 
-func (f *Flags) ruleMatches(flagKey string, ruleIndex int, rule FlagRule, rc *govern.RequestCache, trace *govern.Trace) bool {
+func (f *Flags) ruleMatches(flagKey string, ruleIndex int, rule FlagRule, rc *govern.RequestCache, trace *govern.Arbitrace) bool {
 	subject := flagRuleSubject(flagKey, ruleIndex)
+	if !govern.RecordActiveWindow(trace, rc.EvalTime(), govern.ArbitraceScopeFlagRule, subject, "", rule.HasActiveFrom, rule.ActiveFromUnixNano, rule.HasActiveUntil, rule.ActiveUntilUnixNano) {
+		return false
+	}
 	if rule.SegmentName != "" {
 		segOK, detail := rc.EvalSegment(rule.SegmentName)
-		trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeFlagRule, subject, govern.TraceKindSegment, rule.SegmentName, "", segOK, detail)
+		trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeFlagRule, subject, govern.ArbitraceKindSegment, rule.SegmentName, "", segOK, detail)
 		if !segOK {
 			return false
 		}
 	}
 	if rule.CompiledInline != nil {
 		matched := rule.CompiledInline.Eval(rc.NestedContext())
-		trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeFlagRule, subject, govern.TraceKindCondition, "", "inline condition", matched, fmt.Sprintf("%s -> %v", rule.InlineExpr, matched))
+		trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeFlagRule, subject, govern.ArbitraceKindCondition, "", "inline condition", matched, fmt.Sprintf("%s -> %v", rule.InlineExpr, matched))
 		return matched
 	}
 	if rule.SegmentName == "" {
-		trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeFlagRule, subject, govern.TraceKindCondition, "", "inline condition", false, "no segment or inline condition")
+		trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeFlagRule, subject, govern.ArbitraceKindCondition, "", "inline condition", false, "no segment or inline condition")
 		return false
 	}
 	return true
 }
 
-func (f *Flags) rolloutAllows(flagKey string, ruleIndex int, rule FlagRule, rc *govern.RequestCache, trace *govern.Trace, bundleID string, view overrides.View) bool {
+func (f *Flags) rolloutAllows(flagKey string, ruleIndex int, rule FlagRule, rc *govern.RequestCache, trace *govern.Arbitrace, bundleID string, view overrides.View) bool {
 	spec := f.effectiveRuleRollout(flagKey, ruleIndex, rule, bundleID, view)
 	if spec == nil {
 		return true
 	}
 	decision := govern.DecidePercentRollout(*spec, rc.Context())
-	trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeFlagRule, flagRuleSubject(flagKey, ruleIndex), govern.TraceKindRollout, spec.Namespace, spec.CheckLabel(), decision.Allowed, decision.Detail())
+	trace.AppendScoped(govern.ArbitracePhaseGovernance, govern.ArbitraceScopeFlagRule, flagRuleSubject(flagKey, ruleIndex), govern.ArbitraceKindRollout, spec.Namespace, spec.CheckLabel(), decision.Allowed, decision.Detail())
 	return decision.Allowed
 }
 
-func (f *Flags) assignVariant(flagKey string, ruleIndex int, rule FlagRule, rc *govern.RequestCache, trace *govern.Trace, bundleID string) (string, bool) {
+func (f *Flags) assignVariant(flagKey string, ruleIndex int, rule FlagRule, rc *govern.RequestCache, trace *govern.Arbitrace, bundleID string) (string, bool) {
 	if len(rule.Split) == 0 {
 		return "", false
 	}
@@ -540,10 +543,10 @@ func (f *Flags) assignVariant(flagKey string, ruleIndex int, rule FlagRule, rc *
 	subjectValue, ok := govern.RolloutSubject(rc.Context(), subject)
 	if !ok {
 		trace.AppendScoped(
-			govern.TracePhaseEffect,
-			govern.TraceScopeFlagRule,
+			govern.ArbitracePhaseEffect,
+			govern.ArbitraceScopeFlagRule,
 			subjectKey,
-			govern.TraceKindSplit,
+			govern.ArbitraceKindSplit,
 			namespace,
 			fmt.Sprintf(`split by %s namespace %q`, subject, namespace),
 			false,
@@ -569,10 +572,10 @@ func (f *Flags) assignVariant(flagKey string, ruleIndex int, rule FlagRule, rc *
 		start += band.WeightBps
 	}
 	trace.AppendScoped(
-		govern.TracePhaseEffect,
-		govern.TraceScopeFlagRule,
+		govern.ArbitracePhaseEffect,
+		govern.ArbitraceScopeFlagRule,
 		subjectKey,
-		govern.TraceKindSplit,
+		govern.ArbitraceKindSplit,
 		assigned,
 		fmt.Sprintf(`split by %s namespace %q`, subject, namespace),
 		true,
@@ -660,21 +663,27 @@ func buildHTTPContext(r *http.Request) map[string]any {
 	return ctx
 }
 
-func buildReason(def *FlagDef, variant string, trace []TraceStep) string {
+func buildReason(def *FlagDef, variant string, trace []ArbitraceStep) string {
 	if variant == def.Default {
 		killSwitchDisabled := ""
 		for _, step := range trace {
-			if step.Kind == govern.TraceKindKillSwitch && step.Result {
+			if step.Kind == govern.ArbitraceKindKillSwitch && step.Result {
 				return "kill-switched"
 			}
-			if step.Kind == govern.TraceKindKillSwitch && !step.Result && killSwitchDisabled == "" {
+			if step.Kind == govern.ArbitraceKindKillSwitch && !step.Result && killSwitchDisabled == "" {
 				killSwitchDisabled = step.Detail
 			}
-			if step.Kind == govern.TraceKindCycle && !step.Result {
+			if step.Kind == govern.ArbitraceKindCycle && !step.Result {
 				return "prerequisite cycle detected"
 			}
-			if step.Kind == govern.TraceKindRequires && !step.Result {
+			if step.Kind == govern.ArbitraceKindRequires && !step.Result {
 				return fmt.Sprintf("prerequisite %s not met", step.Target)
+			}
+			if step.Kind == govern.ArbitraceKindActiveFrom && !step.Result {
+				return "before active_from"
+			}
+			if step.Kind == govern.ArbitraceKindActiveUntil && !step.Result {
+				return "after active_until"
 			}
 		}
 		if killSwitchDisabled != "" {
@@ -683,13 +692,13 @@ func buildReason(def *FlagDef, variant string, trace []TraceStep) string {
 		return "no rules matched"
 	}
 	for _, step := range trace {
-		if step.Kind == govern.TraceKindSplit && step.Result {
+		if step.Kind == govern.ArbitraceKindSplit && step.Result {
 			return "assigned by split"
 		}
-		if step.Kind == govern.TraceKindSegment && step.Result {
+		if step.Kind == govern.ArbitraceKindSegment && step.Result {
 			return fmt.Sprintf("matched segment %s", step.Target)
 		}
-		if step.Kind == govern.TraceKindCondition && step.Result {
+		if step.Kind == govern.ArbitraceKindCondition && step.Result {
 			return "matched inline condition"
 		}
 	}

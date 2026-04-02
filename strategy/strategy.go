@@ -3,6 +3,7 @@ package strategy
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/odvcencio/arbiter/compiler"
 	"github.com/odvcencio/arbiter/govern"
@@ -27,21 +28,25 @@ type Definition struct {
 
 // Candidate captures one recognizable strategy shape/path within an ordered declaration.
 type Candidate struct {
-	Label      string
-	Segment    string
-	Condition  string
-	KillSwitch ir.KillSwitchState
-	Rollout    *govern.PercentRollout
-	IsElse     bool
+	Label               string
+	Segment             string
+	Condition           string
+	KillSwitch          ir.KillSwitchState
+	HasActiveFrom       bool
+	ActiveFromUnixNano  int64
+	HasActiveUntil      bool
+	ActiveUntilUnixNano int64
+	Rollout             *govern.PercentRollout
+	IsElse              bool
 }
 
 // Result is the outcome of recognizing and selecting one strategy path.
 type Result struct {
-	Strategy string         `json:"strategy"`
-	Outcome  string         `json:"outcome"`
-	Selected string         `json:"selected"`
-	Params   map[string]any `json:"params,omitempty"`
-	Trace    govern.Trace   `json:"trace,omitempty"`
+	Strategy  string           `json:"strategy"`
+	Outcome   string           `json:"outcome"`
+	Selected  string           `json:"selected"`
+	Params    map[string]any   `json:"params,omitempty"`
+	Arbitrace govern.Arbitrace `json:"arbitrace,omitempty"`
 }
 
 // Compile builds executable strategy plans from a lowered program and segment set.
@@ -89,7 +94,7 @@ func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bund
 	dc := vm.DataFromMap(ctx, sp)
 	evaluator := vm.NewEvaluator(def.Ruleset, sp)
 	rc := govern.NewRequestCache(s.segments, ctx)
-	trace := &govern.Trace{}
+	trace := &govern.Arbitrace{}
 
 	for i, rule := range def.Ruleset.Rules {
 		candidate := def.Candidates[i]
@@ -97,13 +102,17 @@ func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bund
 		checkPrefix := "strategy:" + def.Name + "/" + candidate.Label + ":"
 		killSwitch, rollout := effectiveCandidateGovernance(bundleID, def.Name, candidate, view)
 
-		if killSwitch.RecordScoped(trace, govern.TraceScopeStrategyCandidate, subject, checkPrefix+"kill_switch") {
+		if killSwitch.RecordScoped(trace, govern.ArbitraceScopeStrategyCandidate, subject, checkPrefix+"kill_switch") {
+			continue
+		}
+
+		if !govern.RecordActiveWindow(trace, rc.EvalTime(), govern.ArbitraceScopeStrategyCandidate, subject, checkPrefix, candidate.HasActiveFrom, candidate.ActiveFromUnixNano, candidate.HasActiveUntil, candidate.ActiveUntilUnixNano) {
 			continue
 		}
 
 		if candidate.Segment != "" {
 			ok, detail := rc.EvalSegment(candidate.Segment)
-			trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeStrategyCandidate, subject, govern.TraceKindSegment, candidate.Segment, checkPrefix+"segment", ok, detail)
+			trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeStrategyCandidate, subject, govern.ArbitraceKindSegment, candidate.Segment, checkPrefix+"segment", ok, detail)
 			if !ok {
 				continue
 			}
@@ -114,9 +123,9 @@ func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bund
 			return Result{}, fmt.Errorf("strategy %s candidate %s: %w", def.Name, candidate.Label, err)
 		}
 		if candidate.IsElse {
-			trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeStrategyCandidate, subject, govern.TraceKindFallback, "", checkPrefix+"fallback", matched, "else arm selected")
+			trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeStrategyCandidate, subject, govern.ArbitraceKindFallback, "", checkPrefix+"fallback", matched, "else arm selected")
 		} else {
-			trace.AppendScoped(govern.TracePhaseMatch, govern.TraceScopeStrategyCandidate, subject, govern.TraceKindCondition, "", checkPrefix+"condition", matched, candidate.Condition)
+			trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeStrategyCandidate, subject, govern.ArbitraceKindCondition, "", checkPrefix+"condition", matched, candidate.Condition)
 		}
 		if !matched {
 			continue
@@ -124,7 +133,7 @@ func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bund
 
 		if rollout != nil {
 			decision := govern.DecidePercentRollout(*rollout, rc.Context())
-			trace.AppendScoped(govern.TracePhaseGovernance, govern.TraceScopeStrategyCandidate, subject, govern.TraceKindRollout, rollout.Namespace, checkPrefix+"rollout", decision.Allowed, decision.Detail())
+			trace.AppendScoped(govern.ArbitracePhaseGovernance, govern.ArbitraceScopeStrategyCandidate, subject, govern.ArbitraceKindRollout, rollout.Namespace, checkPrefix+"rollout", decision.Allowed, decision.Detail())
 			if !decision.Allowed {
 				continue
 			}
@@ -139,8 +148,8 @@ func (s *Strategies) EvaluateWithOverrides(name string, ctx map[string]any, bund
 			Outcome:  def.Returns,
 			Selected: candidate.Label,
 			Params:   outcome.Params,
-			Trace: govern.Trace{
-				Steps: append([]govern.TraceStep(nil), trace.Steps...),
+			Arbitrace: govern.Arbitrace{
+				Steps: append([]govern.ArbitraceStep(nil), trace.Steps...),
 			},
 		}, nil
 	}
@@ -216,6 +225,22 @@ func lowerDefinition(program *ir.Program, decl *ir.Strategy) (*Definition, error
 			KillSwitch: candidate.KillSwitch,
 			IsElse:     candidate.IsElse,
 		}
+		if candidate.ActiveWindow.HasFrom {
+			ts, err := time.Parse(time.RFC3339Nano, candidate.ActiveWindow.From)
+			if err != nil {
+				return nil, fmt.Errorf("strategy %s candidate %s: invalid active_from %q", decl.Name, candidate.Label, candidate.ActiveWindow.From)
+			}
+			item.HasActiveFrom = true
+			item.ActiveFromUnixNano = ts.UTC().UnixNano()
+		}
+		if candidate.ActiveWindow.HasUntil {
+			ts, err := time.Parse(time.RFC3339Nano, candidate.ActiveWindow.Until)
+			if err != nil {
+				return nil, fmt.Errorf("strategy %s candidate %s: invalid active_until %q", decl.Name, candidate.Label, candidate.ActiveWindow.Until)
+			}
+			item.HasActiveUntil = true
+			item.ActiveUntilUnixNano = ts.UTC().UnixNano()
+		}
 		if candidate.HasCondition {
 			item.Condition = ir.RenderExpr(program, candidate.Condition)
 		}
@@ -241,11 +266,12 @@ func compileStrategyRuleset(program *ir.Program, decl *ir.Strategy) (*compiler.C
 	for i := range decl.Candidates {
 		candidate := decl.Candidates[i]
 		rule := ir.Rule{
-			Name:       candidate.Label,
-			KillSwitch: candidate.KillSwitch,
-			Segment:    candidate.Segment,
-			Lets:       append([]ir.LetBinding(nil), candidate.Lets...),
-			Rollout:    cloneRollout(candidate.Rollout),
+			Name:         candidate.Label,
+			KillSwitch:   candidate.KillSwitch,
+			ActiveWindow: candidate.ActiveWindow,
+			Segment:      candidate.Segment,
+			Lets:         append([]ir.LetBinding(nil), candidate.Lets...),
+			Rollout:      cloneRollout(candidate.Rollout),
 			Action: ir.Action{
 				Name:   candidate.Label,
 				Params: append([]ir.ActionParam(nil), candidate.Params...),

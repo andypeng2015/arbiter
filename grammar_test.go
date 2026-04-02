@@ -85,6 +85,36 @@ func TestParseMinimal(t *testing.T) {
 	}
 }
 
+func TestParseActiveWindowClauses(t *testing.T) {
+	sexp := parseArb(t, `
+rule Windowed {
+	active_from 2026-01-01T00:00:00Z
+	active_until 2026-02-01T00:00:00Z
+	when { true }
+	then Allow {}
+}
+
+strategy Routing returns Outcome {
+	active_from 2026-01-01T00:00:00Z
+	active_until 2026-02-01T00:00:00Z
+	when { true } then Canary {}
+	else Stable {}
+}
+
+flag checkout type boolean default false {
+	active_from 2026-01-01T00:00:00Z
+	active_until 2026-02-01T00:00:00Z
+	when { true } then true
+}
+`)
+	if strings.Count(sexp, "active_from_clause") != 3 {
+		t.Fatalf("expected 3 active_from_clause nodes, got: %s", sexp)
+	}
+	if strings.Count(sexp, "active_until_clause") != 3 {
+		t.Fatalf("expected 3 active_until_clause nodes, got: %s", sexp)
+	}
+}
+
 func TestParseExpertRule(t *testing.T) {
 	sexp := parseArb(t, `expert rule SeedHighRisk { when { applicant.score < 600 } then assert RiskFlag { key: "high_risk" } }`)
 	if !strings.Contains(sexp, "expert_rule_declaration") {

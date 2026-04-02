@@ -3,6 +3,7 @@ package compiler_test
 import (
 	"os"
 	"testing"
+	"time"
 
 	arbiter "github.com/odvcencio/arbiter"
 	"github.com/odvcencio/arbiter/compiler"
@@ -406,6 +407,31 @@ rule TargetedRollout {
 	}
 	if got := rs.Constants.GetString(rh.RolloutNamespaceIdx); got != "launch_q2" {
 		t.Fatalf("rollout namespace = %q, want launch_q2", got)
+	}
+}
+
+func TestCompileRuleActiveWindow(t *testing.T) {
+	src := `
+rule Windowed {
+	active_from 2026-01-01T00:00:00Z
+	active_until 2026-02-01T00:00:00Z
+	when { true }
+	then Allow {}
+}
+`
+	rs := compileSource(t, src)
+	rh := rs.Rules[0]
+	if !rh.HasActiveFrom {
+		t.Fatal("expected active_from to be compiled")
+	}
+	if !rh.HasActiveUntil {
+		t.Fatal("expected active_until to be compiled")
+	}
+	if got := time.Unix(0, rh.ActiveFromUnixNano).UTC().Format(time.RFC3339Nano); got != "2026-01-01T00:00:00Z" {
+		t.Fatalf("active_from = %q, want 2026-01-01T00:00:00Z", got)
+	}
+	if got := time.Unix(0, rh.ActiveUntilUnixNano).UTC().Format(time.RFC3339Nano); got != "2026-02-01T00:00:00Z" {
+		t.Fatalf("active_until = %q, want 2026-02-01T00:00:00Z", got)
 	}
 }
 

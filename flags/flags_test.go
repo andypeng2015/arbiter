@@ -161,11 +161,47 @@ flag dark_mode type boolean default false kill_switch off {
 	if eval.Reason != "kill_switch declared off; no rules matched" {
 		t.Fatalf("reason: got %q", eval.Reason)
 	}
-	if len(eval.Trace) < 2 {
-		t.Fatalf("expected trace steps, got %#v", eval.Trace)
+	if len(eval.Arbitrace) < 2 {
+		t.Fatalf("expected arbitrace steps, got %#v", eval.Arbitrace)
 	}
-	if step := eval.Trace[0]; step.Check != "kill_switch" || step.Result || step.Detail != "kill_switch declared off" {
-		t.Fatalf("unexpected first trace step: %#v", step)
+	if step := eval.Arbitrace[0]; step.Check != "kill_switch" || step.Result || step.Detail != "kill_switch declared off" {
+		t.Fatalf("unexpected first arbitrace step: %#v", step)
+	}
+}
+
+func TestFlagExplainActiveWindow(t *testing.T) {
+	f, err := Load([]byte(`
+flag dark_mode type boolean default false {
+	active_from 2026-01-10T00:00:00Z
+	when { true } then true
+}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	eval := f.Explain("dark_mode", map[string]any{"__now": "2026-01-09T23:59:59Z"})
+
+	if eval.Variant.Name != "false" {
+		t.Fatalf("variant: got %q, want false", eval.Variant.Name)
+	}
+	if eval.Reason != "before active_from" {
+		t.Fatalf("reason: got %q", eval.Reason)
+	}
+	found := false
+	for _, step := range eval.Arbitrace {
+		if step.Kind == govern.ArbitraceKindActiveFrom {
+			found = true
+			if step.Result {
+				t.Fatalf("expected blocked active_from step, got %#v", step)
+			}
+			if step.Target != "2026-01-10T00:00:00Z" {
+				t.Fatalf("unexpected active_from target: %#v", step)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected active_from arbitrace step")
 	}
 }
 
@@ -319,7 +355,7 @@ func TestFlagExplainMatch(t *testing.T) {
 		t.Error("expected Expires to be set")
 	}
 
-	// Print trace for verification
+	// Print arbitrace for verification
 	t.Logf("=== Explain checkout_v2 (internal user) ===")
 	t.Logf("Flag:      %s", eval.Flag)
 	t.Logf("Variant:   %s", eval.Variant)
@@ -333,8 +369,8 @@ func TestFlagExplainMatch(t *testing.T) {
 		t.Logf("Expires:   %s (%d days remaining)", eval.Metadata.Expires.Format("2006-01-02"), daysLeft)
 	}
 	t.Logf("Elapsed:   %v", eval.Elapsed)
-	t.Logf("Trace:")
-	for i, step := range eval.Trace {
+	t.Logf("Arbitrace:")
+	for i, step := range eval.Arbitrace {
 		mark := "x"
 		if step.Result {
 			mark = "v"
@@ -342,9 +378,9 @@ func TestFlagExplainMatch(t *testing.T) {
 		t.Logf("  [%d] [%s] %s: %s", i, mark, step.Check, step.Detail)
 	}
 
-	// Should have trace steps
-	if len(eval.Trace) == 0 {
-		t.Error("expected trace steps")
+	// Should have arbitrace steps
+	if len(eval.Arbitrace) == 0 {
+		t.Error("expected arbitrace steps")
 	}
 }
 
@@ -372,7 +408,7 @@ func TestFlagExplainNoMatch(t *testing.T) {
 
 	t.Logf("=== Explain checkout_v2 (random user) ===")
 	t.Logf("Variant: %s, Reason: %s", eval.Variant, eval.Reason)
-	for i, step := range eval.Trace {
+	for i, step := range eval.Arbitrace {
 		mark := "x"
 		if step.Result {
 			mark = "v"
@@ -406,21 +442,21 @@ func TestFlagExplainKillSwitch(t *testing.T) {
 		t.Errorf("reason: got %q, want kill-switched", eval.Reason)
 	}
 
-	// Trace should have kill_switch step
+	// Arbitrace should have kill_switch step
 	foundKS := false
-	for _, step := range eval.Trace {
+	for _, step := range eval.Arbitrace {
 		if step.Check == "kill_switch" {
 			foundKS = true
 			if !step.Result {
 				t.Error("kill_switch step should be true")
 			}
-			if step.Phase != govern.TracePhaseGovernance || step.Scope != govern.TraceScopeFlag || step.Subject != "dark_mode" || step.Kind != govern.TraceKindKillSwitch {
-				t.Fatalf("unexpected kill_switch trace semantics: %#v", step)
+			if step.Phase != govern.ArbitracePhaseGovernance || step.Scope != govern.ArbitraceScopeFlag || step.Subject != "dark_mode" || step.Kind != govern.ArbitraceKindKillSwitch {
+				t.Fatalf("unexpected kill_switch arbitrace semantics: %#v", step)
 			}
 		}
 	}
 	if !foundKS {
-		t.Error("expected kill_switch trace step")
+		t.Error("expected kill_switch arbitrace step")
 	}
 }
 
@@ -452,9 +488,9 @@ func TestFlagExplainPrereqFail(t *testing.T) {
 		t.Errorf("reason: got %q, want 'prerequisite payments_enabled not met'", eval.Reason)
 	}
 
-	// Trace should show requires step failing
+	// Arbitrace should show requires step failing
 	foundReq := false
-	for _, step := range eval.Trace {
+	for _, step := range eval.Arbitrace {
 		if step.Check == "requires payments_enabled" {
 			foundReq = true
 			if step.Result {
@@ -463,7 +499,7 @@ func TestFlagExplainPrereqFail(t *testing.T) {
 		}
 	}
 	if !foundReq {
-		t.Error("expected 'requires payments_enabled' trace step")
+		t.Error("expected 'requires payments_enabled' arbitrace step")
 	}
 }
 
@@ -675,8 +711,8 @@ flag flag_b type boolean default false {
 	if eval.Reason != "prerequisite flag_b not met" {
 		t.Logf("reason: %s", eval.Reason)
 	}
-	t.Logf("Trace:")
-	for i, step := range eval.Trace {
+	t.Logf("Arbitrace:")
+	for i, step := range eval.Arbitrace {
 		t.Logf("  [%d] %s: %s", i, step.Check, step.Detail)
 	}
 }

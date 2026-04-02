@@ -24,7 +24,9 @@ outcome HeatWarning {
 }
 
 strategy RouteHeat returns HeatWarning {
-	kill_switch off when { input.hot == true } then AlertNow {
+	kill_switch off
+	active_from 2026-01-01T00:00:00Z
+	when { input.hot == true } then AlertNow {
 		zone: "zone-a",
 	}
 
@@ -48,6 +50,7 @@ arbiter greenhouse {
 
 rule CheckTemp {
 	kill_switch on
+	active_until 2026-02-01T00:00:00Z
 	when { sensor.temperature > SAFE_TEMP }
 	then Alert {}
 }
@@ -98,8 +101,14 @@ expert rule HeatStress cooldown 15m {
 	if summary.Rules[0].KillSwitch != ir.KillSwitchOn {
 		t.Fatalf("expected rule kill_switch on, got %+v", summary.Rules[0])
 	}
+	if summary.Rules[0].ActiveUntil != "2026-02-01T00:00:00Z" {
+		t.Fatalf("expected rule active_until in summary, got %+v", summary.Rules[0])
+	}
 	if got := summary.Strategies[0].Candidates[0].KillSwitch; got != ir.KillSwitchOff {
 		t.Fatalf("expected strategy candidate kill_switch off, got %+v", summary.Strategies[0].Candidates[0])
+	}
+	if got := summary.Strategies[0].Candidates[0].ActiveFrom; got != "2026-01-01T00:00:00Z" {
+		t.Fatalf("expected strategy candidate active_from in summary, got %+v", summary.Strategies[0].Candidates[0])
 	}
 	if len(summary.ExpertRules) != 1 {
 		t.Fatalf("unexpected expert rules: %+v", summary.ExpertRules)

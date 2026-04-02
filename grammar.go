@@ -149,6 +149,7 @@ func ArbiterGrammar() *Grammar {
 
 	g.Define("strategy_when_candidate", Seq(
 		Optional(Field("kill_switch", Sym("kill_switch"))),
+		Repeat(Choice(Sym("active_from_clause"), Sym("active_until_clause"))),
 		Optional(Field("rollout", Sym("rule_rollout"))),
 		Field("condition", Sym("when_block")),
 		Str("then"),
@@ -341,7 +342,7 @@ func ArbiterGrammar() *Grammar {
 		)),
 		Str("{"),
 		Optional(Field("kill_switch", Sym("kill_switch"))),
-		Repeat(Choice(Sym("rule_requires"), Sym("rule_excludes"))),
+		Repeat(Choice(Sym("rule_requires"), Sym("rule_excludes"), Sym("active_from_clause"), Sym("active_until_clause"))),
 		Optional(Field("rollout", Sym("rule_rollout"))),
 		Field("condition", Sym("when_block")),
 		Field("action", Sym("then_block")),
@@ -376,6 +377,16 @@ func ArbiterGrammar() *Grammar {
 			Str("namespace"),
 			Field("namespace", Sym("string_literal")),
 		)),
+	))
+
+	g.Define("active_from_clause", Seq(
+		Str("active_from"),
+		Field("value", Sym("timestamp_literal")),
+	))
+
+	g.Define("active_until_clause", Seq(
+		Str("active_until"),
+		Field("value", Sym("timestamp_literal")),
 	))
 
 	g.Define("expert_rule_declaration", Seq(
@@ -635,6 +646,7 @@ func ArbiterGrammar() *Grammar {
 	// [rollout N] when segment_name { expr } then "variant"
 	g.Define("flag_rule", Seq(
 		Optional(Str("else")),
+		Repeat(Choice(Sym("active_from_clause"), Sym("active_until_clause"))),
 		Optional(Field("rollout", Sym("rule_rollout"))),
 		Str("when"),
 		Field("condition", Choice(

@@ -384,7 +384,7 @@ func TestExpertTax(t *testing.T) {
 		client.CloseSession(context.Background(), &arbiterv1.CloseSessionRequest{SessionId: sess.SessionId})
 	})
 
-	t.Run("activation trace records all firings", func(t *testing.T) {
+	t.Run("activation arbitrace records all firings", func(t *testing.T) {
 		sess, err := client.StartSession(context.Background(), &arbiterv1.StartSessionRequest{
 			BundleId: bundle,
 			Envelope: mustStruct(map[string]any{
@@ -401,21 +401,21 @@ func TestExpertTax(t *testing.T) {
 			t.Fatalf("run session: %v", err)
 		}
 
-		// Get full trace
-		trace, err := client.GetSessionTrace(context.Background(), &arbiterv1.GetSessionTraceRequest{SessionId: sess.SessionId})
+		// Get full arbitrace
+		arbitrace, err := client.GetSessionArbitrace(context.Background(), &arbiterv1.GetSessionArbitraceRequest{SessionId: sess.SessionId})
 		if err != nil {
-			t.Fatalf("get trace: %v", err)
+			t.Fatalf("get arbitrace: %v", err)
 		}
 
 		t.Logf("activations: %d, facts: %d, outcomes: %d",
-			len(trace.Activations), len(trace.Facts), len(trace.Outcomes))
+			len(arbitrace.Activations), len(arbitrace.Facts), len(arbitrace.Outcomes))
 
-		if len(trace.Activations) == 0 {
-			t.Error("expected activation trace entries")
+		if len(arbitrace.Activations) == 0 {
+			t.Error("expected activation arbitrace entries")
 		}
 
 		// Every activation should have a rule name
-		for _, a := range trace.Activations {
+		for _, a := range arbitrace.Activations {
 			if a.Rule == "" {
 				t.Error("activation with empty rule name")
 			}

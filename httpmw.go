@@ -20,9 +20,9 @@ type HTTPErrorHandler func(http.ResponseWriter, *http.Request, error)
 
 // HTTPDecision captures one governed HTTP request evaluation.
 type HTTPDecision struct {
-	Context map[string]any     `json:"context"`
-	Matched []vm.MatchedRule   `json:"matched,omitempty"`
-	Trace   []govern.TraceStep `json:"trace,omitempty"`
+	Context   map[string]any         `json:"context"`
+	Matched   []vm.MatchedRule       `json:"matched,omitempty"`
+	Arbitrace []govern.ArbitraceStep `json:"arbitrace,omitempty"`
 }
 
 // HTTPMiddlewareOptions configures MiddlewareWithOptions.
@@ -82,16 +82,16 @@ func MiddlewareWithOptions(compiled *CompileResult, next http.Handler, opts HTTP
 		// Build a temporary Program wrapper for the new Eval/DataFromMap API.
 		prog := &Program{Ruleset: compiled.Ruleset, Segments: compiled.Segments}
 		dc := DataFromMap(ctxMap, prog)
-		matched, trace, err := EvalGoverned(prog, dc, compiled.Segments, ctxMap)
+		matched, arbitrace, err := EvalGoverned(prog, dc, compiled.Segments, ctxMap)
 		if err != nil {
 			onEvalError(w, r, err)
 			return
 		}
 
 		decision := HTTPDecision{
-			Context: cloneAnyMap(ctxMap),
-			Matched: cloneMatchedRules(matched),
-			Trace:   cloneTraceSteps(trace),
+			Context:   cloneAnyMap(ctxMap),
+			Matched:   cloneMatchedRules(matched),
+			Arbitrace: cloneArbitraceSteps(arbitrace),
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), httpDecisionKey{}, decision)))
 	})
@@ -218,12 +218,12 @@ func cloneMatchedRules(matched []vm.MatchedRule) []vm.MatchedRule {
 	return out
 }
 
-func cloneTraceSteps(trace *govern.Trace) []govern.TraceStep {
-	if trace == nil || len(trace.Steps) == 0 {
+func cloneArbitraceSteps(arbitrace *govern.Arbitrace) []govern.ArbitraceStep {
+	if arbitrace == nil || len(arbitrace.Steps) == 0 {
 		return nil
 	}
-	out := make([]govern.TraceStep, len(trace.Steps))
-	copy(out, trace.Steps)
+	out := make([]govern.ArbitraceStep, len(arbitrace.Steps))
+	copy(out, arbitrace.Steps)
 	return out
 }
 

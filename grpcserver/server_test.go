@@ -205,11 +205,11 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 	if len(eval.Matched) != 1 || eval.Matched[0].Action != "Approve" {
 		t.Fatalf("unexpected evaluate response: %+v", eval)
 	}
-	if len(eval.Trace) == 0 {
-		t.Fatalf("expected evaluate trace, got %+v", eval)
+	if len(eval.Arbitrace) == 0 {
+		t.Fatalf("expected evaluate arbitrace, got %+v", eval)
 	}
-	if step := eval.Trace[0]; step.GetPhase() != "match" || step.GetScope() != "rule" || step.GetSubject() != "HighValue" || step.GetKind() != "segment" || step.GetTarget() != "enterprise" {
-		t.Fatalf("unexpected evaluate trace step: %+v", step)
+	if step := eval.Arbitrace[0]; step.GetPhase() != "match" || step.GetScope() != "rule" || step.GetSubject() != "HighValue" || step.GetKind() != "segment" || step.GetTarget() != "enterprise" {
+		t.Fatalf("unexpected evaluate arbitrace step: %+v", step)
 	}
 
 	flagResp, err := client.ResolveFlag(context.Background(), &arbiterv1.ResolveFlagRequest{
@@ -223,11 +223,11 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 	if flagResp.Variant != "true" {
 		t.Fatalf("expected checkout_v2=true, got %+v", flagResp)
 	}
-	if len(flagResp.Trace) == 0 {
-		t.Fatalf("expected flag trace, got %+v", flagResp)
+	if len(flagResp.Arbitrace) == 0 {
+		t.Fatalf("expected flag arbitrace, got %+v", flagResp)
 	}
-	if step := flagResp.Trace[0]; step.GetPhase() != "match" || step.GetScope() != "flag_rule" || step.GetSubject() != "checkout_v2[0]" || step.GetKind() != "segment" || step.GetTarget() != "enterprise" {
-		t.Fatalf("unexpected flag trace step: %+v", step)
+	if step := flagResp.Arbitrace[0]; step.GetPhase() != "match" || step.GetScope() != "flag_rule" || step.GetSubject() != "checkout_v2[0]" || step.GetKind() != "segment" || step.GetTarget() != "enterprise" {
+		t.Fatalf("unexpected flag arbitrace step: %+v", step)
 	}
 
 	strategyResp, err := client.EvaluateStrategy(context.Background(), &arbiterv1.EvaluateStrategyRequest{
@@ -241,11 +241,11 @@ func TestServerPublishEvaluateAndOverride(t *testing.T) {
 	if strategyResp.Selected != "Priority" || strategyResp.GetOutcome() != "CheckoutPath" {
 		t.Fatalf("unexpected strategy response: %+v", strategyResp)
 	}
-	if len(strategyResp.Trace) == 0 {
-		t.Fatalf("expected strategy trace, got %+v", strategyResp)
+	if len(strategyResp.Arbitrace) == 0 {
+		t.Fatalf("expected strategy arbitrace, got %+v", strategyResp)
 	}
-	if step := strategyResp.Trace[0]; step.GetPhase() != "match" || step.GetScope() != "strategy_candidate" || step.GetSubject() != "CheckoutRouting/Priority" || step.GetKind() != "condition" {
-		t.Fatalf("unexpected strategy trace step: %+v", step)
+	if step := strategyResp.Arbitrace[0]; step.GetPhase() != "match" || step.GetScope() != "strategy_candidate" || step.GetSubject() != "CheckoutRouting/Priority" || step.GetKind() != "condition" {
+		t.Fatalf("unexpected strategy arbitrace step: %+v", step)
 	}
 
 	if _, err := client.SetRuleOverride(context.Background(), &arbiterv1.SetRuleOverrideRequest{
@@ -782,11 +782,11 @@ func TestServerExpertSessions(t *testing.T) {
 	if len(run.Activations) != 2 {
 		t.Fatalf("unexpected activations: %+v", run.Activations)
 	}
-	if len(run.Activations[0].GetTrace()) == 0 {
-		t.Fatalf("expected activation trace, got %+v", run.Activations[0])
+	if len(run.Activations[0].GetArbitrace()) == 0 {
+		t.Fatalf("expected activation arbitrace, got %+v", run.Activations[0])
 	}
-	if step := run.Activations[0].GetTrace()[0]; step.GetScope() != "expert_rule" || step.GetSubject() != "SeedHighRisk" {
-		t.Fatalf("unexpected activation trace step: %+v", step)
+	if step := run.Activations[0].GetArbitrace()[0]; step.GetScope() != "expert_rule" || step.GetSubject() != "SeedHighRisk" {
+		t.Fatalf("unexpected activation arbitrace step: %+v", step)
 	}
 
 	if _, err := client.AssertFacts(context.Background(), &arbiterv1.AssertFactsRequest{
@@ -802,14 +802,14 @@ func TestServerExpertSessions(t *testing.T) {
 		t.Fatalf("AssertFacts: %v", err)
 	}
 
-	trace, err := client.GetSessionTrace(context.Background(), &arbiterv1.GetSessionTraceRequest{
+	arbitrace, err := client.GetSessionArbitrace(context.Background(), &arbiterv1.GetSessionArbitraceRequest{
 		SessionId: start.SessionId,
 	})
 	if err != nil {
-		t.Fatalf("GetSessionTrace: %v", err)
+		t.Fatalf("GetSessionArbitrace: %v", err)
 	}
-	if len(trace.Facts) != 2 {
-		t.Fatalf("expected 2 facts after external assert, got %+v", trace.Facts)
+	if len(arbitrace.Facts) != 2 {
+		t.Fatalf("expected 2 facts after external assert, got %+v", arbitrace.Facts)
 	}
 
 	if _, err := client.RetractFacts(context.Background(), &arbiterv1.RetractFactsRequest{
@@ -822,14 +822,14 @@ func TestServerExpertSessions(t *testing.T) {
 		t.Fatalf("RetractFacts: %v", err)
 	}
 
-	trace, err = client.GetSessionTrace(context.Background(), &arbiterv1.GetSessionTraceRequest{
+	arbitrace, err = client.GetSessionArbitrace(context.Background(), &arbiterv1.GetSessionArbitraceRequest{
 		SessionId: start.SessionId,
 	})
 	if err != nil {
-		t.Fatalf("GetSessionTrace after retract: %v", err)
+		t.Fatalf("GetSessionArbitrace after retract: %v", err)
 	}
-	if len(trace.Facts) != 1 || trace.Facts[0].GetType() != "RiskFlag" {
-		t.Fatalf("unexpected facts after retract: %+v", trace.Facts)
+	if len(arbitrace.Facts) != 1 || arbitrace.Facts[0].GetType() != "RiskFlag" {
+		t.Fatalf("unexpected facts after retract: %+v", arbitrace.Facts)
 	}
 
 	run, err = client.RunSession(context.Background(), &arbiterv1.RunSessionRequest{
@@ -849,7 +849,7 @@ func TestServerExpertSessions(t *testing.T) {
 		t.Fatalf("CloseSession: %v", err)
 	}
 
-	_, err = client.GetSessionTrace(context.Background(), &arbiterv1.GetSessionTraceRequest{
+	_, err = client.GetSessionArbitrace(context.Background(), &arbiterv1.GetSessionArbitraceRequest{
 		SessionId: start.SessionId,
 	})
 	if status.Code(err) != codes.NotFound {
@@ -985,11 +985,11 @@ func TestServerExpertAuditIncludesActivationTrace(t *testing.T) {
 	if event.Kind != "expert" || event.Expert == nil {
 		t.Fatalf("unexpected audit event: %+v", event)
 	}
-	if len(event.Expert.Activations) == 0 || len(event.Expert.Activations[0].Trace) == 0 {
-		t.Fatalf("expected activation trace in audit event: %+v", event.Expert)
+	if len(event.Expert.Activations) == 0 || len(event.Expert.Activations[0].Arbitrace) == 0 {
+		t.Fatalf("expected activation arbitrace in audit event: %+v", event.Expert)
 	}
-	if step := event.Expert.Activations[0].Trace[0]; step.Scope != "expert_rule" || step.Subject != "SeedHighRisk" {
-		t.Fatalf("unexpected expert activation trace step: %+v", step)
+	if step := event.Expert.Activations[0].Arbitrace[0]; step.Scope != "expert_rule" || step.Subject != "SeedHighRisk" {
+		t.Fatalf("unexpected expert activation arbitrace step: %+v", step)
 	}
 }
 

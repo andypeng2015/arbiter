@@ -149,7 +149,7 @@ func (s *Session) shouldStopAfterRound(result roundExecution, forceStableRound b
 	return false
 }
 
-func (s *Session) applyRoundMatches(ctx context.Context, round int, matched []vm.MatchedRule, traces map[string][]govern.TraceStep, firedGroups map[string]struct{}) (bool, activeRoundMutations, bool, error) {
+func (s *Session) applyRoundMatches(ctx context.Context, round int, matched []vm.MatchedRule, traces map[string][]govern.ArbitraceStep, firedGroups map[string]struct{}) (bool, activeRoundMutations, bool, error) {
 	active := activeRoundMutations{
 		asserts:  make(map[string]struct{}),
 		retracts: make(map[string]struct{}),
@@ -226,7 +226,7 @@ func (s *Session) groupAlreadyFired(rule Rule, firedGroups map[string]struct{}) 
 	return blocked
 }
 
-func (s *Session) applyMatchedRule(round int, rule Rule, match vm.MatchedRule, trace []govern.TraceStep, active activeRoundMutations) (bool, error) {
+func (s *Session) applyMatchedRule(round int, rule Rule, match vm.MatchedRule, trace []govern.ArbitraceStep, active activeRoundMutations) (bool, error) {
 	switch rule.Kind {
 	case ActionAssert:
 		changed, _, instance, err := s.applyAssert(round, rule, match, trace)

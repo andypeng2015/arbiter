@@ -56,7 +56,7 @@ strategy CheckoutRouting returns CheckoutPath {
 	if row.Selected != "Global" {
 		t.Fatalf("Selected = %q, want Global", row.Selected)
 	}
-	if len(row.Trace.Steps) == 0 {
+	if len(row.Arbitrace.Steps) == 0 {
 		t.Fatalf("expected trace steps, got %+v", row)
 	}
 }
@@ -153,28 +153,30 @@ strategy CheckoutRouting returns CheckoutPath {
 	if result.Selected != "Stable" {
 		t.Fatalf("Selected = %q, want Stable", result.Selected)
 	}
-	want := []govern.TraceStep{
+	want := []govern.ArbitraceStep{
 		{
-			Check:   "strategy:CheckoutRouting/Disabled:kill_switch",
-			Result:  true,
-			Detail:  "kill_switch declared on",
-			Phase:   govern.TracePhaseGovernance,
-			Scope:   govern.TraceScopeStrategyCandidate,
-			Subject: "CheckoutRouting/Disabled",
-			Kind:    govern.TraceKindKillSwitch,
+			Check:       "strategy:CheckoutRouting/Disabled:kill_switch",
+			Result:      true,
+			Detail:      "kill_switch declared on",
+			Phase:       govern.ArbitracePhaseGovernance,
+			Scope:       govern.ArbitraceScopeStrategyCandidate,
+			Subject:     "CheckoutRouting/Disabled",
+			Kind:        govern.ArbitraceKindKillSwitch,
+			Disposition: govern.ArbitraceDispositionPassed,
 		},
 		{
-			Check:   "strategy:CheckoutRouting/Stable:fallback",
-			Result:  true,
-			Detail:  "else arm selected",
-			Phase:   govern.TracePhaseMatch,
-			Scope:   govern.TraceScopeStrategyCandidate,
-			Subject: "CheckoutRouting/Stable",
-			Kind:    govern.TraceKindFallback,
+			Check:       "strategy:CheckoutRouting/Stable:fallback",
+			Result:      true,
+			Detail:      "else arm selected",
+			Phase:       govern.ArbitracePhaseMatch,
+			Scope:       govern.ArbitraceScopeStrategyCandidate,
+			Subject:     "CheckoutRouting/Stable",
+			Kind:        govern.ArbitraceKindFallback,
+			Disposition: govern.ArbitraceDispositionPassed,
 		},
 	}
-	if !reflect.DeepEqual(result.Trace.Steps, want) {
-		t.Fatalf("trace steps = %#v, want %#v", result.Trace.Steps, want)
+	if !reflect.DeepEqual(result.Arbitrace.Steps, want) {
+		t.Fatalf("trace steps = %#v, want %#v", result.Arbitrace.Steps, want)
 	}
 }
 
@@ -207,28 +209,72 @@ strategy CheckoutRouting returns CheckoutPath {
 	if result.Selected != "Enabled" {
 		t.Fatalf("Selected = %q, want Enabled", result.Selected)
 	}
-	want := []govern.TraceStep{
+	want := []govern.ArbitraceStep{
 		{
-			Check:   "strategy:CheckoutRouting/Enabled:kill_switch",
-			Result:  false,
-			Detail:  "kill_switch declared off",
-			Phase:   govern.TracePhaseGovernance,
-			Scope:   govern.TraceScopeStrategyCandidate,
-			Subject: "CheckoutRouting/Enabled",
-			Kind:    govern.TraceKindKillSwitch,
+			Check:       "strategy:CheckoutRouting/Enabled:kill_switch",
+			Result:      false,
+			Detail:      "kill_switch declared off",
+			Phase:       govern.ArbitracePhaseGovernance,
+			Scope:       govern.ArbitraceScopeStrategyCandidate,
+			Subject:     "CheckoutRouting/Enabled",
+			Kind:        govern.ArbitraceKindKillSwitch,
+			Disposition: govern.ArbitraceDispositionBlocked,
 		},
 		{
-			Check:   "strategy:CheckoutRouting/Enabled:condition",
-			Result:  true,
-			Detail:  "user.country == \"US\"",
-			Phase:   govern.TracePhaseMatch,
-			Scope:   govern.TraceScopeStrategyCandidate,
-			Subject: "CheckoutRouting/Enabled",
-			Kind:    govern.TraceKindCondition,
+			Check:       "strategy:CheckoutRouting/Enabled:condition",
+			Result:      true,
+			Detail:      "user.country == \"US\"",
+			Phase:       govern.ArbitracePhaseMatch,
+			Scope:       govern.ArbitraceScopeStrategyCandidate,
+			Subject:     "CheckoutRouting/Enabled",
+			Kind:        govern.ArbitraceKindCondition,
+			Disposition: govern.ArbitraceDispositionPassed,
 		},
 	}
-	if !reflect.DeepEqual(result.Trace.Steps, want) {
-		t.Fatalf("trace steps = %#v, want %#v", result.Trace.Steps, want)
+	if !reflect.DeepEqual(result.Arbitrace.Steps, want) {
+		t.Fatalf("trace steps = %#v, want %#v", result.Arbitrace.Steps, want)
+	}
+}
+
+func TestEvalStrategyActiveWindowSkipsCandidate(t *testing.T) {
+	full := compileStrategyBundle(t, `
+outcome CheckoutPath {
+	target: string
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	active_from 2026-01-10T00:00:00Z
+	when {
+		user.country == "US"
+	} then Canary {
+		target: "canary",
+	}
+
+	else Stable {
+		target: "stable",
+	}
+}
+`)
+
+	result, err := arbiter.EvalStrategy(full, "CheckoutRouting", map[string]any{
+		"__now": "2026-01-09T23:59:59Z",
+		"user":  map[string]any{"country": "US"},
+	})
+	if err != nil {
+		t.Fatalf("EvalStrategy: %v", err)
+	}
+	if result.Selected != "Stable" {
+		t.Fatalf("Selected = %q, want Stable", result.Selected)
+	}
+	if len(result.Arbitrace.Steps) < 2 {
+		t.Fatalf("expected active window + fallback steps, got %#v", result.Arbitrace.Steps)
+	}
+	first := result.Arbitrace.Steps[0]
+	if first.Check != "strategy:CheckoutRouting/Canary:active_from 2026-01-10T00:00:00Z" {
+		t.Fatalf("unexpected first arbitrace check: %#v", first)
+	}
+	if first.Kind != govern.ArbitraceKindActiveFrom || first.Result {
+		t.Fatalf("unexpected active_from arbitrace step: %#v", first)
 	}
 }
 
@@ -266,7 +312,7 @@ strategy CheckoutRouting returns CheckoutPath {
 	if result.Selected != "Global" {
 		t.Fatalf("Selected = %q, want Global", result.Selected)
 	}
-	if got := len(result.Trace.Steps); got != 3 {
+	if got := len(result.Arbitrace.Steps); got != 3 {
 		t.Fatalf("trace step count = %d, want 3", got)
 	}
 }
@@ -296,28 +342,30 @@ strategy CheckoutRouting returns CheckoutPath {
 	if err != nil {
 		t.Fatalf("EvalStrategy: %v", err)
 	}
-	want := []govern.TraceStep{
+	want := []govern.ArbitraceStep{
 		{
-			Check:   "strategy:CheckoutRouting/Domestic:condition",
-			Result:  false,
-			Detail:  `user.country == "US"`,
-			Phase:   govern.TracePhaseMatch,
-			Scope:   govern.TraceScopeStrategyCandidate,
-			Subject: "CheckoutRouting/Domestic",
-			Kind:    govern.TraceKindCondition,
+			Check:       "strategy:CheckoutRouting/Domestic:condition",
+			Result:      false,
+			Detail:      `user.country == "US"`,
+			Phase:       govern.ArbitracePhaseMatch,
+			Scope:       govern.ArbitraceScopeStrategyCandidate,
+			Subject:     "CheckoutRouting/Domestic",
+			Kind:        govern.ArbitraceKindCondition,
+			Disposition: govern.ArbitraceDispositionBlocked,
 		},
 		{
-			Check:   "strategy:CheckoutRouting/Global:fallback",
-			Result:  true,
-			Detail:  "else arm selected",
-			Phase:   govern.TracePhaseMatch,
-			Scope:   govern.TraceScopeStrategyCandidate,
-			Subject: "CheckoutRouting/Global",
-			Kind:    govern.TraceKindFallback,
+			Check:       "strategy:CheckoutRouting/Global:fallback",
+			Result:      true,
+			Detail:      "else arm selected",
+			Phase:       govern.ArbitracePhaseMatch,
+			Scope:       govern.ArbitraceScopeStrategyCandidate,
+			Subject:     "CheckoutRouting/Global",
+			Kind:        govern.ArbitraceKindFallback,
+			Disposition: govern.ArbitraceDispositionPassed,
 		},
 	}
-	if !reflect.DeepEqual(result.Trace.Steps, want) {
-		t.Fatalf("trace steps = %#v, want %#v", result.Trace.Steps, want)
+	if !reflect.DeepEqual(result.Arbitrace.Steps, want) {
+		t.Fatalf("trace steps = %#v, want %#v", result.Arbitrace.Steps, want)
 	}
 }
 

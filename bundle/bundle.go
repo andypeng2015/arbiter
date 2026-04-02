@@ -531,6 +531,7 @@ func hashString(s string) string {
 
 func writeU16(w *bytes.Buffer, v uint16)  { binary.Write(w, binary.LittleEndian, v) }
 func writeU32(w *bytes.Buffer, v uint32)  { binary.Write(w, binary.LittleEndian, v) }
+func writeI64(w *bytes.Buffer, v int64)   { binary.Write(w, binary.LittleEndian, v) }
 func writeF64(w *bytes.Buffer, v float64) { binary.Write(w, binary.LittleEndian, v) }
 func writeBool(w *bytes.Buffer, v bool) {
 	if v {
@@ -561,6 +562,10 @@ func writeRuleHeader(w *bytes.Buffer, r compiler.RuleHeader) {
 	writeU16(w, r.ActionIdx)
 	writeU16(w, r.FallbackIdx)
 	writeKillSwitchState(w, r.KillSwitch)
+	writeBool(w, r.HasActiveFrom)
+	writeI64(w, r.ActiveFromUnixNano)
+	writeBool(w, r.HasActiveUntil)
+	writeI64(w, r.ActiveUntilUnixNano)
 	writeBool(w, r.HasRollout)
 	writeU16(w, r.RolloutBps)
 	writeU16(w, r.RolloutSubjectIdx)
@@ -579,7 +584,7 @@ func writeRuleHeader(w *bytes.Buffer, r compiler.RuleHeader) {
 
 const (
 	poolValueSerializedSize   = 18
-	ruleHeaderSerializedSize  = 41
+	ruleHeaderSerializedSize  = 59
 	actionParamSerializedSize = 10
 )
 
@@ -625,6 +630,14 @@ func (d *bundleDecoder) readU8() (uint8, error) {
 
 func (d *bundleDecoder) readI32() (int32, error) {
 	var v int32
+	if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (d *bundleDecoder) readI64() (int64, error) {
+	var v int64
 	if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
 		return 0, err
 	}
@@ -773,6 +786,22 @@ func (d *bundleDecoder) readRuleHeader() (compiler.RuleHeader, error) {
 	if err != nil {
 		return compiler.RuleHeader{}, err
 	}
+	hasActiveFrom, err := d.readBool()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	activeFromUnixNano, err := d.readI64()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	hasActiveUntil, err := d.readBool()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
+	activeUntilUnixNano, err := d.readI64()
+	if err != nil {
+		return compiler.RuleHeader{}, err
+	}
 	hasRollout, err := d.readBool()
 	if err != nil {
 		return compiler.RuleHeader{}, err
@@ -837,6 +866,10 @@ func (d *bundleDecoder) readRuleHeader() (compiler.RuleHeader, error) {
 		ActionIdx:           actionIdx,
 		FallbackIdx:         fallbackIdx,
 		KillSwitch:          killSwitch,
+		HasActiveFrom:       hasActiveFrom,
+		ActiveFromUnixNano:  activeFromUnixNano,
+		HasActiveUntil:      hasActiveUntil,
+		ActiveUntilUnixNano: activeUntilUnixNano,
 		HasRollout:          hasRollout,
 		RolloutBps:          rolloutBps,
 		RolloutSubjectIdx:   rolloutSubjectIdx,

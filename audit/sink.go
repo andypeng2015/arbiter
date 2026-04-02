@@ -65,25 +65,27 @@ type ExpertOutcome struct {
 
 // ExpertActivation captures one expert activation.
 type ExpertActivation struct {
-	Round   int                `json:"round"`
-	Rule    string             `json:"rule"`
-	Kind    string             `json:"kind"`
-	Target  string             `json:"target"`
-	Params  map[string]any     `json:"params,omitempty"`
-	Changed bool               `json:"changed"`
-	Detail  string             `json:"detail,omitempty"`
-	Trace   []govern.TraceStep `json:"trace,omitempty"`
+	Round     int                    `json:"round"`
+	Rule      string                 `json:"rule"`
+	Kind      string                 `json:"kind"`
+	Target    string                 `json:"target"`
+	Params    map[string]any         `json:"params,omitempty"`
+	Changed   bool                   `json:"changed"`
+	Detail    string                 `json:"detail,omitempty"`
+	Arbitrace []govern.ArbitraceStep `json:"arbitrace,omitempty"`
 }
 
 // ExpertDecision captures the result of an expert session run.
 type ExpertDecision struct {
-	SessionID   string             `json:"session_id"`
-	Outcomes    []ExpertOutcome    `json:"outcomes,omitempty"`
-	Facts       []ExpertFact       `json:"facts,omitempty"`
-	Activations []ExpertActivation `json:"activations,omitempty"`
-	StopReason  string             `json:"stop_reason,omitempty"`
-	Rounds      int                `json:"rounds,omitempty"`
-	Mutations   int                `json:"mutations,omitempty"`
+	SessionID       string             `json:"session_id"`
+	Outcomes        []ExpertOutcome    `json:"outcomes,omitempty"`
+	Facts           []ExpertFact       `json:"facts,omitempty"`
+	Activations     []ExpertActivation `json:"activations,omitempty"`
+	StopReason      string             `json:"stop_reason,omitempty"`
+	Rounds          int                `json:"rounds,omitempty"`
+	Mutations       int                `json:"mutations,omitempty"`
+	StableDeferred  bool               `json:"stable_deferred,omitempty"`
+	TemporalPending bool               `json:"temporal_pending,omitempty"`
 }
 
 // OverrideChange captures one runtime override mutation.
@@ -107,20 +109,20 @@ type BundleChange struct {
 
 // DecisionEvent is the durable audit record for one governance request.
 type DecisionEvent struct {
-	Timestamp   time.Time          `json:"timestamp"`
-	RequestID   string             `json:"request_id,omitempty"`
-	BundleID    string             `json:"bundle_id"`
-	Environment string             `json:"environment,omitempty"`
-	Kind        string             `json:"kind"`
-	Context     map[string]any     `json:"context,omitempty"`
-	Rules       []RuleMatch        `json:"rules,omitempty"`
-	Flag        *FlagDecision      `json:"flag,omitempty"`
-	Assignment  *FlagAssignment    `json:"assignment,omitempty"`
-	Strategy    *StrategyDecision  `json:"strategy,omitempty"`
-	Expert      *ExpertDecision    `json:"expert,omitempty"`
-	Override    *OverrideChange    `json:"override,omitempty"`
-	Bundle      *BundleChange      `json:"bundle,omitempty"`
-	Trace       []govern.TraceStep `json:"trace,omitempty"`
+	Timestamp   time.Time              `json:"timestamp"`
+	RequestID   string                 `json:"request_id,omitempty"`
+	BundleID    string                 `json:"bundle_id"`
+	Environment string                 `json:"environment,omitempty"`
+	Kind        string                 `json:"kind"`
+	Context     map[string]any         `json:"context,omitempty"`
+	Rules       []RuleMatch            `json:"rules,omitempty"`
+	Flag        *FlagDecision          `json:"flag,omitempty"`
+	Assignment  *FlagAssignment        `json:"assignment,omitempty"`
+	Strategy    *StrategyDecision      `json:"strategy,omitempty"`
+	Expert      *ExpertDecision        `json:"expert,omitempty"`
+	Override    *OverrideChange        `json:"override,omitempty"`
+	Bundle      *BundleChange          `json:"bundle,omitempty"`
+	Arbitrace   []govern.ArbitraceStep `json:"arbitrace,omitempty"`
 }
 
 // Sink persists governance decisions.

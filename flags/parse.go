@@ -104,6 +104,22 @@ func lowerFlagRule(program *ir.Program, ruleIR *ir.FlagRule) (FlagRule, error) {
 	rule := FlagRule{
 		SegmentName: ruleIR.Segment,
 	}
+	if ruleIR.ActiveWindow.HasFrom {
+		ts, err := time.Parse(time.RFC3339Nano, ruleIR.ActiveWindow.From)
+		if err != nil {
+			return rule, fmt.Errorf("invalid active_from %q", ruleIR.ActiveWindow.From)
+		}
+		rule.HasActiveFrom = true
+		rule.ActiveFromUnixNano = ts.UTC().UnixNano()
+	}
+	if ruleIR.ActiveWindow.HasUntil {
+		ts, err := time.Parse(time.RFC3339Nano, ruleIR.ActiveWindow.Until)
+		if err != nil {
+			return rule, fmt.Errorf("invalid active_until %q", ruleIR.ActiveWindow.Until)
+		}
+		rule.HasActiveUntil = true
+		rule.ActiveUntilUnixNano = ts.UTC().UnixNano()
+	}
 
 	if ruleIR.HasCondition {
 		rule.InlineExpr = ir.RenderExpr(program, ruleIR.Condition)

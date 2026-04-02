@@ -24,7 +24,7 @@ service ArbiterService {
   rpc RunSession(RunSessionRequest) returns (RunSessionResponse);
   rpc AssertFacts(AssertFactsRequest) returns (AssertFactsResponse);
   rpc RetractFacts(RetractFactsRequest) returns (RetractFactsResponse);
-  rpc GetSessionTrace(GetSessionTraceRequest) returns (GetSessionTraceResponse);
+  rpc GetSessionArbitrace(GetSessionArbitraceRequest) returns (GetSessionArbitraceResponse);
   rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);
   rpc SetRuleOverride(SetRuleOverrideRequest) returns (SetRuleOverrideResponse);
   rpc SetFlagOverride(SetFlagOverrideRequest) returns (SetFlagOverrideResponse);
@@ -555,7 +555,7 @@ message OverrideEvent {
   StrategyOverrideEntry strategy = 12;
 }
 
-message TraceStep {
+message ArbitraceStep {
   string check = 1;
   bool result = 2;
   string detail = 3;
@@ -564,6 +564,7 @@ message TraceStep {
   string subject = 6;
   string kind = 7;
   string target = 8;
+  string disposition = 9;
 }
 
 message RuleMatch {
@@ -583,7 +584,7 @@ message EvaluateRulesRequest {
 
 message EvaluateRulesResponse {
   repeated RuleMatch matched = 1;
-  repeated TraceStep trace = 2;
+  repeated ArbitraceStep arbitrace = 2;
 }
 
 message ResolveFlagRequest {
@@ -599,7 +600,7 @@ message ResolveFlagResponse {
   google.protobuf.Struct values = 2;
   bool is_default = 3;
   string reason = 4;
-  repeated TraceStep trace = 5;
+  repeated ArbitraceStep arbitrace = 5;
 }
 
 message EvaluateStrategyRequest {
@@ -614,7 +615,7 @@ message EvaluateStrategyResponse {
   string outcome = 1;
   string selected = 2;
   google.protobuf.Struct params = 3;
-  repeated TraceStep trace = 4;
+  repeated ArbitraceStep arbitrace = 4;
 }
 
 message ExpertFact {
@@ -637,7 +638,7 @@ message ExpertActivation {
   google.protobuf.Struct params = 5;
   bool changed = 6;
   string detail = 7;
-  repeated TraceStep trace = 8;
+  repeated ArbitraceStep arbitrace = 8;
 }
 
 message StartSessionRequest {
@@ -664,6 +665,8 @@ message RunSessionResponse {
   string stop_reason = 4;
   uint32 rounds = 5;
   uint32 mutations = 6;
+  bool stable_deferred = 7;
+  bool temporal_pending = 8;
 }
 
 message AssertFactsRequest {
@@ -685,17 +688,19 @@ message RetractFactsRequest {
 
 message RetractFactsResponse {}
 
-message GetSessionTraceRequest {
+message GetSessionArbitraceRequest {
   string session_id = 1;
 }
 
-message GetSessionTraceResponse {
+message GetSessionArbitraceResponse {
   repeated ExpertOutcome outcomes = 1;
   repeated ExpertFact facts = 2;
   repeated ExpertActivation activations = 3;
   string stop_reason = 4;
   uint32 rounds = 5;
   uint32 mutations = 6;
+  bool stable_deferred = 7;
+  bool temporal_pending = 8;
 }
 
 message CloseSessionRequest {

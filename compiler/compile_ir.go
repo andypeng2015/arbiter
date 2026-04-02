@@ -102,6 +102,22 @@ func (c *irCompiler) compileRule(rule *ir.Rule, rs *CompiledRuleset) (RuleHeader
 		Priority:   rule.Priority,
 		KillSwitch: rule.KillSwitch,
 	}
+	if rule.ActiveWindow.HasFrom {
+		fromUnixNano, err := compileTimestampLiteralUnixNano(rule.ActiveWindow.From)
+		if err != nil {
+			return RuleHeader{}, err
+		}
+		rh.HasActiveFrom = true
+		rh.ActiveFromUnixNano = fromUnixNano
+	}
+	if rule.ActiveWindow.HasUntil {
+		untilUnixNano, err := compileTimestampLiteralUnixNano(rule.ActiveWindow.Until)
+		if err != nil {
+			return RuleHeader{}, err
+		}
+		rh.HasActiveUntil = true
+		rh.ActiveUntilUnixNano = untilUnixNano
+	}
 
 	for _, prereq := range rule.Prereqs {
 		if rh.PrereqLen == 0 {
@@ -464,11 +480,19 @@ func (c *irCompiler) compileLookup(code []byte, expr *ir.Expr) []byte {
 }
 
 func compileTimestampLiteral(text string) (float64, error) {
+	unixNano, err := compileTimestampLiteralUnixNano(text)
+	if err != nil {
+		return 0, err
+	}
+	return float64(unixNano) / float64(time.Second), nil
+}
+
+func compileTimestampLiteralUnixNano(text string) (int64, error) {
 	ts, err := time.Parse(time.RFC3339Nano, text)
 	if err != nil {
 		return 0, fmt.Errorf("invalid timestamp literal %q", text)
 	}
-	return float64(ts.UTC().Unix()), nil
+	return ts.UTC().UnixNano(), nil
 }
 
 func (c *irCompiler) compileBinary(code []byte, expr *ir.Expr) []byte {

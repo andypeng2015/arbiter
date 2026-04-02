@@ -3,38 +3,46 @@ package govern
 import "strings"
 
 const (
-	TracePhaseGovernance = "governance"
-	TracePhaseMatch      = "match"
-	TracePhaseEffect     = "effect"
+	ArbitracePhaseGovernance = "governance"
+	ArbitracePhaseMatch      = "match"
+	ArbitracePhaseEffect     = "effect"
 )
 
 const (
-	TraceScopeRule              = "rule"
-	TraceScopeFlag              = "flag"
-	TraceScopeFlagRule          = "flag_rule"
-	TraceScopeStrategyCandidate = "strategy_candidate"
-	TraceScopeExpertRule        = "expert_rule"
+	ArbitraceScopeRule              = "rule"
+	ArbitraceScopeFlag              = "flag"
+	ArbitraceScopeFlagRule          = "flag_rule"
+	ArbitraceScopeStrategyCandidate = "strategy_candidate"
+	ArbitraceScopeExpertRule        = "expert_rule"
 )
 
 const (
-	TraceKindKillSwitch = "kill_switch"
-	TraceKindRequires   = "requires"
-	TraceKindExcludes   = "excludes"
-	TraceKindSegment    = "segment"
-	TraceKindCondition  = "condition"
-	TraceKindRollout    = "rollout"
-	TraceKindSplit      = "split"
-	TraceKindFallback   = "fallback"
-	TraceKindCycle      = "cycle"
+	ArbitraceKindKillSwitch  = "kill_switch"
+	ArbitraceKindActiveFrom  = "active_from"
+	ArbitraceKindActiveUntil = "active_until"
+	ArbitraceKindRequires    = "requires"
+	ArbitraceKindExcludes    = "excludes"
+	ArbitraceKindSegment     = "segment"
+	ArbitraceKindCondition   = "condition"
+	ArbitraceKindRollout     = "rollout"
+	ArbitraceKindSplit       = "split"
+	ArbitraceKindFallback    = "fallback"
+	ArbitraceKindCycle       = "cycle"
 )
 
-// Trace records evaluation decisions. It is not goroutine-safe.
-type Trace struct {
-	Steps []TraceStep `json:"steps,omitempty"`
+const (
+	ArbitraceDispositionPassed   = "passed"
+	ArbitraceDispositionBlocked  = "blocked"
+	ArbitraceDispositionDeferred = "deferred"
+)
+
+// Arbitrace records evaluation decisions. It is not goroutine-safe.
+type Arbitrace struct {
+	Steps []ArbitraceStep `json:"steps,omitempty"`
 }
 
-// TraceStep records one governance check.
-type TraceStep struct {
+// ArbitraceStep records one governance check.
+type ArbitraceStep struct {
 	Check   string `json:"check"`
 	Result  bool   `json:"result"`
 	Detail  string `json:"detail"`
@@ -43,32 +51,50 @@ type TraceStep struct {
 	Subject string `json:"subject,omitempty"`
 	Kind    string `json:"kind,omitempty"`
 	Target  string `json:"target,omitempty"`
+	// Disposition is Arbiter's canonical tri-state outcome for this step.
+	// `result` remains the legacy bool surface; deferred steps set result=false.
+	Disposition string `json:"disposition,omitempty"`
 }
 
-// Append adds a trace step. It is a no-op on a nil receiver.
-func (t *Trace) Append(check string, result bool, detail string) {
-	t.AppendStep(NewTraceStep(check, result, detail))
+// Clone returns a copy of the arbitrace and its steps.
+func (a Arbitrace) Clone() Arbitrace {
+	if len(a.Steps) == 0 {
+		return Arbitrace{}
+	}
+	clone := Arbitrace{Steps: make([]ArbitraceStep, len(a.Steps))}
+	copy(clone.Steps, a.Steps)
+	return clone
 }
 
-// AppendScoped adds a trace step with normalized semantic metadata.
-func (t *Trace) AppendScoped(phase, scope, subject, kind, target, check string, result bool, detail string) {
-	t.AppendStep(NewScopedTraceStep(phase, scope, subject, kind, target, check, result, detail))
+// Append adds an arbitrace step. It is a no-op on a nil receiver.
+func (a *Arbitrace) Append(check string, result bool, detail string) {
+	a.AppendStep(NewArbitraceStep(check, result, detail))
 }
 
-// AppendStep adds one trace step, normalizing semantic metadata from the check
+// AppendScoped adds an arbitrace step with normalized semantic metadata.
+func (a *Arbitrace) AppendScoped(phase, scope, subject, kind, target, check string, result bool, detail string) {
+	a.AppendStep(NewScopedArbitraceStep(phase, scope, subject, kind, target, check, result, detail))
+}
+
+// AppendDeferredScoped adds one explicitly deferred arbitrace step.
+func (a *Arbitrace) AppendDeferredScoped(phase, scope, subject, kind, target, check string, detail string) {
+	a.AppendStep(NewDeferredScopedArbitraceStep(phase, scope, subject, kind, target, check, detail))
+}
+
+// AppendStep adds one arbitrace step, normalizing semantic metadata from the check
 // label when structured fields were not set explicitly.
-func (t *Trace) AppendStep(step TraceStep) {
-	if t == nil {
+func (a *Arbitrace) AppendStep(step ArbitraceStep) {
+	if a == nil {
 		return
 	}
 	step.normalize()
-	t.Steps = append(t.Steps, step)
+	a.Steps = append(a.Steps, step)
 }
 
-// NewTraceStep builds one trace step and infers structured semantics from the
+// NewArbitraceStep builds one arbitrace step and infers structured semantics from the
 // legacy check label.
-func NewTraceStep(check string, result bool, detail string) TraceStep {
-	step := TraceStep{
+func NewArbitraceStep(check string, result bool, detail string) ArbitraceStep {
+	step := ArbitraceStep{
 		Check:  check,
 		Result: result,
 		Detail: detail,
@@ -77,10 +103,10 @@ func NewTraceStep(check string, result bool, detail string) TraceStep {
 	return step
 }
 
-// NewScopedTraceStep builds one structured trace step while preserving the
+// NewScopedArbitraceStep builds one structured arbitrace step while preserving the
 // legacy check label for existing clients.
-func NewScopedTraceStep(phase, scope, subject, kind, target, check string, result bool, detail string) TraceStep {
-	step := TraceStep{
+func NewScopedArbitraceStep(phase, scope, subject, kind, target, check string, result bool, detail string) ArbitraceStep {
+	step := ArbitraceStep{
 		Check:   check,
 		Result:  result,
 		Detail:  detail,
@@ -94,28 +120,43 @@ func NewScopedTraceStep(phase, scope, subject, kind, target, check string, resul
 	return step
 }
 
-func (s *TraceStep) normalize() {
+// NewDeferredScopedArbitraceStep builds one structured deferred arbitrace step.
+func NewDeferredScopedArbitraceStep(phase, scope, subject, kind, target, check string, detail string) ArbitraceStep {
+	step := NewScopedArbitraceStep(phase, scope, subject, kind, target, check, false, detail)
+	step.Disposition = ArbitraceDispositionDeferred
+	step.normalize()
+	return step
+}
+
+func (s *ArbitraceStep) normalize() {
 	if s == nil {
 		return
 	}
 	if s.Check == "" {
-		s.Check = defaultTraceCheck(s.Kind, s.Target)
+		s.Check = defaultArbitraceCheck(s.Kind, s.Target)
 	}
 	if s.Check == "" {
 		return
 	}
 	if s.Scope == "" || s.Subject == "" || s.Kind == "" || s.Target == "" {
-		inferTraceSemantics(s)
+		inferArbitraceSemantics(s)
 	}
 	if s.Phase == "" {
-		s.Phase = tracePhaseForKind(s.Kind)
+		s.Phase = arbitracePhaseForKind(s.Kind)
 	}
 	if s.Check == "" {
-		s.Check = defaultTraceCheck(s.Kind, s.Target)
+		s.Check = defaultArbitraceCheck(s.Kind, s.Target)
+	}
+	if s.Disposition == "" {
+		if s.Result {
+			s.Disposition = ArbitraceDispositionPassed
+		} else {
+			s.Disposition = ArbitraceDispositionBlocked
+		}
 	}
 }
 
-func inferTraceSemantics(step *TraceStep) {
+func inferArbitraceSemantics(step *ArbitraceStep) {
 	check := strings.TrimSpace(step.Check)
 	if check == "" {
 		return
@@ -125,7 +166,7 @@ func inferTraceSemantics(step *TraceStep) {
 		parts := strings.SplitN(rest, ":", 2)
 		if len(parts) == 2 {
 			if step.Scope == "" {
-				step.Scope = TraceScopeStrategyCandidate
+				step.Scope = ArbitraceScopeStrategyCandidate
 			}
 			if step.Subject == "" {
 				step.Subject = parts[0]
@@ -139,96 +180,128 @@ func inferTraceSemantics(step *TraceStep) {
 	switch {
 	case check == "kill_switch":
 		if step.Kind == "" {
-			step.Kind = TraceKindKillSwitch
+			step.Kind = ArbitraceKindKillSwitch
+		}
+	case check == "active_from":
+		if step.Kind == "" {
+			step.Kind = ArbitraceKindActiveFrom
+		}
+	case check == "active_until":
+		if step.Kind == "" {
+			step.Kind = ArbitraceKindActiveUntil
 		}
 	case check == "cycle detection":
 		if step.Kind == "" {
-			step.Kind = TraceKindCycle
+			step.Kind = ArbitraceKindCycle
 		}
 	case check == "inline condition" || check == "condition":
 		if step.Kind == "" {
-			step.Kind = TraceKindCondition
+			step.Kind = ArbitraceKindCondition
 		}
 	case check == "fallback":
 		if step.Kind == "" {
-			step.Kind = TraceKindFallback
+			step.Kind = ArbitraceKindFallback
 		}
 	case strings.HasPrefix(check, "requires "):
 		if step.Kind == "" {
-			step.Kind = TraceKindRequires
+			step.Kind = ArbitraceKindRequires
 		}
 		if step.Target == "" {
 			step.Target = strings.TrimPrefix(check, "requires ")
 		}
+	case strings.HasPrefix(check, "active_from "):
+		if step.Kind == "" {
+			step.Kind = ArbitraceKindActiveFrom
+		}
+		if step.Target == "" {
+			step.Target = strings.TrimPrefix(check, "active_from ")
+		}
+	case strings.HasPrefix(check, "active_until "):
+		if step.Kind == "" {
+			step.Kind = ArbitraceKindActiveUntil
+		}
+		if step.Target == "" {
+			step.Target = strings.TrimPrefix(check, "active_until ")
+		}
 	case strings.HasPrefix(check, "excludes "):
 		if step.Kind == "" {
-			step.Kind = TraceKindExcludes
+			step.Kind = ArbitraceKindExcludes
 		}
 		if step.Target == "" {
 			step.Target = strings.TrimPrefix(check, "excludes ")
 		}
 	case strings.HasPrefix(check, "segment "):
 		if step.Kind == "" {
-			step.Kind = TraceKindSegment
+			step.Kind = ArbitraceKindSegment
 		}
 		if step.Target == "" {
 			step.Target = strings.TrimPrefix(check, "segment ")
 		}
 	case strings.HasPrefix(check, "rollout percent "):
 		if step.Kind == "" {
-			step.Kind = TraceKindRollout
+			step.Kind = ArbitraceKindRollout
 		}
 	case strings.HasPrefix(check, "split by "):
 		if step.Kind == "" {
-			step.Kind = TraceKindSplit
+			step.Kind = ArbitraceKindSplit
 		}
 	}
 }
 
-func tracePhaseForKind(kind string) string {
+func arbitracePhaseForKind(kind string) string {
 	switch kind {
-	case TraceKindKillSwitch, TraceKindRequires, TraceKindExcludes, TraceKindRollout, TraceKindCycle:
-		return TracePhaseGovernance
-	case TraceKindSegment, TraceKindCondition, TraceKindFallback:
-		return TracePhaseMatch
-	case TraceKindSplit:
-		return TracePhaseEffect
+	case ArbitraceKindKillSwitch, ArbitraceKindActiveFrom, ArbitraceKindActiveUntil, ArbitraceKindRequires, ArbitraceKindExcludes, ArbitraceKindRollout, ArbitraceKindCycle:
+		return ArbitracePhaseGovernance
+	case ArbitraceKindSegment, ArbitraceKindCondition, ArbitraceKindFallback:
+		return ArbitracePhaseMatch
+	case ArbitraceKindSplit:
+		return ArbitracePhaseEffect
 	default:
 		return ""
 	}
 }
 
-func defaultTraceCheck(kind, target string) string {
+func defaultArbitraceCheck(kind, target string) string {
 	switch kind {
-	case TraceKindKillSwitch:
+	case ArbitraceKindKillSwitch:
 		return "kill_switch"
-	case TraceKindRequires:
+	case ArbitraceKindActiveFrom:
+		if target != "" {
+			return "active_from " + target
+		}
+		return "active_from"
+	case ArbitraceKindActiveUntil:
+		if target != "" {
+			return "active_until " + target
+		}
+		return "active_until"
+	case ArbitraceKindRequires:
 		if target != "" {
 			return "requires " + target
 		}
-	case TraceKindExcludes:
+	case ArbitraceKindExcludes:
 		if target != "" {
 			return "excludes " + target
 		}
-	case TraceKindSegment:
+	case ArbitraceKindSegment:
 		if target != "" {
 			return "segment " + target
 		}
-	case TraceKindCondition:
+	case ArbitraceKindCondition:
 		return "condition"
-	case TraceKindRollout:
+	case ArbitraceKindRollout:
 		if target != "" {
 			return target
 		}
 		return "rollout"
-	case TraceKindSplit:
+	case ArbitraceKindSplit:
 		if target != "" {
 			return target
 		}
 		return "split"
-	case TraceKindFallback:
+	case ArbitraceKindFallback:
 		return "fallback"
-	case TraceKindCycle:
+	case ArbitraceKindCycle:
 		return "cycle detection"
 	}
 	return ""

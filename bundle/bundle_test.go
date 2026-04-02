@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"strings"
 	"testing"
+	"time"
 
 	arbiter "github.com/odvcencio/arbiter"
 	"github.com/odvcencio/arbiter/bundle"
@@ -169,6 +170,40 @@ rule Unset {
 		if got[i] != want[i] {
 			t.Fatalf("rule %d kill_switch = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func TestRoundTripPreservesActiveWindow(t *testing.T) {
+	prog, err := arbiter.Compile([]byte(`
+rule Windowed {
+	active_from 2026-01-01T00:00:00Z
+	active_until 2026-02-01T00:00:00Z
+	when { true }
+	then Allow {}
+}
+`))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	blob, err := bundle.Marshal(prog.Ruleset)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	restored, err := bundle.Unmarshal(blob)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	rule := restored.Rules[0]
+	if !rule.HasActiveFrom || !rule.HasActiveUntil {
+		t.Fatalf("expected active window fields to survive round-trip, got %+v", rule)
+	}
+	if got := time.Unix(0, rule.ActiveFromUnixNano).UTC().Format(time.RFC3339Nano); got != "2026-01-01T00:00:00Z" {
+		t.Fatalf("active_from = %q, want 2026-01-01T00:00:00Z", got)
+	}
+	if got := time.Unix(0, rule.ActiveUntilUnixNano).UTC().Format(time.RFC3339Nano); got != "2026-02-01T00:00:00Z" {
+		t.Fatalf("active_until = %q, want 2026-02-01T00:00:00Z", got)
 	}
 }
 

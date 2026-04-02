@@ -4843,7 +4843,7 @@ func (x *OverrideEvent) GetStrategy() *StrategyOverrideEntry {
 	return nil
 }
 
-type TraceStep struct {
+type ArbitraceStep struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Check         string                 `protobuf:"bytes,1,opt,name=check,proto3" json:"check,omitempty"`
 	Result        bool                   `protobuf:"varint,2,opt,name=result,proto3" json:"result,omitempty"`
@@ -4853,24 +4853,25 @@ type TraceStep struct {
 	Subject       string                 `protobuf:"bytes,6,opt,name=subject,proto3" json:"subject,omitempty"`
 	Kind          string                 `protobuf:"bytes,7,opt,name=kind,proto3" json:"kind,omitempty"`
 	Target        string                 `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
+	Disposition   string                 `protobuf:"bytes,9,opt,name=disposition,proto3" json:"disposition,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TraceStep) Reset() {
-	*x = TraceStep{}
+func (x *ArbitraceStep) Reset() {
+	*x = ArbitraceStep{}
 	mi := &file_arbiter_v1_service_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TraceStep) String() string {
+func (x *ArbitraceStep) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TraceStep) ProtoMessage() {}
+func (*ArbitraceStep) ProtoMessage() {}
 
-func (x *TraceStep) ProtoReflect() protoreflect.Message {
+func (x *ArbitraceStep) ProtoReflect() protoreflect.Message {
 	mi := &file_arbiter_v1_service_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4882,63 +4883,70 @@ func (x *TraceStep) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TraceStep.ProtoReflect.Descriptor instead.
-func (*TraceStep) Descriptor() ([]byte, []int) {
+// Deprecated: Use ArbitraceStep.ProtoReflect.Descriptor instead.
+func (*ArbitraceStep) Descriptor() ([]byte, []int) {
 	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{63}
 }
 
-func (x *TraceStep) GetCheck() string {
+func (x *ArbitraceStep) GetCheck() string {
 	if x != nil {
 		return x.Check
 	}
 	return ""
 }
 
-func (x *TraceStep) GetResult() bool {
+func (x *ArbitraceStep) GetResult() bool {
 	if x != nil {
 		return x.Result
 	}
 	return false
 }
 
-func (x *TraceStep) GetDetail() string {
+func (x *ArbitraceStep) GetDetail() string {
 	if x != nil {
 		return x.Detail
 	}
 	return ""
 }
 
-func (x *TraceStep) GetPhase() string {
+func (x *ArbitraceStep) GetPhase() string {
 	if x != nil {
 		return x.Phase
 	}
 	return ""
 }
 
-func (x *TraceStep) GetScope() string {
+func (x *ArbitraceStep) GetScope() string {
 	if x != nil {
 		return x.Scope
 	}
 	return ""
 }
 
-func (x *TraceStep) GetSubject() string {
+func (x *ArbitraceStep) GetSubject() string {
 	if x != nil {
 		return x.Subject
 	}
 	return ""
 }
 
-func (x *TraceStep) GetKind() string {
+func (x *ArbitraceStep) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *TraceStep) GetTarget() string {
+func (x *ArbitraceStep) GetTarget() string {
 	if x != nil {
 		return x.Target
+	}
+	return ""
+}
+
+func (x *ArbitraceStep) GetDisposition() string {
+	if x != nil {
+		return x.Disposition
 	}
 	return ""
 }
@@ -5090,7 +5098,7 @@ func (x *EvaluateRulesRequest) GetBundleName() string {
 type EvaluateRulesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Matched       []*RuleMatch           `protobuf:"bytes,1,rep,name=matched,proto3" json:"matched,omitempty"`
-	Trace         []*TraceStep           `protobuf:"bytes,2,rep,name=trace,proto3" json:"trace,omitempty"`
+	Arbitrace     []*ArbitraceStep       `protobuf:"bytes,2,rep,name=arbitrace,proto3" json:"arbitrace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5132,9 +5140,9 @@ func (x *EvaluateRulesResponse) GetMatched() []*RuleMatch {
 	return nil
 }
 
-func (x *EvaluateRulesResponse) GetTrace() []*TraceStep {
+func (x *EvaluateRulesResponse) GetArbitrace() []*ArbitraceStep {
 	if x != nil {
-		return x.Trace
+		return x.Arbitrace
 	}
 	return nil
 }
@@ -5221,7 +5229,7 @@ type ResolveFlagResponse struct {
 	Values        *structpb.Struct       `protobuf:"bytes,2,opt,name=values,proto3" json:"values,omitempty"`
 	IsDefault     bool                   `protobuf:"varint,3,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
 	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	Trace         []*TraceStep           `protobuf:"bytes,5,rep,name=trace,proto3" json:"trace,omitempty"`
+	Arbitrace     []*ArbitraceStep       `protobuf:"bytes,5,rep,name=arbitrace,proto3" json:"arbitrace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5284,9 +5292,9 @@ func (x *ResolveFlagResponse) GetReason() string {
 	return ""
 }
 
-func (x *ResolveFlagResponse) GetTrace() []*TraceStep {
+func (x *ResolveFlagResponse) GetArbitrace() []*ArbitraceStep {
 	if x != nil {
-		return x.Trace
+		return x.Arbitrace
 	}
 	return nil
 }
@@ -5372,7 +5380,7 @@ type EvaluateStrategyResponse struct {
 	Outcome       string                 `protobuf:"bytes,1,opt,name=outcome,proto3" json:"outcome,omitempty"`
 	Selected      string                 `protobuf:"bytes,2,opt,name=selected,proto3" json:"selected,omitempty"`
 	Params        *structpb.Struct       `protobuf:"bytes,3,opt,name=params,proto3" json:"params,omitempty"`
-	Trace         []*TraceStep           `protobuf:"bytes,4,rep,name=trace,proto3" json:"trace,omitempty"`
+	Arbitrace     []*ArbitraceStep       `protobuf:"bytes,4,rep,name=arbitrace,proto3" json:"arbitrace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5428,9 +5436,9 @@ func (x *EvaluateStrategyResponse) GetParams() *structpb.Struct {
 	return nil
 }
 
-func (x *EvaluateStrategyResponse) GetTrace() []*TraceStep {
+func (x *EvaluateStrategyResponse) GetArbitrace() []*ArbitraceStep {
 	if x != nil {
-		return x.Trace
+		return x.Arbitrace
 	}
 	return nil
 }
@@ -5564,7 +5572,7 @@ type ExpertActivation struct {
 	Params        *structpb.Struct       `protobuf:"bytes,5,opt,name=params,proto3" json:"params,omitempty"`
 	Changed       bool                   `protobuf:"varint,6,opt,name=changed,proto3" json:"changed,omitempty"`
 	Detail        string                 `protobuf:"bytes,7,opt,name=detail,proto3" json:"detail,omitempty"`
-	Trace         []*TraceStep           `protobuf:"bytes,8,rep,name=trace,proto3" json:"trace,omitempty"`
+	Arbitrace     []*ArbitraceStep       `protobuf:"bytes,8,rep,name=arbitrace,proto3" json:"arbitrace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5648,9 +5656,9 @@ func (x *ExpertActivation) GetDetail() string {
 	return ""
 }
 
-func (x *ExpertActivation) GetTrace() []*TraceStep {
+func (x *ExpertActivation) GetArbitrace() []*ArbitraceStep {
 	if x != nil {
-		return x.Trace
+		return x.Arbitrace
 	}
 	return nil
 }
@@ -5828,15 +5836,17 @@ func (x *RunSessionRequest) GetRequestId() string {
 }
 
 type RunSessionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Outcomes      []*ExpertOutcome       `protobuf:"bytes,1,rep,name=outcomes,proto3" json:"outcomes,omitempty"`
-	Facts         []*ExpertFact          `protobuf:"bytes,2,rep,name=facts,proto3" json:"facts,omitempty"`
-	Activations   []*ExpertActivation    `protobuf:"bytes,3,rep,name=activations,proto3" json:"activations,omitempty"`
-	StopReason    string                 `protobuf:"bytes,4,opt,name=stop_reason,json=stopReason,proto3" json:"stop_reason,omitempty"`
-	Rounds        uint32                 `protobuf:"varint,5,opt,name=rounds,proto3" json:"rounds,omitempty"`
-	Mutations     uint32                 `protobuf:"varint,6,opt,name=mutations,proto3" json:"mutations,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Outcomes        []*ExpertOutcome       `protobuf:"bytes,1,rep,name=outcomes,proto3" json:"outcomes,omitempty"`
+	Facts           []*ExpertFact          `protobuf:"bytes,2,rep,name=facts,proto3" json:"facts,omitempty"`
+	Activations     []*ExpertActivation    `protobuf:"bytes,3,rep,name=activations,proto3" json:"activations,omitempty"`
+	StopReason      string                 `protobuf:"bytes,4,opt,name=stop_reason,json=stopReason,proto3" json:"stop_reason,omitempty"`
+	Rounds          uint32                 `protobuf:"varint,5,opt,name=rounds,proto3" json:"rounds,omitempty"`
+	Mutations       uint32                 `protobuf:"varint,6,opt,name=mutations,proto3" json:"mutations,omitempty"`
+	StableDeferred  bool                   `protobuf:"varint,7,opt,name=stable_deferred,json=stableDeferred,proto3" json:"stable_deferred,omitempty"`
+	TemporalPending bool                   `protobuf:"varint,8,opt,name=temporal_pending,json=temporalPending,proto3" json:"temporal_pending,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RunSessionResponse) Reset() {
@@ -5909,6 +5919,20 @@ func (x *RunSessionResponse) GetMutations() uint32 {
 		return x.Mutations
 	}
 	return 0
+}
+
+func (x *RunSessionResponse) GetStableDeferred() bool {
+	if x != nil {
+		return x.StableDeferred
+	}
+	return false
+}
+
+func (x *RunSessionResponse) GetTemporalPending() bool {
+	if x != nil {
+		return x.TemporalPending
+	}
+	return false
 }
 
 type AssertFactsRequest struct {
@@ -6139,27 +6163,27 @@ func (*RetractFactsResponse) Descriptor() ([]byte, []int) {
 	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{82}
 }
 
-type GetSessionTraceRequest struct {
+type GetSessionArbitraceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetSessionTraceRequest) Reset() {
-	*x = GetSessionTraceRequest{}
+func (x *GetSessionArbitraceRequest) Reset() {
+	*x = GetSessionArbitraceRequest{}
 	mi := &file_arbiter_v1_service_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetSessionTraceRequest) String() string {
+func (x *GetSessionArbitraceRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetSessionTraceRequest) ProtoMessage() {}
+func (*GetSessionArbitraceRequest) ProtoMessage() {}
 
-func (x *GetSessionTraceRequest) ProtoReflect() protoreflect.Message {
+func (x *GetSessionArbitraceRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_arbiter_v1_service_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -6171,44 +6195,46 @@ func (x *GetSessionTraceRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSessionTraceRequest.ProtoReflect.Descriptor instead.
-func (*GetSessionTraceRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetSessionArbitraceRequest.ProtoReflect.Descriptor instead.
+func (*GetSessionArbitraceRequest) Descriptor() ([]byte, []int) {
 	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{83}
 }
 
-func (x *GetSessionTraceRequest) GetSessionId() string {
+func (x *GetSessionArbitraceRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
 	}
 	return ""
 }
 
-type GetSessionTraceResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Outcomes      []*ExpertOutcome       `protobuf:"bytes,1,rep,name=outcomes,proto3" json:"outcomes,omitempty"`
-	Facts         []*ExpertFact          `protobuf:"bytes,2,rep,name=facts,proto3" json:"facts,omitempty"`
-	Activations   []*ExpertActivation    `protobuf:"bytes,3,rep,name=activations,proto3" json:"activations,omitempty"`
-	StopReason    string                 `protobuf:"bytes,4,opt,name=stop_reason,json=stopReason,proto3" json:"stop_reason,omitempty"`
-	Rounds        uint32                 `protobuf:"varint,5,opt,name=rounds,proto3" json:"rounds,omitempty"`
-	Mutations     uint32                 `protobuf:"varint,6,opt,name=mutations,proto3" json:"mutations,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type GetSessionArbitraceResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Outcomes        []*ExpertOutcome       `protobuf:"bytes,1,rep,name=outcomes,proto3" json:"outcomes,omitempty"`
+	Facts           []*ExpertFact          `protobuf:"bytes,2,rep,name=facts,proto3" json:"facts,omitempty"`
+	Activations     []*ExpertActivation    `protobuf:"bytes,3,rep,name=activations,proto3" json:"activations,omitempty"`
+	StopReason      string                 `protobuf:"bytes,4,opt,name=stop_reason,json=stopReason,proto3" json:"stop_reason,omitempty"`
+	Rounds          uint32                 `protobuf:"varint,5,opt,name=rounds,proto3" json:"rounds,omitempty"`
+	Mutations       uint32                 `protobuf:"varint,6,opt,name=mutations,proto3" json:"mutations,omitempty"`
+	StableDeferred  bool                   `protobuf:"varint,7,opt,name=stable_deferred,json=stableDeferred,proto3" json:"stable_deferred,omitempty"`
+	TemporalPending bool                   `protobuf:"varint,8,opt,name=temporal_pending,json=temporalPending,proto3" json:"temporal_pending,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
-func (x *GetSessionTraceResponse) Reset() {
-	*x = GetSessionTraceResponse{}
+func (x *GetSessionArbitraceResponse) Reset() {
+	*x = GetSessionArbitraceResponse{}
 	mi := &file_arbiter_v1_service_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetSessionTraceResponse) String() string {
+func (x *GetSessionArbitraceResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetSessionTraceResponse) ProtoMessage() {}
+func (*GetSessionArbitraceResponse) ProtoMessage() {}
 
-func (x *GetSessionTraceResponse) ProtoReflect() protoreflect.Message {
+func (x *GetSessionArbitraceResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_arbiter_v1_service_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -6220,51 +6246,65 @@ func (x *GetSessionTraceResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSessionTraceResponse.ProtoReflect.Descriptor instead.
-func (*GetSessionTraceResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetSessionArbitraceResponse.ProtoReflect.Descriptor instead.
+func (*GetSessionArbitraceResponse) Descriptor() ([]byte, []int) {
 	return file_arbiter_v1_service_proto_rawDescGZIP(), []int{84}
 }
 
-func (x *GetSessionTraceResponse) GetOutcomes() []*ExpertOutcome {
+func (x *GetSessionArbitraceResponse) GetOutcomes() []*ExpertOutcome {
 	if x != nil {
 		return x.Outcomes
 	}
 	return nil
 }
 
-func (x *GetSessionTraceResponse) GetFacts() []*ExpertFact {
+func (x *GetSessionArbitraceResponse) GetFacts() []*ExpertFact {
 	if x != nil {
 		return x.Facts
 	}
 	return nil
 }
 
-func (x *GetSessionTraceResponse) GetActivations() []*ExpertActivation {
+func (x *GetSessionArbitraceResponse) GetActivations() []*ExpertActivation {
 	if x != nil {
 		return x.Activations
 	}
 	return nil
 }
 
-func (x *GetSessionTraceResponse) GetStopReason() string {
+func (x *GetSessionArbitraceResponse) GetStopReason() string {
 	if x != nil {
 		return x.StopReason
 	}
 	return ""
 }
 
-func (x *GetSessionTraceResponse) GetRounds() uint32 {
+func (x *GetSessionArbitraceResponse) GetRounds() uint32 {
 	if x != nil {
 		return x.Rounds
 	}
 	return 0
 }
 
-func (x *GetSessionTraceResponse) GetMutations() uint32 {
+func (x *GetSessionArbitraceResponse) GetMutations() uint32 {
 	if x != nil {
 		return x.Mutations
 	}
 	return 0
+}
+
+func (x *GetSessionArbitraceResponse) GetStableDeferred() bool {
+	if x != nil {
+		return x.StableDeferred
+	}
+	return false
+}
+
+func (x *GetSessionArbitraceResponse) GetTemporalPending() bool {
+	if x != nil {
+		return x.TemporalPending
+	}
+	return false
 }
 
 type CloseSessionRequest struct {
@@ -7178,8 +7218,8 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\rstrategy_name\x18\n" +
 	" \x01(\tR\fstrategyName\x12'\n" +
 	"\x0fcandidate_label\x18\v \x01(\tR\x0ecandidateLabel\x12=\n" +
-	"\bstrategy\x18\f \x01(\v2!.arbiter.v1.StrategyOverrideEntryR\bstrategy\"\xc3\x01\n" +
-	"\tTraceStep\x12\x14\n" +
+	"\bstrategy\x18\f \x01(\v2!.arbiter.v1.StrategyOverrideEntryR\bstrategy\"\xe9\x01\n" +
+	"\rArbitraceStep\x12\x14\n" +
 	"\x05check\x18\x01 \x01(\tR\x05check\x12\x16\n" +
 	"\x06result\x18\x02 \x01(\bR\x06result\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x14\n" +
@@ -7187,7 +7227,8 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\x05scope\x18\x05 \x01(\tR\x05scope\x12\x18\n" +
 	"\asubject\x18\x06 \x01(\tR\asubject\x12\x12\n" +
 	"\x04kind\x18\a \x01(\tR\x04kind\x12\x16\n" +
-	"\x06target\x18\b \x01(\tR\x06target\"\xa0\x01\n" +
+	"\x06target\x18\b \x01(\tR\x06target\x12 \n" +
+	"\vdisposition\x18\t \x01(\tR\vdisposition\"\xa0\x01\n" +
 	"\tRuleMatch\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bpriority\x18\x02 \x01(\x05R\bpriority\x12\x16\n" +
@@ -7200,10 +7241,10 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"request_id\x18\x03 \x01(\tR\trequestId\x12\x1f\n" +
 	"\vbundle_name\x18\x04 \x01(\tR\n" +
-	"bundleName\"u\n" +
+	"bundleName\"\x81\x01\n" +
 	"\x15EvaluateRulesResponse\x12/\n" +
-	"\amatched\x18\x01 \x03(\v2\x15.arbiter.v1.RuleMatchR\amatched\x12+\n" +
-	"\x05trace\x18\x02 \x03(\v2\x15.arbiter.v1.TraceStepR\x05trace\"\xbf\x01\n" +
+	"\amatched\x18\x01 \x03(\v2\x15.arbiter.v1.RuleMatchR\amatched\x127\n" +
+	"\tarbitrace\x18\x02 \x03(\v2\x19.arbiter.v1.ArbitraceStepR\tarbitrace\"\xbf\x01\n" +
 	"\x12ResolveFlagRequest\x12\x1b\n" +
 	"\tbundle_id\x18\x01 \x01(\tR\bbundleId\x12\x19\n" +
 	"\bflag_key\x18\x02 \x01(\tR\aflagKey\x121\n" +
@@ -7211,14 +7252,14 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tR\trequestId\x12\x1f\n" +
 	"\vbundle_name\x18\x05 \x01(\tR\n" +
-	"bundleName\"\xc4\x01\n" +
+	"bundleName\"\xd0\x01\n" +
 	"\x13ResolveFlagResponse\x12\x18\n" +
 	"\avariant\x18\x01 \x01(\tR\avariant\x12/\n" +
 	"\x06values\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06values\x12\x1d\n" +
 	"\n" +
 	"is_default\x18\x03 \x01(\bR\tisDefault\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\x12+\n" +
-	"\x05trace\x18\x05 \x03(\v2\x15.arbiter.v1.TraceStepR\x05trace\"\xce\x01\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x127\n" +
+	"\tarbitrace\x18\x05 \x03(\v2\x19.arbiter.v1.ArbitraceStepR\tarbitrace\"\xce\x01\n" +
 	"\x17EvaluateStrategyRequest\x12\x1b\n" +
 	"\tbundle_id\x18\x01 \x01(\tR\bbundleId\x12#\n" +
 	"\rstrategy_name\x18\x02 \x01(\tR\fstrategyName\x121\n" +
@@ -7226,12 +7267,12 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tR\trequestId\x12\x1f\n" +
 	"\vbundle_name\x18\x05 \x01(\tR\n" +
-	"bundleName\"\xae\x01\n" +
+	"bundleName\"\xba\x01\n" +
 	"\x18EvaluateStrategyResponse\x12\x18\n" +
 	"\aoutcome\x18\x01 \x01(\tR\aoutcome\x12\x1a\n" +
 	"\bselected\x18\x02 \x01(\tR\bselected\x12/\n" +
-	"\x06params\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06params\x12+\n" +
-	"\x05trace\x18\x04 \x03(\v2\x15.arbiter.v1.TraceStepR\x05trace\"c\n" +
+	"\x06params\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06params\x127\n" +
+	"\tarbitrace\x18\x04 \x03(\v2\x19.arbiter.v1.ArbitraceStepR\tarbitrace\"c\n" +
 	"\n" +
 	"ExpertFact\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x10\n" +
@@ -7240,7 +7281,7 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\rExpertOutcome\x12\x12\n" +
 	"\x04rule\x18\x01 \x01(\tR\x04rule\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
-	"\x06params\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06params\"\xf8\x01\n" +
+	"\x06params\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06params\"\x84\x02\n" +
 	"\x10ExpertActivation\x12\x14\n" +
 	"\x05round\x18\x01 \x01(\rR\x05round\x12\x12\n" +
 	"\x04rule\x18\x02 \x01(\tR\x04rule\x12\x12\n" +
@@ -7248,8 +7289,8 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\x06target\x18\x04 \x01(\tR\x06target\x12/\n" +
 	"\x06params\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x18\n" +
 	"\achanged\x18\x06 \x01(\bR\achanged\x12\x16\n" +
-	"\x06detail\x18\a \x01(\tR\x06detail\x12+\n" +
-	"\x05trace\x18\b \x03(\v2\x15.arbiter.v1.TraceStepR\x05trace\"\xb6\x01\n" +
+	"\x06detail\x18\a \x01(\tR\x06detail\x127\n" +
+	"\tarbitrace\x18\b \x03(\v2\x19.arbiter.v1.ArbitraceStepR\tarbitrace\"\xb6\x01\n" +
 	"\x13StartSessionRequest\x12\x1b\n" +
 	"\tbundle_id\x18\x01 \x01(\tR\bbundleId\x123\n" +
 	"\benvelope\x18\x02 \x01(\v2\x17.google.protobuf.StructR\benvelope\x12,\n" +
@@ -7264,7 +7305,7 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x02 \x01(\tR\trequestId\"\x90\x02\n" +
+	"request_id\x18\x02 \x01(\tR\trequestId\"\xe4\x02\n" +
 	"\x12RunSessionResponse\x125\n" +
 	"\boutcomes\x18\x01 \x03(\v2\x19.arbiter.v1.ExpertOutcomeR\boutcomes\x12,\n" +
 	"\x05facts\x18\x02 \x03(\v2\x16.arbiter.v1.ExpertFactR\x05facts\x12>\n" +
@@ -7272,7 +7313,9 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\vstop_reason\x18\x04 \x01(\tR\n" +
 	"stopReason\x12\x16\n" +
 	"\x06rounds\x18\x05 \x01(\rR\x06rounds\x12\x1c\n" +
-	"\tmutations\x18\x06 \x01(\rR\tmutations\"a\n" +
+	"\tmutations\x18\x06 \x01(\rR\tmutations\x12'\n" +
+	"\x0fstable_deferred\x18\a \x01(\bR\x0estableDeferred\x12)\n" +
+	"\x10temporal_pending\x18\b \x01(\bR\x0ftemporalPending\"a\n" +
 	"\x12AssertFactsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12,\n" +
@@ -7285,18 +7328,20 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12)\n" +
 	"\x05facts\x18\x02 \x03(\v2\x13.arbiter.v1.FactRefR\x05facts\"\x16\n" +
-	"\x14RetractFactsResponse\"7\n" +
-	"\x16GetSessionTraceRequest\x12\x1d\n" +
+	"\x14RetractFactsResponse\";\n" +
+	"\x1aGetSessionArbitraceRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\x95\x02\n" +
-	"\x17GetSessionTraceResponse\x125\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\xed\x02\n" +
+	"\x1bGetSessionArbitraceResponse\x125\n" +
 	"\boutcomes\x18\x01 \x03(\v2\x19.arbiter.v1.ExpertOutcomeR\boutcomes\x12,\n" +
 	"\x05facts\x18\x02 \x03(\v2\x16.arbiter.v1.ExpertFactR\x05facts\x12>\n" +
 	"\vactivations\x18\x03 \x03(\v2\x1c.arbiter.v1.ExpertActivationR\vactivations\x12\x1f\n" +
 	"\vstop_reason\x18\x04 \x01(\tR\n" +
 	"stopReason\x12\x16\n" +
 	"\x06rounds\x18\x05 \x01(\rR\x06rounds\x12\x1c\n" +
-	"\tmutations\x18\x06 \x01(\rR\tmutations\"4\n" +
+	"\tmutations\x18\x06 \x01(\rR\tmutations\x12'\n" +
+	"\x0fstable_deferred\x18\a \x01(\bR\x0estableDeferred\x12)\n" +
+	"\x10temporal_pending\x18\b \x01(\bR\x0ftemporalPending\"4\n" +
 	"\x13CloseSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"\x16\n" +
@@ -7350,7 +7395,7 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\x1cCAPABILITY_OWNER_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15CAPABILITY_OWNER_CORE\x10\x01\x12\x19\n" +
 	"\x15CAPABILITY_OWNER_HOST\x10\x02\x12\x1b\n" +
-	"\x17CAPABILITY_OWNER_PLUGIN\x10\x032\xa2\x0e\n" +
+	"\x17CAPABILITY_OWNER_PLUGIN\x10\x032\xae\x0e\n" +
 	"\x0eArbiterService\x12T\n" +
 	"\rPublishBundle\x12 .arbiter.v1.PublishBundleRequest\x1a!.arbiter.v1.PublishBundleResponse\x12N\n" +
 	"\vListBundles\x12\x1e.arbiter.v1.ListBundlesRequest\x1a\x1f.arbiter.v1.ListBundlesResponse\x12W\n" +
@@ -7367,8 +7412,8 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"RunSession\x12\x1d.arbiter.v1.RunSessionRequest\x1a\x1e.arbiter.v1.RunSessionResponse\x12N\n" +
 	"\vAssertFacts\x12\x1e.arbiter.v1.AssertFactsRequest\x1a\x1f.arbiter.v1.AssertFactsResponse\x12Q\n" +
-	"\fRetractFacts\x12\x1f.arbiter.v1.RetractFactsRequest\x1a .arbiter.v1.RetractFactsResponse\x12Z\n" +
-	"\x0fGetSessionTrace\x12\".arbiter.v1.GetSessionTraceRequest\x1a#.arbiter.v1.GetSessionTraceResponse\x12Q\n" +
+	"\fRetractFacts\x12\x1f.arbiter.v1.RetractFactsRequest\x1a .arbiter.v1.RetractFactsResponse\x12f\n" +
+	"\x13GetSessionArbitrace\x12&.arbiter.v1.GetSessionArbitraceRequest\x1a'.arbiter.v1.GetSessionArbitraceResponse\x12Q\n" +
 	"\fCloseSession\x12\x1f.arbiter.v1.CloseSessionRequest\x1a .arbiter.v1.CloseSessionResponse\x12Z\n" +
 	"\x0fSetRuleOverride\x12\".arbiter.v1.SetRuleOverrideRequest\x1a#.arbiter.v1.SetRuleOverrideResponse\x12Z\n" +
 	"\x0fSetFlagOverride\x12\".arbiter.v1.SetFlagOverrideRequest\x1a#.arbiter.v1.SetFlagOverrideResponse\x12f\n" +
@@ -7467,7 +7512,7 @@ var file_arbiter_v1_service_proto_goTypes = []any{
 	(*FlagRuleOverrideEntry)(nil),          // 64: arbiter.v1.FlagRuleOverrideEntry
 	(*StrategyOverrideEntry)(nil),          // 65: arbiter.v1.StrategyOverrideEntry
 	(*OverrideEvent)(nil),                  // 66: arbiter.v1.OverrideEvent
-	(*TraceStep)(nil),                      // 67: arbiter.v1.TraceStep
+	(*ArbitraceStep)(nil),                  // 67: arbiter.v1.ArbitraceStep
 	(*RuleMatch)(nil),                      // 68: arbiter.v1.RuleMatch
 	(*EvaluateRulesRequest)(nil),           // 69: arbiter.v1.EvaluateRulesRequest
 	(*EvaluateRulesResponse)(nil),          // 70: arbiter.v1.EvaluateRulesResponse
@@ -7487,8 +7532,8 @@ var file_arbiter_v1_service_proto_goTypes = []any{
 	(*FactRef)(nil),                        // 84: arbiter.v1.FactRef
 	(*RetractFactsRequest)(nil),            // 85: arbiter.v1.RetractFactsRequest
 	(*RetractFactsResponse)(nil),           // 86: arbiter.v1.RetractFactsResponse
-	(*GetSessionTraceRequest)(nil),         // 87: arbiter.v1.GetSessionTraceRequest
-	(*GetSessionTraceResponse)(nil),        // 88: arbiter.v1.GetSessionTraceResponse
+	(*GetSessionArbitraceRequest)(nil),     // 87: arbiter.v1.GetSessionArbitraceRequest
+	(*GetSessionArbitraceResponse)(nil),    // 88: arbiter.v1.GetSessionArbitraceResponse
 	(*CloseSessionRequest)(nil),            // 89: arbiter.v1.CloseSessionRequest
 	(*CloseSessionResponse)(nil),           // 90: arbiter.v1.CloseSessionResponse
 	(*SetRuleOverrideRequest)(nil),         // 91: arbiter.v1.SetRuleOverrideRequest
@@ -7596,17 +7641,17 @@ var file_arbiter_v1_service_proto_depIdxs = []int32{
 	100, // 88: arbiter.v1.RuleMatch.params:type_name -> google.protobuf.Struct
 	100, // 89: arbiter.v1.EvaluateRulesRequest.context:type_name -> google.protobuf.Struct
 	68,  // 90: arbiter.v1.EvaluateRulesResponse.matched:type_name -> arbiter.v1.RuleMatch
-	67,  // 91: arbiter.v1.EvaluateRulesResponse.trace:type_name -> arbiter.v1.TraceStep
+	67,  // 91: arbiter.v1.EvaluateRulesResponse.arbitrace:type_name -> arbiter.v1.ArbitraceStep
 	100, // 92: arbiter.v1.ResolveFlagRequest.context:type_name -> google.protobuf.Struct
 	100, // 93: arbiter.v1.ResolveFlagResponse.values:type_name -> google.protobuf.Struct
-	67,  // 94: arbiter.v1.ResolveFlagResponse.trace:type_name -> arbiter.v1.TraceStep
+	67,  // 94: arbiter.v1.ResolveFlagResponse.arbitrace:type_name -> arbiter.v1.ArbitraceStep
 	100, // 95: arbiter.v1.EvaluateStrategyRequest.context:type_name -> google.protobuf.Struct
 	100, // 96: arbiter.v1.EvaluateStrategyResponse.params:type_name -> google.protobuf.Struct
-	67,  // 97: arbiter.v1.EvaluateStrategyResponse.trace:type_name -> arbiter.v1.TraceStep
+	67,  // 97: arbiter.v1.EvaluateStrategyResponse.arbitrace:type_name -> arbiter.v1.ArbitraceStep
 	100, // 98: arbiter.v1.ExpertFact.fields:type_name -> google.protobuf.Struct
 	100, // 99: arbiter.v1.ExpertOutcome.params:type_name -> google.protobuf.Struct
 	100, // 100: arbiter.v1.ExpertActivation.params:type_name -> google.protobuf.Struct
-	67,  // 101: arbiter.v1.ExpertActivation.trace:type_name -> arbiter.v1.TraceStep
+	67,  // 101: arbiter.v1.ExpertActivation.arbitrace:type_name -> arbiter.v1.ArbitraceStep
 	100, // 102: arbiter.v1.StartSessionRequest.envelope:type_name -> google.protobuf.Struct
 	75,  // 103: arbiter.v1.StartSessionRequest.facts:type_name -> arbiter.v1.ExpertFact
 	76,  // 104: arbiter.v1.RunSessionResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
@@ -7614,9 +7659,9 @@ var file_arbiter_v1_service_proto_depIdxs = []int32{
 	77,  // 106: arbiter.v1.RunSessionResponse.activations:type_name -> arbiter.v1.ExpertActivation
 	75,  // 107: arbiter.v1.AssertFactsRequest.facts:type_name -> arbiter.v1.ExpertFact
 	84,  // 108: arbiter.v1.RetractFactsRequest.facts:type_name -> arbiter.v1.FactRef
-	76,  // 109: arbiter.v1.GetSessionTraceResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
-	75,  // 110: arbiter.v1.GetSessionTraceResponse.facts:type_name -> arbiter.v1.ExpertFact
-	77,  // 111: arbiter.v1.GetSessionTraceResponse.activations:type_name -> arbiter.v1.ExpertActivation
+	76,  // 109: arbiter.v1.GetSessionArbitraceResponse.outcomes:type_name -> arbiter.v1.ExpertOutcome
+	75,  // 110: arbiter.v1.GetSessionArbitraceResponse.facts:type_name -> arbiter.v1.ExpertFact
+	77,  // 111: arbiter.v1.GetSessionArbitraceResponse.activations:type_name -> arbiter.v1.ExpertActivation
 	101, // 112: arbiter.v1.SetRuleOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
 	102, // 113: arbiter.v1.SetRuleOverrideRequest.rollout:type_name -> google.protobuf.UInt32Value
 	101, // 114: arbiter.v1.SetFlagOverrideRequest.kill_switch:type_name -> google.protobuf.BoolValue
@@ -7638,7 +7683,7 @@ var file_arbiter_v1_service_proto_depIdxs = []int32{
 	80,  // 130: arbiter.v1.ArbiterService.RunSession:input_type -> arbiter.v1.RunSessionRequest
 	82,  // 131: arbiter.v1.ArbiterService.AssertFacts:input_type -> arbiter.v1.AssertFactsRequest
 	85,  // 132: arbiter.v1.ArbiterService.RetractFacts:input_type -> arbiter.v1.RetractFactsRequest
-	87,  // 133: arbiter.v1.ArbiterService.GetSessionTrace:input_type -> arbiter.v1.GetSessionTraceRequest
+	87,  // 133: arbiter.v1.ArbiterService.GetSessionArbitrace:input_type -> arbiter.v1.GetSessionArbitraceRequest
 	89,  // 134: arbiter.v1.ArbiterService.CloseSession:input_type -> arbiter.v1.CloseSessionRequest
 	91,  // 135: arbiter.v1.ArbiterService.SetRuleOverride:input_type -> arbiter.v1.SetRuleOverrideRequest
 	93,  // 136: arbiter.v1.ArbiterService.SetFlagOverride:input_type -> arbiter.v1.SetFlagOverrideRequest
@@ -7666,7 +7711,7 @@ var file_arbiter_v1_service_proto_depIdxs = []int32{
 	81,  // 158: arbiter.v1.ArbiterService.RunSession:output_type -> arbiter.v1.RunSessionResponse
 	83,  // 159: arbiter.v1.ArbiterService.AssertFacts:output_type -> arbiter.v1.AssertFactsResponse
 	86,  // 160: arbiter.v1.ArbiterService.RetractFacts:output_type -> arbiter.v1.RetractFactsResponse
-	88,  // 161: arbiter.v1.ArbiterService.GetSessionTrace:output_type -> arbiter.v1.GetSessionTraceResponse
+	88,  // 161: arbiter.v1.ArbiterService.GetSessionArbitrace:output_type -> arbiter.v1.GetSessionArbitraceResponse
 	90,  // 162: arbiter.v1.ArbiterService.CloseSession:output_type -> arbiter.v1.CloseSessionResponse
 	92,  // 163: arbiter.v1.ArbiterService.SetRuleOverride:output_type -> arbiter.v1.SetRuleOverrideResponse
 	94,  // 164: arbiter.v1.ArbiterService.SetFlagOverride:output_type -> arbiter.v1.SetFlagOverrideResponse

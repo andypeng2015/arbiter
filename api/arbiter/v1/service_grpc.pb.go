@@ -34,7 +34,7 @@ const (
 	ArbiterService_RunSession_FullMethodName          = "/arbiter.v1.ArbiterService/RunSession"
 	ArbiterService_AssertFacts_FullMethodName         = "/arbiter.v1.ArbiterService/AssertFacts"
 	ArbiterService_RetractFacts_FullMethodName        = "/arbiter.v1.ArbiterService/RetractFacts"
-	ArbiterService_GetSessionTrace_FullMethodName     = "/arbiter.v1.ArbiterService/GetSessionTrace"
+	ArbiterService_GetSessionArbitrace_FullMethodName = "/arbiter.v1.ArbiterService/GetSessionArbitrace"
 	ArbiterService_CloseSession_FullMethodName        = "/arbiter.v1.ArbiterService/CloseSession"
 	ArbiterService_SetRuleOverride_FullMethodName     = "/arbiter.v1.ArbiterService/SetRuleOverride"
 	ArbiterService_SetFlagOverride_FullMethodName     = "/arbiter.v1.ArbiterService/SetFlagOverride"
@@ -61,7 +61,7 @@ type ArbiterServiceClient interface {
 	RunSession(ctx context.Context, in *RunSessionRequest, opts ...grpc.CallOption) (*RunSessionResponse, error)
 	AssertFacts(ctx context.Context, in *AssertFactsRequest, opts ...grpc.CallOption) (*AssertFactsResponse, error)
 	RetractFacts(ctx context.Context, in *RetractFactsRequest, opts ...grpc.CallOption) (*RetractFactsResponse, error)
-	GetSessionTrace(ctx context.Context, in *GetSessionTraceRequest, opts ...grpc.CallOption) (*GetSessionTraceResponse, error)
+	GetSessionArbitrace(ctx context.Context, in *GetSessionArbitraceRequest, opts ...grpc.CallOption) (*GetSessionArbitraceResponse, error)
 	CloseSession(ctx context.Context, in *CloseSessionRequest, opts ...grpc.CallOption) (*CloseSessionResponse, error)
 	SetRuleOverride(ctx context.Context, in *SetRuleOverrideRequest, opts ...grpc.CallOption) (*SetRuleOverrideResponse, error)
 	SetFlagOverride(ctx context.Context, in *SetFlagOverrideRequest, opts ...grpc.CallOption) (*SetFlagOverrideResponse, error)
@@ -245,10 +245,10 @@ func (c *arbiterServiceClient) RetractFacts(ctx context.Context, in *RetractFact
 	return out, nil
 }
 
-func (c *arbiterServiceClient) GetSessionTrace(ctx context.Context, in *GetSessionTraceRequest, opts ...grpc.CallOption) (*GetSessionTraceResponse, error) {
+func (c *arbiterServiceClient) GetSessionArbitrace(ctx context.Context, in *GetSessionArbitraceRequest, opts ...grpc.CallOption) (*GetSessionArbitraceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetSessionTraceResponse)
-	err := c.cc.Invoke(ctx, ArbiterService_GetSessionTrace_FullMethodName, in, out, cOpts...)
+	out := new(GetSessionArbitraceResponse)
+	err := c.cc.Invoke(ctx, ArbiterService_GetSessionArbitrace_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ type ArbiterServiceServer interface {
 	RunSession(context.Context, *RunSessionRequest) (*RunSessionResponse, error)
 	AssertFacts(context.Context, *AssertFactsRequest) (*AssertFactsResponse, error)
 	RetractFacts(context.Context, *RetractFactsRequest) (*RetractFactsResponse, error)
-	GetSessionTrace(context.Context, *GetSessionTraceRequest) (*GetSessionTraceResponse, error)
+	GetSessionArbitrace(context.Context, *GetSessionArbitraceRequest) (*GetSessionArbitraceResponse, error)
 	CloseSession(context.Context, *CloseSessionRequest) (*CloseSessionResponse, error)
 	SetRuleOverride(context.Context, *SetRuleOverrideRequest) (*SetRuleOverrideResponse, error)
 	SetFlagOverride(context.Context, *SetFlagOverrideRequest) (*SetFlagOverrideResponse, error)
@@ -385,8 +385,8 @@ func (UnimplementedArbiterServiceServer) AssertFacts(context.Context, *AssertFac
 func (UnimplementedArbiterServiceServer) RetractFacts(context.Context, *RetractFactsRequest) (*RetractFactsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RetractFacts not implemented")
 }
-func (UnimplementedArbiterServiceServer) GetSessionTrace(context.Context, *GetSessionTraceRequest) (*GetSessionTraceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetSessionTrace not implemented")
+func (UnimplementedArbiterServiceServer) GetSessionArbitrace(context.Context, *GetSessionArbitraceRequest) (*GetSessionArbitraceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSessionArbitrace not implemented")
 }
 func (UnimplementedArbiterServiceServer) CloseSession(context.Context, *CloseSessionRequest) (*CloseSessionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CloseSession not implemented")
@@ -680,20 +680,20 @@ func _ArbiterService_RetractFacts_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ArbiterService_GetSessionTrace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetSessionTraceRequest)
+func _ArbiterService_GetSessionArbitrace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSessionArbitraceRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ArbiterServiceServer).GetSessionTrace(ctx, in)
+		return srv.(ArbiterServiceServer).GetSessionArbitrace(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ArbiterService_GetSessionTrace_FullMethodName,
+		FullMethod: ArbiterService_GetSessionArbitrace_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ArbiterServiceServer).GetSessionTrace(ctx, req.(*GetSessionTraceRequest))
+		return srv.(ArbiterServiceServer).GetSessionArbitrace(ctx, req.(*GetSessionArbitraceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -848,8 +848,8 @@ var ArbiterService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ArbiterService_RetractFacts_Handler,
 		},
 		{
-			MethodName: "GetSessionTrace",
-			Handler:    _ArbiterService_GetSessionTrace_Handler,
+			MethodName: "GetSessionArbitrace",
+			Handler:    _ArbiterService_GetSessionArbitrace_Handler,
 		},
 		{
 			MethodName: "CloseSession",

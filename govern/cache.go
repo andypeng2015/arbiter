@@ -1,6 +1,9 @@
 package govern
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type flagResult struct {
 	variant string
@@ -16,6 +19,8 @@ type RequestCache struct {
 	ruleResults map[string]bool
 	flagResults map[string]flagResult
 	evalStack   map[string]bool
+	evalTime    time.Time
+	hasEvalTime bool
 }
 
 // NewRequestCache creates a per-request cache.
@@ -48,6 +53,18 @@ func (rc *RequestCache) NestedContext() map[string]any {
 		return nil
 	}
 	return rc.nestedCtx
+}
+
+// EvalTime returns the effective evaluation time for this request.
+func (rc *RequestCache) EvalTime() time.Time {
+	if rc == nil {
+		return time.Now().UTC()
+	}
+	if !rc.hasEvalTime {
+		rc.evalTime = resolveEvalTime(rc.ctx)
+		rc.hasEvalTime = true
+	}
+	return rc.evalTime
 }
 
 // EvalSegment evaluates a segment with memoization.
@@ -107,17 +124,17 @@ func (rc *RequestCache) PrerequisiteMet(name string) bool {
 	return false
 }
 
-// CheckPrerequisites verifies all prerequisites are met and records trace steps.
-func (rc *RequestCache) CheckPrerequisites(prereqs []string, trace *Trace) bool {
-	return rc.CheckPrerequisitesFor("", "", prereqs, trace)
+// CheckPrerequisites verifies all prerequisites are met and records arbitrace steps.
+func (rc *RequestCache) CheckPrerequisites(prereqs []string, arbitrace *Arbitrace) bool {
+	return rc.CheckPrerequisitesFor("", "", prereqs, arbitrace)
 }
 
-// CheckPrerequisitesFor verifies all prerequisites are met and records trace
+// CheckPrerequisitesFor verifies all prerequisites are met and records arbitrace
 // steps with a structured scope/subject.
-func (rc *RequestCache) CheckPrerequisitesFor(scope, subject string, prereqs []string, trace *Trace) bool {
+func (rc *RequestCache) CheckPrerequisitesFor(scope, subject string, prereqs []string, arbitrace *Arbitrace) bool {
 	for _, prereq := range prereqs {
 		ok := rc.PrerequisiteMet(prereq)
-		trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindRequires, prereq, "", ok, fmt.Sprintf("%s -> %v", prereq, ok))
+		arbitrace.AppendScoped(ArbitracePhaseGovernance, scope, subject, ArbitraceKindRequires, prereq, "", ok, fmt.Sprintf("%s -> %v", prereq, ok))
 		if !ok {
 			return false
 		}
@@ -128,25 +145,25 @@ func (rc *RequestCache) CheckPrerequisitesFor(scope, subject string, prereqs []s
 // CheckExclusions verifies no excluded rules matched. Returns false if any
 // exclusion matched. Also returns false if an excluded rule hasn't been
 // evaluated yet — we can't safely proceed without knowing.
-func (rc *RequestCache) CheckExclusions(excludes []string, trace *Trace) bool {
-	return rc.CheckExclusionsFor("", "", excludes, trace)
+func (rc *RequestCache) CheckExclusions(excludes []string, arbitrace *Arbitrace) bool {
+	return rc.CheckExclusionsFor("", "", excludes, arbitrace)
 }
 
-// CheckExclusionsFor verifies no excluded rules matched and records trace steps
+// CheckExclusionsFor verifies no excluded rules matched and records arbitrace steps
 // with a structured scope/subject.
-func (rc *RequestCache) CheckExclusionsFor(scope, subject string, excludes []string, trace *Trace) bool {
+func (rc *RequestCache) CheckExclusionsFor(scope, subject string, excludes []string, arbitrace *Arbitrace) bool {
 	if rc == nil {
 		return true
 	}
 	for _, excl := range excludes {
 		if _, evaluated := rc.ruleResults[excl]; !evaluated {
 			// Rule hasn't been evaluated yet — defer this rule until later
-			trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindExcludes, excl, "", false, fmt.Sprintf("%s not yet evaluated", excl))
+			arbitrace.AppendDeferredScoped(ArbitracePhaseGovernance, scope, subject, ArbitraceKindExcludes, excl, "", fmt.Sprintf("%s not yet evaluated", excl))
 			return false
 		}
 		matched := rc.ruleResults[excl]
 		ok := !matched
-		trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindExcludes, excl, "", ok, fmt.Sprintf("%s matched=%v", excl, matched))
+		arbitrace.AppendScoped(ArbitracePhaseGovernance, scope, subject, ArbitraceKindExcludes, excl, "", ok, fmt.Sprintf("%s matched=%v", excl, matched))
 		if !ok {
 			return false
 		}

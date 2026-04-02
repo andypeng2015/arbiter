@@ -86,7 +86,7 @@ For maximum readability, use one house style across the repo:
 
 Across modalities, keep clause order predictable:
 
-- Governance prelude first: `kill_switch`, modality-specific prereq or stability clauses, then `rollout`
+- Governance prelude first: `kill_switch`, `active_from` / `active_until`, modality-specific prereq or stability clauses, then `rollout`
 - Matching or binding second: `when`, `segment`, candidate conditions, or fact bindings
 - Effect last: `then`, `otherwise`, `assert`, `emit`, or runtime routing
 - If a clause does not apply to a modality, skip it; do not reorder the rest
@@ -127,6 +127,8 @@ Rules support governance keywords directly:
 ```arb
 rule EnhancedRiskCheck priority 1 {
     kill_switch on
+    active_from 2026-01-01T00:00:00Z
+    active_until 2026-02-01T00:00:00Z
     requires BasicRiskCheck
     rollout 20
     when segment high_risk {
@@ -164,6 +166,7 @@ outcome CheckoutPath {
 
 strategy CheckoutRouting returns CheckoutPath {
     kill_switch off
+    active_from 2026-01-01T00:00:00Z
     when {
         risk.requires_review == true
     } then Manual {
@@ -178,7 +181,9 @@ strategy CheckoutRouting returns CheckoutPath {
 }
 ```
 
-They reuse the same conditions, segments, rollouts, and trace machinery as rules, but the evaluation model recognizes one named shape and then takes the first matching governed path with an explicit fallback.
+They reuse the same conditions, segments, rollouts, and arbitrace machinery as rules, but the evaluation model recognizes one named shape and then takes the first matching governed path with an explicit fallback.
+
+`active_from` is inclusive. `active_until` is exclusive. The same structural window works on governed rules, strategy candidates, and flag rules, and uses `__now` if provided in the request context; otherwise Arbiter uses the current UTC time.
 
 ### Feature Flags
 
@@ -194,12 +199,13 @@ flag checkout_v2 type multivariate default "control" {
         layout: "single_page",
     }
 
+    active_from 2026-01-01T00:00:00Z
     when beta_users then "treatment"
     rollout 50 when { user.country == "US" } then "treatment"
 }
 ```
 
-Schema validation, secret references, request-level caching, hot reload, HTTP serving, explainability traces — all come along.
+Schema validation, secret references, request-level caching, hot reload, HTTP serving, explainability arbitraces — all come along.
 
 ### Expert Inference
 
@@ -240,9 +246,9 @@ Expert controls:
 - `no_loop` prevents a rule from re-firing solely because of its own mutations
 - `activation_group name` allows only the first matching rule in a group to fire per round
 
-The session runs with guardrails — configurable max rounds and max mutations, context cancellation. Every firing is recorded in the activation trace.
+The session runs with guardrails — configurable max rounds and max mutations, context cancellation. Every firing is recorded in the activation arbitrace.
 
-`modify` and `retract` are reversible overlays, not one-way destructive writes. If the supporting rule stops matching, the underlying fact view is recomputed and the overlay falls away. That can produce a steady-state no-op activation in the trace while a modifier or retractor remains active.
+`modify` and `retract` are reversible overlays, not one-way destructive writes. If the supporting rule stops matching, the underlying fact view is recomputed and the overlay falls away. That can produce a steady-state no-op activation in the arbitrace while a modifier or retractor remains active.
 
 Temporal windows are available directly in the expert context. Facts expose `__round`, `__asserted_at`, and `__age_seconds`, and the session context exposes `current_round` plus `__now`. That lets long-lived sessions write age-based rules without extra scheduler glue:
 
@@ -417,11 +423,11 @@ Arbiters are always killable by default. There is no `kill_switch` keyword insid
 
 ### Explainability
 
-Every evaluation produces an inspectable decision trace. Rules, flags, strategies, and expert sessions now share the same trace nouns: `phase`, `scope`, `subject`, `kind`, `check`, `result`, `detail`.
+Every evaluation produces an inspectable decision arbitrace. Rules, flags, strategies, and expert sessions now share the same arbitrace nouns: `phase`, `scope`, `subject`, `kind`, `check`, `result`, `detail`, `disposition`.
 
 ```go
 // Stateless rules
-matched, trace, _ := arbiter.EvalGoverned(ruleset, dc, segments, ctx)
+matched, arbitrace, _ := arbiter.EvalGoverned(ruleset, dc, segments, ctx)
 
 // Flags
 eval := flags.Explain("checkout_v2", ctx)
@@ -433,6 +439,12 @@ result, _ := strategies.Evaluate("CheckoutRouting", ctx)
 result, _ := session.Run(ctx)
 result.Activations // every firing, every round, what changed, and why it was allowed
 ```
+
+The canonical wire and JSON field name is now `arbitrace`, and the shared protobuf step type is `ArbitraceStep`.
+
+`result` remains the legacy bool surface for compatibility. `disposition` is the canonical Arbiter outcome for a step: `passed`, `blocked`, or `deferred`. Conservative deferral therefore stays visible instead of collapsing into a generic false.
+
+Stateless temporal eligibility is first-class too: `active_from` and `active_until` record their own governance steps instead of disappearing into generic conditions.
 
 Rules, flags, and strategies preserve the legacy `check/result/detail` shape for compatibility, but also carry structured semantics:
 
@@ -446,6 +458,7 @@ Rules, flags, and strategies preserve the legacy `check/result/detail` shape for
     "kind": "requires",
     "target": "BasicRiskCheck",
     "result": true,
+    "disposition": "passed",
     "detail": "BasicRiskCheck -> true"
   },
   {
@@ -456,6 +469,7 @@ Rules, flags, and strategies preserve the legacy `check/result/detail` shape for
     "kind": "segment",
     "target": "high_risk",
     "result": true,
+    "disposition": "passed",
     "detail": "model.risk_score > 0.8 -> true"
   },
   {
@@ -465,14 +479,17 @@ Rules, flags, and strategies preserve the legacy `check/result/detail` shape for
     "subject": "EnhancedRiskCheck",
     "kind": "rollout",
     "result": false,
+    "disposition": "blocked",
     "detail": "subject_key=user.id, subject=\"user_123\", namespace=\"bundle:rule:EnhancedRiskCheck\", bucket=5700, threshold=2000, resolution=10000"
   }
 ]
 ```
 
-Expert activations now carry the same trace structure per firing, so a session snapshot tells you both what mutated and which governance/match checks made that mutation eligible.
+Expert activations now carry the same arbitrace structure per firing, so a session snapshot tells you both what mutated and which governance/match checks made that mutation eligible.
 
-That same `TraceStep` shape now flows through gRPC responses too: `EvaluateRules`, `ResolveFlag`, `EvaluateStrategy`, `RunSession`, and `GetSessionTrace` all expose the structured fields instead of flattening back to `check/result/detail` only.
+Expert session snapshots and `RunSession` responses also expose `stable_deferred` and `temporal_pending`, so callers can tell whether the engine is still conservatively waiting on quiescence or temporal maturation when a run stops early.
+
+That same `ArbitraceStep` shape now flows through gRPC responses too: `EvaluateRules`, `ResolveFlag`, `EvaluateStrategy`, `RunSession`, and `GetSessionArbitrace` all expose the structured fields instead of flattening back to `check/result/detail` only.
 
 ### Runtime Overrides
 
@@ -516,7 +533,7 @@ service ArbiterService {
     rpc RunSession(...)         // advance until quiescence / guardrail
     rpc AssertFacts(...)        // insert or update working-memory facts
     rpc RetractFacts(...)       // remove working-memory facts
-    rpc GetSessionTrace(...)    // current facts, outcomes, activations
+    rpc GetSessionArbitrace(...)    // current facts, outcomes, activations
     rpc CloseSession(...)       // deterministically dispose of a live session
     rpc SetRuleOverride(...)    // runtime kill switch / rollout changes
     rpc SetFlagOverride(...)    // runtime flag kill switch
@@ -554,7 +571,7 @@ sink, _ := audit.NewJSONLSink("/var/log/arbiter/decisions.jsonl")
 server := grpcserver.NewServer(registry, overrides, sink)
 ```
 
-Each audit event captures the full context: matched rules, flag resolutions, expert session outcomes, governance trace steps, timestamps, request IDs, and bundle IDs. Override mutations also preserve explicit `kill_switch_state`, and expert activations include their per-firing trace in the audited payload.
+Each audit event captures the full context: matched rules, flag resolutions, expert session outcomes, governance arbitrace steps, timestamps, request IDs, and bundle IDs. Override mutations also preserve explicit `kill_switch_state`, and expert activations include their per-firing arbitrace in the audited payload.
 
 Bundle publishes, activations, rollbacks, and override mutations are also emitted as audit events.
 
@@ -688,8 +705,8 @@ dc := arbiter.DataFromMap(data, prog)
 // Fast path — no governance
 matched, _ := arbiter.Eval(prog, dc)
 
-// Governed path — segments, kill switches, rollouts, prerequisites, trace
-matched, trace, _ := arbiter.EvalGoverned(prog, dc, prog.Segments, ctx)
+// Governed path — segments, kill switches, rollouts, prerequisites, arbitrace
+matched, arbitrace, _ := arbiter.EvalGoverned(prog, dc, prog.Segments, ctx)
 
 // Selective evaluation — filter by tags
 matched, _ = arbiter.Eval(prog, dc, arbiter.WithTags("fraud"))
@@ -1199,9 +1216,9 @@ intern/        Constant pool — deduplicates strings and numbers across all rul
 compiler/      CST → IR → bytecode compiler (with constant folding), table compilation, regex pre-compilation
 ir/            Intermediate representation: declarations, expressions, tables, lookup, optimization passes
 vm/            Stack-based bytecode VM (fixed 256-element stack, thread-safe string pool, table lookup)
-govern/        Governance primitives: segments, rollouts, kill switches, prerequisites, trace
+govern/        Governance primitives: segments, rollouts, kill switches, prerequisites, arbitrace
 flags/         Feature flags: variants, schema validation, secret references, hot reload
-strategy/      Native decision trees: exactly-one governed routing with trace
+strategy/      Native decision trees: exactly-one governed routing with arbitrace
 expert/        Forward-chaining inference: working memory, assert/emit/retract/modify, temporal constraints
 workflow/      Multi-arbiter chaining: outcome→fact mapping, topological ordering, delivery
 audit/         Durable decision logging (Sink interface, JSONL default)
@@ -1251,7 +1268,7 @@ type Order struct {
     Region string  `arb:"order.region"`
 }
 
-matched, trace, err := arbiter.EvalGovernedTyped(compiled, Order{Total: 150, Region: "US"})
+matched, arbitrace, err := arbiter.EvalGovernedTyped(compiled, Order{Total: 150, Region: "US"})
 ```
 
 ### Include Resolver
@@ -1360,7 +1377,7 @@ What you can rely on:
 - Lookup tables for data-driven decisions without rule explosion
 - Rule tagging with selective evaluation (`WithTags`)
 - Feature flags, strategies, expert inference, continuous arbiters
-- Governance primitives: segments, rollouts, kill switches, prerequisites, traces
+- Governance primitives: segments, rollouts, kill switches, prerequisites, arbitraces
 - Exact decimal arithmetic with 19 unit dimensions (85+ symbols)
 - gRPC server with Prometheus metrics, structured logging (`slog`), OpenTelemetry traces
 - Full LSP: diagnostics, completions, hover, go-to-def, references, rename, symbols, formatting, semantic highlighting, code actions, multi-file diagnostics

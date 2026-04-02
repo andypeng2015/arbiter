@@ -353,10 +353,10 @@ class ArbiterClient:
             service_pb2.RetractFactsRequest(session_id=session_id, facts=items),
         )
 
-    def get_session_trace(self, session_id: str) -> service_pb2.GetSessionTraceResponse:
+    def get_session_arbitrace(self, session_id: str) -> service_pb2.GetSessionArbitraceResponse:
         return self._invoke(
-            self.stub.GetSessionTrace,
-            service_pb2.GetSessionTraceRequest(session_id=session_id),
+            self.stub.GetSessionArbitrace,
+            service_pb2.GetSessionArbitraceRequest(session_id=session_id),
         )
 
     def close_session(self, session_id: str) -> service_pb2.CloseSessionResponse:

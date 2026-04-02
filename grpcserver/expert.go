@@ -122,16 +122,16 @@ func (s *Server) RetractFacts(_ context.Context, req *arbiterv1.RetractFactsRequ
 	return &arbiterv1.RetractFactsResponse{}, nil
 }
 
-// GetSessionTrace returns the current expert session state.
-func (s *Server) GetSessionTrace(_ context.Context, req *arbiterv1.GetSessionTraceRequest) (*arbiterv1.GetSessionTraceResponse, error) {
+// GetSessionArbitrace returns the current expert session state.
+func (s *Server) GetSessionArbitrace(_ context.Context, req *arbiterv1.GetSessionArbitraceRequest) (*arbiterv1.GetSessionArbitraceResponse, error) {
 	handle, err := s.lockSession(req.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
 	defer handle.mu.Unlock()
-	resp, err := protoTraceSnapshot(handle.Session.Snapshot())
+	resp, err := protoArbitraceSnapshot(handle.Session.Snapshot())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "marshal session trace: %v", err)
+		return nil, status.Errorf(codes.Internal, "marshal session arbitrace: %v", err)
 	}
 	return resp, nil
 }
@@ -215,16 +215,18 @@ func protoSessionResult(result expert.Result) (*arbiterv1.RunSessionResponse, er
 		return nil, err
 	}
 	return &arbiterv1.RunSessionResponse{
-		Outcomes:    outcomes,
-		Facts:       facts,
-		Activations: activations,
-		StopReason:  string(result.StopReason),
-		Rounds:      uint32(result.Rounds),
-		Mutations:   uint32(result.Mutations),
+		Outcomes:        outcomes,
+		Facts:           facts,
+		Activations:     activations,
+		StopReason:      string(result.StopReason),
+		Rounds:          uint32(result.Rounds),
+		Mutations:       uint32(result.Mutations),
+		StableDeferred:  result.StableDeferred,
+		TemporalPending: result.TemporalPending,
 	}, nil
 }
 
-func protoTraceSnapshot(result expert.Result) (*arbiterv1.GetSessionTraceResponse, error) {
+func protoArbitraceSnapshot(result expert.Result) (*arbiterv1.GetSessionArbitraceResponse, error) {
 	outcomes, err := protoOutcomes(result.Outcomes)
 	if err != nil {
 		return nil, err
@@ -237,13 +239,15 @@ func protoTraceSnapshot(result expert.Result) (*arbiterv1.GetSessionTraceRespons
 	if err != nil {
 		return nil, err
 	}
-	return &arbiterv1.GetSessionTraceResponse{
-		Outcomes:    outcomes,
-		Facts:       facts,
-		Activations: activations,
-		StopReason:  string(result.StopReason),
-		Rounds:      uint32(result.Rounds),
-		Mutations:   uint32(result.Mutations),
+	return &arbiterv1.GetSessionArbitraceResponse{
+		Outcomes:        outcomes,
+		Facts:           facts,
+		Activations:     activations,
+		StopReason:      string(result.StopReason),
+		Rounds:          uint32(result.Rounds),
+		Mutations:       uint32(result.Mutations),
+		StableDeferred:  result.StableDeferred,
+		TemporalPending: result.TemporalPending,
 	}, nil
 }
 
@@ -287,14 +291,14 @@ func protoActivations(items []expert.Activation) ([]*arbiterv1.ExpertActivation,
 			return nil, err
 		}
 		out = append(out, &arbiterv1.ExpertActivation{
-			Round:   uint32(item.Round),
-			Rule:    item.Rule,
-			Kind:    string(item.Kind),
-			Target:  item.Target,
-			Params:  params,
-			Changed: item.Changed,
-			Detail:  item.Detail,
-			Trace:   protoTrace(item.Trace),
+			Round:     uint32(item.Round),
+			Rule:      item.Rule,
+			Kind:      string(item.Kind),
+			Target:    item.Target,
+			Params:    params,
+			Changed:   item.Changed,
+			Detail:    item.Detail,
+			Arbitrace: protoArbitrace(item.Arbitrace),
 		})
 	}
 	return out, nil
@@ -302,13 +306,15 @@ func protoActivations(items []expert.Activation) ([]*arbiterv1.ExpertActivation,
 
 func auditExpertDecision(sessionID string, result expert.Result) *audit.ExpertDecision {
 	decision := &audit.ExpertDecision{
-		SessionID:   sessionID,
-		StopReason:  string(result.StopReason),
-		Rounds:      result.Rounds,
-		Mutations:   result.Mutations,
-		Outcomes:    make([]audit.ExpertOutcome, 0, len(result.Outcomes)),
-		Facts:       make([]audit.ExpertFact, 0, len(result.Facts)),
-		Activations: make([]audit.ExpertActivation, 0, len(result.Activations)),
+		SessionID:       sessionID,
+		StopReason:      string(result.StopReason),
+		Rounds:          result.Rounds,
+		Mutations:       result.Mutations,
+		StableDeferred:  result.StableDeferred,
+		TemporalPending: result.TemporalPending,
+		Outcomes:        make([]audit.ExpertOutcome, 0, len(result.Outcomes)),
+		Facts:           make([]audit.ExpertFact, 0, len(result.Facts)),
+		Activations:     make([]audit.ExpertActivation, 0, len(result.Activations)),
 	}
 	for _, outcome := range result.Outcomes {
 		decision.Outcomes = append(decision.Outcomes, audit.ExpertOutcome{
@@ -327,14 +333,14 @@ func auditExpertDecision(sessionID string, result expert.Result) *audit.ExpertDe
 	}
 	for _, activation := range result.Activations {
 		decision.Activations = append(decision.Activations, audit.ExpertActivation{
-			Round:   activation.Round,
-			Rule:    activation.Rule,
-			Kind:    string(activation.Kind),
-			Target:  activation.Target,
-			Params:  activation.Params,
-			Changed: activation.Changed,
-			Detail:  activation.Detail,
-			Trace:   append([]govern.TraceStep(nil), activation.Trace...),
+			Round:     activation.Round,
+			Rule:      activation.Rule,
+			Kind:      string(activation.Kind),
+			Target:    activation.Target,
+			Params:    activation.Params,
+			Changed:   activation.Changed,
+			Detail:    activation.Detail,
+			Arbitrace: append([]govern.ArbitraceStep(nil), activation.Arbitrace...),
 		})
 	}
 	return decision

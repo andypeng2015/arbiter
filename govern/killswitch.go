@@ -43,31 +43,31 @@ func ResolveKillSwitch(declared, declaredOn bool, override *bool) KillSwitchDeci
 	}
 }
 
-// Record appends the effective kill-switch decision to the trace and reports
+// Record appends the effective kill-switch decision to the arbitrace and reports
 // whether evaluation should be skipped.
-func (d KillSwitchDecision) Record(trace *Trace, check string) bool {
-	return d.RecordScoped(trace, "", "", check)
+func (d KillSwitchDecision) Record(arbitrace *Arbitrace, check string) bool {
+	return d.RecordScoped(arbitrace, "", "", check)
 }
 
-// RecordScoped appends the effective kill-switch decision to the trace with
+// RecordScoped appends the effective kill-switch decision to the arbitrace with
 // structured scope/subject metadata and reports whether evaluation should be
 // skipped.
-func (d KillSwitchDecision) RecordScoped(trace *Trace, scope, subject, check string) bool {
+func (d KillSwitchDecision) RecordScoped(arbitrace *Arbitrace, scope, subject, check string) bool {
 	if d.Enabled {
-		trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindKillSwitch, "", check, true, d.Detail)
+		arbitrace.AppendScoped(ArbitracePhaseGovernance, scope, subject, ArbitraceKindKillSwitch, "", check, true, d.Detail)
 		return true
 	}
 	if d.Explicit {
-		trace.AppendScoped(TracePhaseGovernance, scope, subject, TraceKindKillSwitch, "", check, false, d.Detail)
+		arbitrace.AppendScoped(ArbitracePhaseGovernance, scope, subject, ArbitraceKindKillSwitch, "", check, false, d.Detail)
 	}
 	return false
 }
 
 // IsKillSwitched reports whether evaluation should be skipped.
-func IsKillSwitched(enabled bool, trace *Trace) bool {
+func IsKillSwitched(enabled bool, arbitrace *Arbitrace) bool {
 	if !enabled {
 		return false
 	}
-	trace.Append("kill_switch", true, "outcome is kill-switched")
+	arbitrace.Append("kill_switch", true, "outcome is kill-switched")
 	return true
 }

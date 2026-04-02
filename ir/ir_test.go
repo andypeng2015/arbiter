@@ -238,6 +238,63 @@ strategy CheckoutRouting returns CheckoutPath {
 	}
 }
 
+func TestLowerCollectsActiveWindow(t *testing.T) {
+	program := lowerSource(t, `
+outcome CheckoutPath {
+	target: string
+}
+
+rule Windowed {
+	active_from 2026-01-01T00:00:00Z
+	active_until 2026-02-01T00:00:00Z
+	when { true }
+	then Allow {}
+}
+
+strategy CheckoutRouting returns CheckoutPath {
+	active_from 2026-03-01T00:00:00Z
+	active_until 2026-04-01T00:00:00Z
+	when { true } then Canary {
+		target: "canary"
+	}
+
+	else Stable {
+		target: "stable"
+	}
+}
+
+flag checkout_v2 type boolean default false {
+	active_from 2026-05-01T00:00:00Z
+	active_until 2026-06-01T00:00:00Z
+	when { true } then true
+}
+`)
+
+	rule := program.Rules[0]
+	if !rule.ActiveWindow.HasFrom || rule.ActiveWindow.From != "2026-01-01T00:00:00Z" {
+		t.Fatalf("unexpected rule active_from: %+v", rule.ActiveWindow)
+	}
+	if !rule.ActiveWindow.HasUntil || rule.ActiveWindow.Until != "2026-02-01T00:00:00Z" {
+		t.Fatalf("unexpected rule active_until: %+v", rule.ActiveWindow)
+	}
+
+	candidate := program.Strategies[0].Candidates[0]
+	if !candidate.ActiveWindow.HasFrom || candidate.ActiveWindow.From != "2026-03-01T00:00:00Z" {
+		t.Fatalf("unexpected candidate active_from: %+v", candidate.ActiveWindow)
+	}
+	if !candidate.ActiveWindow.HasUntil || candidate.ActiveWindow.Until != "2026-04-01T00:00:00Z" {
+		t.Fatalf("unexpected candidate active_until: %+v", candidate.ActiveWindow)
+	}
+
+	flagRule := program.Flags[0].Rules[0]
+	if !flagRule.ActiveWindow.HasFrom || flagRule.ActiveWindow.From != "2026-05-01T00:00:00Z" {
+		t.Fatalf("unexpected flag rule active_from: %+v", flagRule.ActiveWindow)
+	}
+	if !flagRule.ActiveWindow.HasUntil || flagRule.ActiveWindow.Until != "2026-06-01T00:00:00Z" {
+		t.Fatalf("unexpected flag rule active_until: %+v", flagRule.ActiveWindow)
+	}
+}
+
 func TestLowerQuantityLiteral(t *testing.T) {
 	program := lowerSource(t, `rule HeatStress { when { reading.temperature > 28 C } then Alert {} }`)
 	found := false

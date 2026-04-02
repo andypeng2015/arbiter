@@ -310,8 +310,8 @@ func (s *Server) EvaluateRules(ctx context.Context, req *arbiterv1.EvaluateRules
 	ruleMatchesTotal.WithLabelValues(bundle.Name).Add(float64(len(matched)))
 
 	resp := &arbiterv1.EvaluateRulesResponse{
-		Matched: make([]*arbiterv1.RuleMatch, 0, len(matched)),
-		Trace:   protoTrace(trace.Steps),
+		Matched:   make([]*arbiterv1.RuleMatch, 0, len(matched)),
+		Arbitrace: protoArbitrace(trace.Steps),
 	}
 	for _, m := range matched {
 		params, err := structpb.NewStruct(cleanMap(m.Params))
@@ -334,7 +334,7 @@ func (s *Server) EvaluateRules(ctx context.Context, req *arbiterv1.EvaluateRules
 		Kind:      "rules",
 		Context:   ctxMap,
 		Rules:     auditRuleMatches(matched),
-		Trace:     trace.Steps,
+		Arbitrace: trace.Steps,
 	})
 	return resp, nil
 }
@@ -386,7 +386,7 @@ func (s *Server) ResolveFlag(ctx context.Context, req *arbiterv1.ResolveFlagRequ
 			Reason:      eval.Reason,
 			Environment: env,
 		},
-		Trace: toGovernTrace(eval.Trace),
+		Arbitrace: toGovernArbitrace(eval.Arbitrace),
 	}
 
 	// Emit assignment event for non-default resolutions (experimentation).
@@ -409,7 +409,7 @@ func (s *Server) ResolveFlag(ctx context.Context, req *arbiterv1.ResolveFlagRequ
 		Values:    values,
 		IsDefault: eval.IsDefault,
 		Reason:    eval.Reason,
-		Trace:     protoTrace(eval.Trace),
+		Arbitrace: protoArbitrace(eval.Arbitrace),
 	}, nil
 }
 
@@ -465,15 +465,15 @@ func (s *Server) EvaluateStrategy(ctx context.Context, req *arbiterv1.EvaluateSt
 			Selected: result.Selected,
 			Params:   result.Params,
 		},
-		Trace: result.Trace.Steps,
+		Arbitrace: result.Arbitrace.Steps,
 	})
 
 	selectedLabel = result.Selected
 	return &arbiterv1.EvaluateStrategyResponse{
-		Outcome:  result.Outcome,
-		Selected: result.Selected,
-		Params:   params,
-		Trace:    protoTrace(result.Trace.Steps),
+		Outcome:   result.Outcome,
+		Selected:  result.Selected,
+		Params:    params,
+		Arbitrace: protoArbitrace(result.Arbitrace.Steps),
 	}, nil
 }
 
@@ -727,25 +727,26 @@ func extractUserID(ctx map[string]any) (string, bool) {
 	return "", false
 }
 
-func protoTrace(steps []govern.TraceStep) []*arbiterv1.TraceStep {
-	out := make([]*arbiterv1.TraceStep, 0, len(steps))
+func protoArbitrace(steps []govern.ArbitraceStep) []*arbiterv1.ArbitraceStep {
+	out := make([]*arbiterv1.ArbitraceStep, 0, len(steps))
 	for _, step := range steps {
-		out = append(out, &arbiterv1.TraceStep{
-			Check:   step.Check,
-			Result:  step.Result,
-			Detail:  step.Detail,
-			Phase:   step.Phase,
-			Scope:   step.Scope,
-			Subject: step.Subject,
-			Kind:    step.Kind,
-			Target:  step.Target,
+		out = append(out, &arbiterv1.ArbitraceStep{
+			Check:       step.Check,
+			Result:      step.Result,
+			Detail:      step.Detail,
+			Phase:       step.Phase,
+			Scope:       step.Scope,
+			Subject:     step.Subject,
+			Kind:        step.Kind,
+			Target:      step.Target,
+			Disposition: step.Disposition,
 		})
 	}
 	return out
 }
 
-func toGovernTrace(steps []flags.TraceStep) []govern.TraceStep {
-	out := make([]govern.TraceStep, 0, len(steps))
+func toGovernArbitrace(steps []flags.ArbitraceStep) []govern.ArbitraceStep {
+	out := make([]govern.ArbitraceStep, 0, len(steps))
 	return append(out, steps...)
 }
 

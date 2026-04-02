@@ -19,22 +19,28 @@ must produce identical results for identical inputs.
 ```
 rule <Name> [priority <N>] {
     [kill_switch]
+    [active_from <timestamp>]
+    [active_until <timestamp>]
     [requires <RuleName>]*
     [excludes <RuleName>]*
+    [rollout [percent] <N> [by <subject>] [namespace <string>]]
     when [segment <SegmentName>] { <expr> }
     then <ActionName> { [<key>: <expr>]* }
     [otherwise <ActionName> { [<key>: <expr>]* }]
-    [rollout [percent] <N> [by <subject>] [namespace <string>]]
 }
 ```
 
 - **priority**: integer metadata carried on match results. Does NOT affect
   evaluation order; rules always evaluate top-to-bottom.
 - **kill_switch**: bypasses the rule during governed evaluation.
+- **active_from / active_until**: structural stateless eligibility window.
+  `active_from` is inclusive; `active_until` is exclusive. If `__now` is not
+  present in the request context, evaluation uses current UTC time.
 - **requires**: named rule must have matched or named flag must resolve
   non-default before this rule's condition is evaluated.
 - **excludes**: if the named rule was evaluated and matched, this rule is
-  skipped. If not yet evaluated, this rule is deferred (treated as not matched).
+  skipped. If not yet evaluated, this rule is deferred (treated as not matched,
+  but recorded as `disposition=deferred` in the arbitrace).
 - **when**: condition block. May combine a named segment and an inline
   expression; both must be true.
 - **then/otherwise**: action produced on match/non-match. `otherwise` only
@@ -79,15 +85,17 @@ expert rule <Name> [priority <N>] [per_fact] [cooldown <dur>] [debounce <dur>] {
 ```
 strategy <Name> returns <OutcomeSchema> {
     when [segment <Seg>] { <expr> }
-        [kill_switch] [rollout ...] then <Label> { [<key>: <expr>]* }
+        [kill_switch] [active_from <timestamp>] [active_until <timestamp>]
+        [rollout ...] then <Label> { [<key>: <expr>]* }
     [when ... then <Label> { ... }]*
     [else <Label> { [<key>: <expr>]* }]
 }
 ```
 
 Ordered candidates; first match wins. `else` is unconditional fallback.
-Each candidate may have its own `kill_switch` and `rollout`. The `returns`
-clause names the outcome schema populated by the selected candidate.
+Each candidate may have its own `kill_switch`, active window, and `rollout`.
+The `returns` clause names the outcome schema populated by the selected
+candidate.
 
 #### 1.4 `flag`
 
@@ -97,7 +105,8 @@ flag <Name> [type boolean|multivariate] [default <value>] [kill_switch] {
     [requires <FlagName>]*
     [variant <string> { [<key>: <expr>]* }]*
     [defaults { [<key>: <expr>]* }]
-    [when <segment|{expr}|segment{expr}> [rollout ...] then <variant>
+    [[active_from <timestamp>] [active_until <timestamp>]
+     when <segment|{expr}|segment{expr}> [rollout ...] then <variant>
         | split [by <subject>] [namespace <string>] { [<variant>: <weight>]* }
     ]*
 }
@@ -211,16 +220,18 @@ For each rule, in declaration order:
 2. **Prerequisites** -- check RequestCache. If any prerequisite failed, skip.
 3. **Excludes** -- if excluded rule not yet evaluated, skip (deferred). If
    evaluated and matched, skip.
-4. **Segment** -- evaluate named segment (cached). If false, skip.
-5. **Condition** -- evaluate inline expression. If false, skip (build fallback
+4. **Active window** -- if `active_from` / `active_until` rejects the current
+   eval time, skip.
+5. **Segment** -- evaluate named segment (cached). If false, skip.
+6. **Condition** -- evaluate inline expression. If false, skip (build fallback
    if `otherwise` exists).
-6. **Rollout** -- compute rollout decision. If not allowed, skip.
-7. **Match** -- build `then` action, record as matched.
+7. **Rollout** -- compute rollout decision. If not allowed, skip.
+8. **Match** -- build `then` action, record as matched.
 
 #### 2.3 Strategy Selection
 
 1. Candidates evaluated in **declaration order**.
-2. Per candidate: check kill switch, evaluate segment, evaluate condition
+2. Per candidate: check kill switch, evaluate active window, evaluate segment, evaluate condition
    (`else` uses constant `true`), check rollout.
 3. **First match wins.** No candidate match returns an error.
 
@@ -231,7 +242,7 @@ For each rule, in declaration order:
 3. **Kill switch**: if enabled, return default.
 4. **Prerequisites**: recursively evaluate required flags. If any resolves
    default, return this flag's default.
-5. **Rules**: first matching rule wins. Check rollout; if blocked, continue.
+5. **Rules**: first matching rule wins. Check active window, then rollout; if blocked, continue.
    If rule has `split`, assign via weighted bucketing. Otherwise return `then`
    variant.
 6. No match returns the flag's **default** variant.
@@ -393,8 +404,9 @@ on the eval stack returns its default.
 #### 4.6 Excludes
 
 `excludes <name>`: deferred evaluation via RequestCache. Not-yet-evaluated
-excluded rule causes skip (conservative deferral). Evaluated-and-matched causes
-skip. Evaluated-and-not-matched passes.
+excluded rule causes skip (conservative deferral) and records an arbitrace step
+with `result=false`, `kind=excludes`, and `disposition=deferred`.
+Evaluated-and-matched causes skip. Evaluated-and-not-matched passes.
 
 #### 4.7 Override Precedence
 
@@ -407,24 +419,32 @@ per-flag, per-flag-rule, per-strategy-candidate.
 
 ---
 
-### 5. Trace Guarantees
+### 5. Arbitrace Guarantees
 
-#### 5.1 Governed Traces
+#### 5.1 Governed Arbitraces
 
-Every governed evaluation produces a `Trace` with ordered `TraceStep` entries:
+Every governed evaluation produces an `Arbitrace` with ordered `ArbitraceStep` entries:
 
 - **Check**: string -- human-readable description.
-- **Result**: bool -- whether the check passed.
+- **Result**: bool -- legacy compatibility bool; deferred steps keep `false`.
+- **Disposition**: string -- canonical tri-state outcome: `passed`, `blocked`, or `deferred`.
 - **Detail**: string -- explanation (values, cache state).
+- **Phase / Scope / Subject / Kind / Target**: structured semantics shared across governed surfaces.
 
-Steps appended in eval order. Typical per-rule sequence: kill_switch, requires,
-excludes, segment, condition, rollout.
+Steps appended in eval order. Typical per-rule sequence: kill_switch,
+active_from/active_until, requires, excludes, segment, condition, rollout.
 
 #### 5.2 Expert Activations
 
 Each firing produces an `Activation` record: Round (int), Rule (string),
 Kind (assert/emit/retract/modify), Target (string), Params (map), Changed
 (bool), Detail (string).
+
+Expert session results also expose:
+
+- **stable_deferred**: whether a `stable` rule is still waiting for a quiescent round.
+- **temporal_pending**: whether a temporal constraint such as `stable_for`, `for`,
+  or `debounce` is still maturing.
 
 #### 5.3 Determinism
 
