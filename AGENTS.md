@@ -4,6 +4,8 @@
 
 Arbiter is a compact language for governed outcomes. The compiler (this repo) is written in Go. It compiles `.arb` files to bytecode and evaluates them via a VM. Four evaluation modes: stateless eval, feature flags, expert inference (forward-chaining), and continuous arbiters (always-on workflows). Module path: `github.com/odvcencio/arbiter`.
 
+For agents helping someone use Arbiter as a dependency, read the canonical skill first: [using-arbiter](https://github.com/odvcencio/m31labs-skills/blob/main/skills/using-arbiter/SKILL.md).
+
 ## Build & Test
 
 ```bash

@@ -12,6 +12,10 @@ Every decision your software makes — approve this transaction, show this varia
 
 Four modalities, one language. **Stateless evaluation** for request-path decisions. **Feature flags** for governed variant resolution. **Expert inference** for forward-chaining reasoning until quiescence. **Continuous arbiters** for always-on decision loops. Same compiler, same VM, same governance.
 
+## Agent Skill
+
+Agents helping someone use Arbiter as a dependency should read the canonical M31 Labs skill: [using-arbiter](https://github.com/odvcencio/m31labs-skills/blob/main/skills/using-arbiter/SKILL.md).
+
 Choose the lightest sufficient mode:
 
 - `rule` = many matching governed outcomes
