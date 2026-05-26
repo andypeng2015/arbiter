@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/overrides"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/overrides"
 )
 
 // GRPCControlPlane adapts the Arbiter gRPC control plane to the local agent contract.

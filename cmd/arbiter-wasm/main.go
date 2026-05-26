@@ -11,13 +11,13 @@ import (
 	"sync/atomic"
 	"syscall/js"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/bundle"
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/strategy"
-	"github.com/odvcencio/arbiter/vm"
-	"github.com/odvcencio/arbiter/workflow"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/bundle"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/strategy"
+	"m31labs.dev/arbiter/vm"
+	"m31labs.dev/arbiter/workflow"
 )
 
 func main() {

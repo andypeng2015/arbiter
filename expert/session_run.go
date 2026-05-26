@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/vm"
 )
 
 // Run evaluates the expert program until it reaches a fixed point or a guardrail.

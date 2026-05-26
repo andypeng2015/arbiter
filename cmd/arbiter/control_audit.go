@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/odvcencio/arbiter/audit"
-	"github.com/odvcencio/arbiter/observability"
+	"m31labs.dev/arbiter/audit"
+	"m31labs.dev/arbiter/observability"
 )
 
 type controlAuditTracker struct {

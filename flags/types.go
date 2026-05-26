@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/ir"
 )
 
 // FlagType represents boolean or multivariate flags.

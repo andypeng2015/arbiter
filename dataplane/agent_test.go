@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odvcencio/arbiter/overrides"
+	"m31labs.dev/arbiter/overrides"
 )
 
 // Full-repo race runs can push dataplane bootstrap close to 10s under CPU contention.

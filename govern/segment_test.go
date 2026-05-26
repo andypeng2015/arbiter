@@ -3,8 +3,8 @@ package govern_test
 import (
 	"testing"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/govern"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/govern"
 )
 
 func TestCompiledSegmentEval(t *testing.T) {

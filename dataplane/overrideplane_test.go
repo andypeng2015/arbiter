@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odvcencio/arbiter/overrides"
+	"m31labs.dev/arbiter/overrides"
 )
 
 func TestAgentBootstrapsAndRebindsOverrides(t *testing.T) {

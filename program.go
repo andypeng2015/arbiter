@@ -3,11 +3,11 @@ package arbiter
 import (
 	"sync"
 
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/ir"
-	"github.com/odvcencio/arbiter/strategy"
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/ir"
+	"m31labs.dev/arbiter/strategy"
+	"m31labs.dev/arbiter/vm"
 )
 
 // DiagnosticSeverity indicates the severity level of a Diagnostic.

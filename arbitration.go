@@ -1,6 +1,6 @@
 package arbiter
 
-import "github.com/odvcencio/arbiter/govern"
+import "m31labs.dev/arbiter/govern"
 
 // Arbitrace is Arbiter's canonical name for an explainability trace.
 type Arbitrace = govern.Arbitrace

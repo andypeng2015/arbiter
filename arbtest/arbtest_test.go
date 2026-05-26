@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/odvcencio/arbiter/arbtest"
+	"m31labs.dev/arbiter/arbtest"
 )
 
 func TestRunFileStrategy(t *testing.T) {

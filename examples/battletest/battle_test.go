@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/internal/testarbiter"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/internal/testarbiter"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

@@ -1,6 +1,6 @@
 package vm
 
-import "github.com/odvcencio/arbiter/compiler"
+import "m31labs.dev/arbiter/compiler"
 
 // Evaluator reuses a VM across multiple rule evaluations.
 type Evaluator struct {

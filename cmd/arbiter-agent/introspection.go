@@ -4,8 +4,8 @@ import (
 	"crypto/tls"
 	"time"
 
-	"github.com/odvcencio/arbiter/dataplane"
-	"github.com/odvcencio/arbiter/internal/grpcutil"
+	"m31labs.dev/arbiter/dataplane"
+	"m31labs.dev/arbiter/internal/grpcutil"
 )
 
 type agentControlTransport struct {

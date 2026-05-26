@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odvcencio/arbiter/dataplane"
-	"github.com/odvcencio/arbiter/internal/buildinfo"
-	"github.com/odvcencio/arbiter/internal/statusview"
+	"m31labs.dev/arbiter/dataplane"
+	"m31labs.dev/arbiter/internal/buildinfo"
+	"m31labs.dev/arbiter/internal/statusview"
 )
 
 const statusTestInitialSource = `

@@ -6,12 +6,12 @@ import (
 
 	gotreesitter "github.com/odvcencio/gotreesitter"
 
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/ir"
-	"github.com/odvcencio/arbiter/overrides"
-	"github.com/odvcencio/arbiter/strategy"
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/ir"
+	"m31labs.dev/arbiter/overrides"
+	"m31labs.dev/arbiter/strategy"
+	"m31labs.dev/arbiter/vm"
 )
 
 // Compile compiles .arb source into a Program containing all evaluation artifacts.

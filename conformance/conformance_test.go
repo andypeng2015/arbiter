@@ -16,10 +16,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/bundle"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/vm"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/bundle"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/vm"
 )
 
 type conformanceCase struct {

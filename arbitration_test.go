@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/flags"
-	"github.com/odvcencio/arbiter/govern"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/flags"
+	"m31labs.dev/arbiter/govern"
 )
 
 func TestArbitraceCloneCopiesSteps(t *testing.T) {

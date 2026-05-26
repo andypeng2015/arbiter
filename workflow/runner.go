@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/audit"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/expert/factsource"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/audit"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/expert/factsource"
 )
 
 // SourceLoader loads one external source snapshot.

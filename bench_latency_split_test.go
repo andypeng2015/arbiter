@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"

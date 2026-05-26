@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/odvcencio/arbiter/compiler"
+	"m31labs.dev/arbiter/compiler"
 )
 
 // makeJSONRules generates n Arishem JSON rules reproducing the issue #28 workload.

@@ -1,7 +1,7 @@
 // vm/value.go
 package vm
 
-import dec "github.com/odvcencio/arbiter/decimal"
+import dec "m31labs.dev/arbiter/decimal"
 
 // Type tags for Value.
 const (

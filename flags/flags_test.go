@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odvcencio/arbiter/govern"
+	"m31labs.dev/arbiter/govern"
 )
 
 const fullFlagSource = `

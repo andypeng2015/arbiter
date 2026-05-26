@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/ir"
 )
 
 // ArbiterDeclaration is one continuously running decision loop declared in .arb.

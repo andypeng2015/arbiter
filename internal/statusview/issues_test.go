@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/odvcencio/arbiter/internal/buildinfo"
+	"m31labs.dev/arbiter/internal/buildinfo"
 )
 
 func TestDefinitionsUseUniqueCodes(t *testing.T) {

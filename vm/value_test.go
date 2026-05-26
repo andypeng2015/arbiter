@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unsafe"
 
-	dec "github.com/odvcencio/arbiter/decimal"
+	dec "m31labs.dev/arbiter/decimal"
 )
 
 func TestValueEqual(t *testing.T) {

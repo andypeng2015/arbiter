@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/flags"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/flags"
 )
 
 type bundleEventType string

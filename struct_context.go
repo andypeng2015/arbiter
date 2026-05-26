@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/vm"
 )
 
 // structMapping caches the field→key mapping for one struct type.

@@ -5,9 +5,9 @@ import (
 	"net"
 	"testing"
 
-	arbiter "github.com/odvcencio/arbiter"
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/workflow"
+	arbiter "m31labs.dev/arbiter"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/workflow"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"

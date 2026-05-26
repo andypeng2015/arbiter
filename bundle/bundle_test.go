@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/bundle"
-	"github.com/odvcencio/arbiter/ir"
-	"github.com/odvcencio/arbiter/vm"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/bundle"
+	"m31labs.dev/arbiter/ir"
+	"m31labs.dev/arbiter/vm"
 )
 
 func TestBundleTableRoundTrip(t *testing.T) {

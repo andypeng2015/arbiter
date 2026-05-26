@@ -3,8 +3,8 @@ package arbiter
 import (
 	"fmt"
 
-	"github.com/odvcencio/arbiter/overrides"
-	"github.com/odvcencio/arbiter/strategy"
+	"m31labs.dev/arbiter/overrides"
+	"m31labs.dev/arbiter/strategy"
 )
 
 // CompileStrategies compiles all strategy declarations from raw .arb source.

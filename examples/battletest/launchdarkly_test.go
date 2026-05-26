@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/govern"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/govern"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )

@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/overrides"
+	"m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/overrides"
 )
 
 // Flags is a compiled flag ruleset with first-class flag concepts and rich explainability.

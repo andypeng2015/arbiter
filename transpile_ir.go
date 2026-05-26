@@ -1,7 +1,7 @@
 package arbiter
 
-import "github.com/odvcencio/arbiter/ir"
-import "github.com/odvcencio/arbiter/units"
+import "m31labs.dev/arbiter/ir"
+import "m31labs.dev/arbiter/units"
 
 func emitIRProgram(program *ir.Program) *TranspileResult {
 	result := &TranspileResult{

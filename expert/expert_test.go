@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/ir"
+	arbiter "m31labs.dev/arbiter"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/ir"
 )
 
 func TestCompileExtractsExpertRules(t *testing.T) {

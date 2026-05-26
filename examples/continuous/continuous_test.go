@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/workflow"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/workflow"
 )
 
 func TestChainedArbiters(t *testing.T) {

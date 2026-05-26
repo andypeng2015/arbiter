@@ -3,9 +3,9 @@ package compiler_test
 import (
 	"testing"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/ir"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/ir"
 )
 
 func TestCompileIRDirect(t *testing.T) {

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/odvcencio/arbiter/capability"
-	"github.com/odvcencio/arbiter/internal/buildinfo"
-	"github.com/odvcencio/arbiter/internal/grpcutil"
-	"github.com/odvcencio/arbiter/internal/statusview"
-	"github.com/odvcencio/arbiter/workflow"
+	"m31labs.dev/arbiter/capability"
+	"m31labs.dev/arbiter/internal/buildinfo"
+	"m31labs.dev/arbiter/internal/grpcutil"
+	"m31labs.dev/arbiter/internal/statusview"
+	"m31labs.dev/arbiter/workflow"
 )
 
 type runtimeControlTransport struct {

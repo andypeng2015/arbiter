@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/odvcencio/arbiter/compiler"
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/intern"
+	"m31labs.dev/arbiter/compiler"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/intern"
 )
 
 const (

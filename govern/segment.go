@@ -1,8 +1,8 @@
 package govern
 
 import (
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/vm"
 )
 
 // CompiledSegment is a named condition compiled to bytecode.

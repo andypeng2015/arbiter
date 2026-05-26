@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/ir"
 )
 
 // resolvedField is the result of resolving a dotted input path.

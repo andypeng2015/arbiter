@@ -4,7 +4,7 @@ import (
 	"crypto/ed25519"
 	"testing"
 
-	"github.com/odvcencio/arbiter/bundle"
+	"m31labs.dev/arbiter/bundle"
 )
 
 func TestSignVerifyRoundTrip(t *testing.T) {

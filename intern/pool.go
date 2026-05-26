@@ -4,7 +4,7 @@ package intern
 import (
 	"fmt"
 
-	dec "github.com/odvcencio/arbiter/decimal"
+	dec "m31labs.dev/arbiter/decimal"
 )
 
 // TypeTag identifies the type of a pooled value.

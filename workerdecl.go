@@ -3,7 +3,7 @@ package arbiter
 import (
 	"fmt"
 
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/ir"
 )
 
 // WorkerDeclaration is one named typed capability that an arbiter can invoke.

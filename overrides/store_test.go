@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/ir"
 )
 
 func TestStoreSnapshotRoundTripViaFile(t *testing.T) {

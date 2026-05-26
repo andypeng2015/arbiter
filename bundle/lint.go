@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/compiler"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/compiler"
 )
 
 // Signal is one structured evidence fact extracted from a compiled ruleset.

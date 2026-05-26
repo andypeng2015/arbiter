@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/vm"
 )
 
 func TestFindManifest(t *testing.T) {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/ir"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/ir"
 )
 
 // ParseFile parses one .test.arb file.

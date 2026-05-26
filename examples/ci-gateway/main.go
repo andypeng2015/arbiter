@@ -33,7 +33,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/odvcencio/arbiter"
+	"m31labs.dev/arbiter"
 )
 
 // Config from environment.

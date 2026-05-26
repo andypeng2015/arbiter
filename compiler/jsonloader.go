@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/odvcencio/arbiter/intern"
+	"m31labs.dev/arbiter/intern"
 )
 
 // JSONRuleInput holds the raw JSON strings for one rule.

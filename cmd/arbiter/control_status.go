@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/grpcserver"
-	"github.com/odvcencio/arbiter/internal/buildinfo"
-	"github.com/odvcencio/arbiter/internal/grpcutil"
-	"github.com/odvcencio/arbiter/internal/statusview"
-	"github.com/odvcencio/arbiter/overrides"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/grpcserver"
+	"m31labs.dev/arbiter/internal/buildinfo"
+	"m31labs.dev/arbiter/internal/grpcutil"
+	"m31labs.dev/arbiter/internal/statusview"
+	"m31labs.dev/arbiter/overrides"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

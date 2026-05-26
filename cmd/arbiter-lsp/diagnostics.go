@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/ir"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/ir"
 )
 
 type importSite struct {

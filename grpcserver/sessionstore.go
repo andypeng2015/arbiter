@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/odvcencio/arbiter/expert"
+	"m31labs.dev/arbiter/expert"
 )
 
 // SessionStore keeps expert sessions in memory.

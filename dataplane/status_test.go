@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odvcencio/arbiter/overrides"
+	"m31labs.dev/arbiter/overrides"
 )
 
 func TestAgentStatusReportsReadyBundleAndFreshness(t *testing.T) {

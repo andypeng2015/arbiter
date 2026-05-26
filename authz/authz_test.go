@@ -3,7 +3,7 @@ package authz_test
 import (
 	"testing"
 
-	"github.com/odvcencio/arbiter/authz"
+	"m31labs.dev/arbiter/authz"
 )
 
 func TestEvaluateSourceAllowsMatchingRequest(t *testing.T) {

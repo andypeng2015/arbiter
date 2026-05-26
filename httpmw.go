@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/vm"
 )
 
 // HTTPContextFunc builds an Arbiter evaluation context from an HTTP request.

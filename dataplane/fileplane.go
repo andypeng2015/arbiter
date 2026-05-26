@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	arbiter "github.com/odvcencio/arbiter"
+	arbiter "m31labs.dev/arbiter"
 )
 
 // FileControlPlane is a local stand-in for the future gRPC control plane.

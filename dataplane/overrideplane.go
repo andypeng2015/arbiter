@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/odvcencio/arbiter/overrides"
+	"m31labs.dev/arbiter/overrides"
 )
 
 // FileOverrideControlPlane reads a persisted override snapshot from disk and

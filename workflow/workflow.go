@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/expert"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/expert"
 )
 
 // OutcomeFactMapper maps an emitted outcome into a chained fact for a target arbiter.

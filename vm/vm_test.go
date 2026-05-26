@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/intern"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/intern"
 )
 
 // Helper to build a simple ruleset with one rule.

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/odvcencio/arbiter"
+	"m31labs.dev/arbiter"
 )
 
 // Watch loads flags from a file and watches for changes, hot-reloading on write.

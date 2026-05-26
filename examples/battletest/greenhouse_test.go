@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
 )
 
 func TestGreenhouse(t *testing.T) {

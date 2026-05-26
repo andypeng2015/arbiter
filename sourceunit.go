@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/internal/parseutil"
-	"github.com/odvcencio/arbiter/ir"
-	"github.com/odvcencio/arbiter/strategy"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/internal/parseutil"
+	"m31labs.dev/arbiter/ir"
+	"m31labs.dev/arbiter/strategy"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 )
 

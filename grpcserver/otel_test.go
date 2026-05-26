@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/audit"
-	"github.com/odvcencio/arbiter/overrides"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/audit"
+	"m31labs.dev/arbiter/overrides"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	arbiter "github.com/odvcencio/arbiter"
+	arbiter "m31labs.dev/arbiter"
 )
 
 func TestConvertJSON(t *testing.T) {

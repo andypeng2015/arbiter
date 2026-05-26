@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/ir"
 )
 
 // Manifest holds the parsed contents of an arbiter.toml project manifest.

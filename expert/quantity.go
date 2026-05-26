@@ -1,8 +1,8 @@
 package expert
 
 import (
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/units"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/units"
 )
 
 // Q constructs one runtime quantity value for schema-aware fact assertions.

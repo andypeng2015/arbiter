@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/ir"
-	"github.com/odvcencio/arbiter/units"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/ir"
+	"m31labs.dev/arbiter/units"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 )
 

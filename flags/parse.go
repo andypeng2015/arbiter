@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/ir"
 )
 
 func (f *Flags) parseParsed(parsed *arbiter.ParsedSource, full *arbiter.CompileResult) error {

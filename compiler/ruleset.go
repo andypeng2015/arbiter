@@ -4,8 +4,8 @@ package compiler
 import (
 	"regexp"
 
-	"github.com/odvcencio/arbiter/intern"
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/intern"
+	"m31labs.dev/arbiter/ir"
 )
 
 // CompiledRuleset is the output of compilation — everything the VM needs.

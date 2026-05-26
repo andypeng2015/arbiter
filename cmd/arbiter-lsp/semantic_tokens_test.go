@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	arbiter "github.com/odvcencio/arbiter"
+	arbiter "m31labs.dev/arbiter"
 )
 
 func TestComputeSemanticTokens_ExpertAssert(t *testing.T) {

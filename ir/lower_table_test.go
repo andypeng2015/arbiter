@@ -3,7 +3,7 @@ package ir_test
 import (
 	"testing"
 
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/ir"
 )
 
 func TestLowerTable(t *testing.T) {

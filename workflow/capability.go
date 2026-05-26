@@ -4,8 +4,8 @@ import (
 	"slices"
 	"strings"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/expert/factsource"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/expert/factsource"
 )
 
 // CapabilityOwner identifies who owns one runtime transport surface.

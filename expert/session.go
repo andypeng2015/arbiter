@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/overrides"
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/overrides"
+	"m31labs.dev/arbiter/vm"
 )
 
 // Fact is one working-memory fact.

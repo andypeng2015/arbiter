@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	arbiter "github.com/odvcencio/arbiter"
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/expert/factsource"
-	"github.com/odvcencio/arbiter/workflow"
+	arbiter "m31labs.dev/arbiter"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/expert/factsource"
+	"m31labs.dev/arbiter/workflow"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

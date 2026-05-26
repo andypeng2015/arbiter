@@ -8,8 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/units"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/units"
 )
 
 const (

@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/intern"
-	"github.com/odvcencio/arbiter/ir"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/intern"
+	"m31labs.dev/arbiter/ir"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 )
 

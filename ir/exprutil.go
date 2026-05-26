@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/units"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/units"
 )
 
 // RenderExpr renders an expression back into Arbiter-like source.

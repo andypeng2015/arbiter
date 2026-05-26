@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/odvcencio/arbiter/internal/parseutil"
+	"m31labs.dev/arbiter/internal/parseutil"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 )
 

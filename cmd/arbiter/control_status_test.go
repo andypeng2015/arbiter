@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/audit"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/grpcserver"
-	"github.com/odvcencio/arbiter/internal/buildinfo"
-	"github.com/odvcencio/arbiter/internal/statusview"
-	"github.com/odvcencio/arbiter/overrides"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/audit"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/grpcserver"
+	"m31labs.dev/arbiter/internal/buildinfo"
+	"m31labs.dev/arbiter/internal/statusview"
+	"m31labs.dev/arbiter/overrides"
 )
 
 const controlStatusTestSource = `

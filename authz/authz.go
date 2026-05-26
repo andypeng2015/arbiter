@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/vm"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/vm"
 )
 
 // Request is the conventional actor/action/resource authz envelope.

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/odvcencio/arbiter/govern"
+	"m31labs.dev/arbiter/govern"
 )
 
 // RuleMatch captures one matched rule for durable auditing.

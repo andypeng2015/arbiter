@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/ir"
-	"github.com/odvcencio/arbiter/units"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/ir"
+	"m31labs.dev/arbiter/units"
 )
 
 func (p *Program) factSchema(name string) (*ir.FactSchema, bool) {

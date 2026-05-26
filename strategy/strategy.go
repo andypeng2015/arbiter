@@ -5,11 +5,11 @@ import (
 	"sort"
 	"time"
 
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/ir"
-	"github.com/odvcencio/arbiter/overrides"
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/ir"
+	"m31labs.dev/arbiter/overrides"
+	"m31labs.dev/arbiter/vm"
 )
 
 // Strategies is a compiled set of strategy declarations over named decision shapes.

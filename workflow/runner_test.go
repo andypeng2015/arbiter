@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/expert"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/expert"
 )
 
 func writeDeliveryJournal(t *testing.T, path string, entries ...deliveryJournalEntry) {

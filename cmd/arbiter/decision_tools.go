@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/audit"
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/audit"
+	"m31labs.dev/arbiter/vm"
 )
 
 type governedProgram struct {

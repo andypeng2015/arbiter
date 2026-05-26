@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/odvcencio/arbiter/overrides"
+	"m31labs.dev/arbiter/overrides"
 )
 
 // BundleLocator identifies one bundle by name or explicit ID.

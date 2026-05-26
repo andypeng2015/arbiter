@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/odvcencio/arbiter"
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/internal/buildinfo"
-	"github.com/odvcencio/arbiter/internal/grpcutil"
-	"github.com/odvcencio/arbiter/internal/statusview"
+	"m31labs.dev/arbiter"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/internal/buildinfo"
+	"m31labs.dev/arbiter/internal/grpcutil"
+	"m31labs.dev/arbiter/internal/statusview"
 	"google.golang.org/grpc"
 )
 

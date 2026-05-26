@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/ir"
 )
 
 // RuleOverride overlays rule-level governance fields at runtime.

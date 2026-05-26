@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/overrides"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/overrides"
 )
 
 func TestEvalStrategySelectsCandidateAndFallsBack(t *testing.T) {

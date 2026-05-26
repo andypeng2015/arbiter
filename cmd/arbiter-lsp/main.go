@@ -17,9 +17,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/odvcencio/arbiter/format"
-	"github.com/odvcencio/arbiter/internal/buildinfo"
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/format"
+	"m31labs.dev/arbiter/internal/buildinfo"
+	"m31labs.dev/arbiter/ir"
 )
 
 func main() {

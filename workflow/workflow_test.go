@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/odvcencio/arbiter/expert"
+	"m31labs.dev/arbiter/expert"
 )
 
 func TestWorkflowChainsOutcomeDeltasIntoDownstreamArbiters(t *testing.T) {

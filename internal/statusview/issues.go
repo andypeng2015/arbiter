@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/internal/buildinfo"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/internal/buildinfo"
 )
 
 type Severity string

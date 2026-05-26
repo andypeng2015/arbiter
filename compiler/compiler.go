@@ -1,7 +1,7 @@
 package compiler
 
 import (
-	"github.com/odvcencio/arbiter/ir"
+	"m31labs.dev/arbiter/ir"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 )
 

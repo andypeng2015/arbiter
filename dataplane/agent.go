@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/grpcserver"
-	"github.com/odvcencio/arbiter/overrides"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/grpcserver"
+	"m31labs.dev/arbiter/overrides"
 )
 
 const (

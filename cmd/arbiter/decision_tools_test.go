@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/odvcencio/arbiter/audit"
+	"m31labs.dev/arbiter/audit"
 )
 
 func TestDiffCmdJSONOutput(t *testing.T) {

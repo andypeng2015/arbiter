@@ -1,7 +1,7 @@
 package arbiter
 
 import (
-	"github.com/odvcencio/arbiter/decompile"
+	"m31labs.dev/arbiter/decompile"
 )
 
 // ConvertJSON converts Arishem-style JSON condition and action expressions

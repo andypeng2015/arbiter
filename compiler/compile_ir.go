@@ -5,10 +5,10 @@ import (
 	"regexp"
 	"time"
 
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/intern"
-	"github.com/odvcencio/arbiter/ir"
-	"github.com/odvcencio/arbiter/units"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/intern"
+	"m31labs.dev/arbiter/ir"
+	"m31labs.dev/arbiter/units"
 )
 
 // CompileIR emits a CompiledRuleset from a lowered Arbiter IR program.

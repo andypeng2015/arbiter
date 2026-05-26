@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/audit"
-	"github.com/odvcencio/arbiter/overrides"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/audit"
+	"m31labs.dev/arbiter/overrides"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/protobuf/types/known/structpb"

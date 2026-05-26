@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/audit"
-	"github.com/odvcencio/arbiter/expert"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/audit"
+	"m31labs.dev/arbiter/expert"
 )
 
 type deliveryAttemptGroup struct {

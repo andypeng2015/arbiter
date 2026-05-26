@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/govern"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/govern"
 )
 
 func TestStableRulesDeferUntilAfterAQuiescentRound(t *testing.T) {

@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odvcencio/arbiter/compiler"
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/intern"
-	"github.com/odvcencio/arbiter/units"
+	"m31labs.dev/arbiter/compiler"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/intern"
+	"m31labs.dev/arbiter/units"
 )
 
 // Helper that compiles .arb source and evals against the given data context.

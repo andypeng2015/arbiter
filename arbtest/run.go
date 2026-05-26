@@ -10,12 +10,12 @@ import (
 	"time"
 	"unicode"
 
-	arbiter "github.com/odvcencio/arbiter"
-	dec "github.com/odvcencio/arbiter/decimal"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/flags"
-	"github.com/odvcencio/arbiter/vm"
-	"github.com/odvcencio/arbiter/workflow"
+	arbiter "m31labs.dev/arbiter"
+	dec "m31labs.dev/arbiter/decimal"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/flags"
+	"m31labs.dev/arbiter/vm"
+	"m31labs.dev/arbiter/workflow"
 )
 
 type timedOutcome struct {

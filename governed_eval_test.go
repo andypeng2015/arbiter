@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/odvcencio/arbiter/govern"
+	"m31labs.dev/arbiter/govern"
 )
 
 func TestCompileFullExtractsSegments(t *testing.T) {

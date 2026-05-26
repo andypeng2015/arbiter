@@ -13,11 +13,11 @@ import (
 	"syscall"
 	"time"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/audit"
-	"github.com/odvcencio/arbiter/dataplane"
-	"github.com/odvcencio/arbiter/grpcserver"
-	"github.com/odvcencio/arbiter/internal/grpcutil"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/audit"
+	"m31labs.dev/arbiter/dataplane"
+	"m31labs.dev/arbiter/grpcserver"
+	"m31labs.dev/arbiter/internal/grpcutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/odvcencio/arbiter/compiler"
-	"github.com/odvcencio/arbiter/intern"
+	"m31labs.dev/arbiter/compiler"
+	"m31labs.dev/arbiter/intern"
 )
 
 func (vm *VM) evalTableOp(instrs []byte, end, ip uint32, op compiler.OpCode, flags uint8, arg uint16, dc DataContext) (uint32, bool) {

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/expert"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/expert"
 )
 
 func (r *Runner) applyWorkerExecution(arbiterName string, worker arbiter.WorkerDeclaration, result WorkerExecution) error {

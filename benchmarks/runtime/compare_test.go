@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/cel-go/cel"
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/expert"
-	"github.com/odvcencio/arbiter/flags"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/expert"
+	"m31labs.dev/arbiter/flags"
 	"github.com/open-policy-agent/opa/rego"
 )
 

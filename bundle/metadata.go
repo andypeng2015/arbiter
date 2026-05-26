@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/odvcencio/arbiter/compiler"
+	"m31labs.dev/arbiter/compiler"
 )
 
 // Metadata trailer layout (appended after the bundle body, before any

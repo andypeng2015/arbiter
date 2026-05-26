@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odvcencio/arbiter/expert"
+	"m31labs.dev/arbiter/expert"
 )
 
 func TestSessionStorePrunesExpiredSessionsOnCreate(t *testing.T) {

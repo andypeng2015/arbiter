@@ -1,8 +1,8 @@
 package arbiter
 
 import (
-	"github.com/odvcencio/arbiter/govern"
-	"github.com/odvcencio/arbiter/vm"
+	"m31labs.dev/arbiter/govern"
+	"m31labs.dev/arbiter/vm"
 )
 
 // EvalTyped evaluates a compiled program against a typed struct.

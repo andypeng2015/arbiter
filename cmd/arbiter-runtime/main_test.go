@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	arbiterv1 "github.com/odvcencio/arbiter/api/arbiter/v1"
-	"github.com/odvcencio/arbiter/capability"
-	"github.com/odvcencio/arbiter/internal/buildinfo"
-	"github.com/odvcencio/arbiter/internal/statusview"
-	"github.com/odvcencio/arbiter/workflow"
+	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
+	"m31labs.dev/arbiter/capability"
+	"m31labs.dev/arbiter/internal/buildinfo"
+	"m31labs.dev/arbiter/internal/statusview"
+	"m31labs.dev/arbiter/workflow"
 )
 
 func TestCapabilityStatus(t *testing.T) {

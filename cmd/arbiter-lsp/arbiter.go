@@ -4,9 +4,9 @@ import (
 	"net/url"
 	"strings"
 
-	arbiter "github.com/odvcencio/arbiter"
-	"github.com/odvcencio/arbiter/explore"
-	"github.com/odvcencio/arbiter/ir"
+	arbiter "m31labs.dev/arbiter"
+	"m31labs.dev/arbiter/explore"
+	"m31labs.dev/arbiter/ir"
 )
 
 // compileForDiagnostics compiles source appropriate to the URI.
