@@ -1,15 +1,16 @@
-module github.com/odvcencio/arbiter/benchmarks/runtime
+module m31labs.dev/arbiter/benchmarks/runtime
 
 go 1.25.0
 
 require (
 	github.com/google/cel-go v0.27.0
-	github.com/odvcencio/arbiter v0.0.0
+	github.com/odvcencio/arbiter v1.6.0
 	github.com/open-policy-agent/opa v1.14.1
 )
 
 require (
 	cel.dev/expr v0.25.1 // indirect
+	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -42,7 +43,7 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
