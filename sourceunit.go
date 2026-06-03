@@ -338,7 +338,7 @@ func CompileFile(path string, opts ...Option) (*Program, error) {
 		return nil, err
 	}
 
-	prog, err := compileProgramOpts(program, opts...)
+	prog, err := compileProgramOpts(program, append(opts, withBaseDir(filepath.Dir(path)))...)
 	if err != nil {
 		return nil, WrapFileError(unit, err)
 	}
@@ -365,7 +365,7 @@ func CompileFileSource(path string, source []byte, opts ...Option) (*Program, er
 	if err != nil {
 		return nil, err
 	}
-	prog, err := compileProgramOpts(program, opts...)
+	prog, err := compileProgramOpts(program, append(opts, withBaseDir(filepath.Dir(absPath)))...)
 	if err != nil {
 		return nil, wrapRootPathError(absPath, err)
 	}
@@ -414,6 +414,11 @@ func applyCompileOptions(opts []Option) compileOptions {
 // compileProgram, which validates and builds all evaluation artifacts.
 func compileProgramOpts(program *ir.Program, opts ...Option) (*Program, error) {
 	co := applyCompileOptions(opts)
+	if program.InputRef != nil {
+		if err := resolveInputRef(program, co.baseDir); err != nil {
+			return nil, err
+		}
+	}
 	if co.inputSchema != nil {
 		if err := mergeInjectedInputSchema(program, co.inputSchema); err != nil {
 			return nil, err

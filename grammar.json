@@ -818,26 +818,68 @@
     "input_declaration": {
       "members": [
         {
-          "type": "STRING",
-          "value": "input"
+          "members": [
+            {
+              "type": "STRING",
+              "value": "input"
+            },
+            {
+              "type": "STRING",
+              "value": "{"
+            },
+            {
+              "content": {
+                "name": "input_field",
+                "type": "SYMBOL"
+              },
+              "type": "REPEAT"
+            },
+            {
+              "type": "STRING",
+              "value": "}"
+            }
+          ],
+          "type": "SEQ"
         },
         {
-          "type": "STRING",
-          "value": "{"
-        },
-        {
-          "content": {
-            "name": "input_field",
-            "type": "SYMBOL"
-          },
-          "type": "REPEAT"
-        },
-        {
-          "type": "STRING",
-          "value": "}"
+          "members": [
+            {
+              "type": "STRING",
+              "value": "input"
+            },
+            {
+              "type": "STRING",
+              "value": "from"
+            },
+            {
+              "type": "STRING",
+              "value": "proto"
+            },
+            {
+              "content": {
+                "name": "string_literal",
+                "type": "SYMBOL"
+              },
+              "name": "path",
+              "type": "FIELD"
+            },
+            {
+              "type": "STRING",
+              "value": "message"
+            },
+            {
+              "content": {
+                "name": "string_literal",
+                "type": "SYMBOL"
+              },
+              "name": "message",
+              "type": "FIELD"
+            }
+          ],
+          "type": "SEQ"
         }
       ],
-      "type": "SEQ"
+      "type": "CHOICE"
     },
     "input_field": {
       "members": [

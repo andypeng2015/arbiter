@@ -150,7 +150,22 @@ func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) {
 		case "import_declaration":
 			l.program.Imports = append(l.program.Imports, l.lowerImport(child))
 		case "input_declaration":
-			if l.program.Input != nil {
+			if pathNode := child.ChildByFieldName("path", l.lang); pathNode != nil {
+				// `input from proto "<path>" message "<name>"`
+				if l.program.Input != nil || l.program.InputRef != nil {
+					l.errs = append(l.errs, fmt.Errorf("duplicate input declaration"))
+					break
+				}
+				ref := &InputRef{
+					Kind: "proto",
+					Path: parseutil.StripQuotes(l.text(pathNode)),
+					Span: spanForNode(child),
+				}
+				if msgNode := child.ChildByFieldName("message", l.lang); msgNode != nil {
+					ref.Message = parseutil.StripQuotes(l.text(msgNode))
+				}
+				l.program.InputRef = ref
+			} else if l.program.Input != nil {
 				l.errs = append(l.errs, fmt.Errorf("duplicate input declaration"))
 			} else {
 				l.program.Input = l.lowerInputSchema(child)

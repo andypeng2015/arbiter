@@ -65,6 +65,13 @@ type compileOptions struct {
 	manifest    *string
 	resolver    IncludeResolver
 	inputSchema *ir.InputSchema
+	baseDir     string // directory used to resolve `input from proto "<rel>"` refs
+}
+
+// withBaseDir sets the directory that relative `input from proto` paths resolve
+// against. Set internally by the file-backed compile entrypoints.
+func withBaseDir(dir string) Option {
+	return func(o *compileOptions) { o.baseDir = dir }
 }
 
 // WithManifest sets the manifest path for module resolution.

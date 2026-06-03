@@ -114,6 +114,26 @@ func TestLowerInput(t *testing.T) {
 	}
 }
 
+func TestLowerInputFromProto(t *testing.T) {
+	program := lowerSource(t, `input from proto "user.proto" message "acme.User"`)
+
+	if program.InputRef == nil {
+		t.Fatal("program.InputRef = nil, want a proto input ref")
+	}
+	if program.InputRef.Kind != "proto" {
+		t.Fatalf("InputRef.Kind = %q, want proto", program.InputRef.Kind)
+	}
+	if program.InputRef.Path != "user.proto" {
+		t.Fatalf("InputRef.Path = %q, want user.proto", program.InputRef.Path)
+	}
+	if program.InputRef.Message != "acme.User" {
+		t.Fatalf("InputRef.Message = %q, want acme.User", program.InputRef.Message)
+	}
+	if program.Input != nil {
+		t.Fatal("program.Input should be nil when input is declared via a proto ref")
+	}
+}
+
 func TestLowerInputOptionalField(t *testing.T) {
 	program := lowerSource(t, `input { user: { tier?: string } }`)
 

@@ -221,11 +221,23 @@ func ArbiterGrammar() *Grammar {
 	))
 
 	// --- Input declaration ---
-	g.Define("input_declaration", Seq(
-		Str("input"),
-		Str("{"),
-		Repeat(Sym("input_field")),
-		Str("}"),
+	// Either an inline block (`input { ... }`) or a reference to an external
+	// schema the program already owns (`input from proto "x.proto" message "pkg.Msg"`).
+	g.Define("input_declaration", Choice(
+		Seq(
+			Str("input"),
+			Str("{"),
+			Repeat(Sym("input_field")),
+			Str("}"),
+		),
+		Seq(
+			Str("input"),
+			Str("from"),
+			Str("proto"),
+			Field("path", Sym("string_literal")),
+			Str("message"),
+			Field("message", Sym("string_literal")),
+		),
 	))
 
 	g.Define("input_field", Seq(

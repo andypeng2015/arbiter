@@ -10,6 +10,7 @@ type Program struct {
 	Imports        []Import
 	Tags           []TagDeclaration
 	Input          *InputSchema
+	InputRef       *InputRef
 	Consts         []Const
 	Features       []Feature
 	FactSchemas    []FactSchema
@@ -108,6 +109,16 @@ type FieldType struct {
 	Base      string     // "string", "number", "decimal", "boolean", "timestamp", "list", "object"
 	Dimension string     // for number<D>, decimal<D>
 	Element   *FieldType // for list<T> — element type; nil for non-list types
+}
+
+// InputRef is an external input-schema reference declared in source as
+// `input from proto "<path>" message "<name>"`. It is resolved to an
+// InputSchema at compile time, relative to the source file's directory.
+type InputRef struct {
+	Kind    string // "proto"
+	Path    string
+	Message string
+	Span    Span
 }
 
 // InputSchema is the top-level input schema declaration.
