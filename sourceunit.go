@@ -521,6 +521,7 @@ func compileProgram(program *ir.Program) (*Program, error) {
 		return nil, err
 	}
 	ir.FoldConstants(program)
+	warnings = append(warnings, detectDeadCode(program)...)
 	rs, err := compiler.CompileIR(program)
 	if err != nil {
 		return nil, err
