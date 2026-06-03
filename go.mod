@@ -4,7 +4,6 @@ go 1.25.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/bufbuild/protocompile v0.14.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/odvcencio/gotreesitter v0.19.1
