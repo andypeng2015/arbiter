@@ -338,7 +338,7 @@ func CompileFile(path string, opts ...Option) (*Program, error) {
 		return nil, err
 	}
 
-	prog, err := compileProgram(program)
+	prog, err := compileProgramOpts(program, opts...)
 	if err != nil {
 		return nil, WrapFileError(unit, err)
 	}
@@ -365,7 +365,7 @@ func CompileFileSource(path string, source []byte, opts ...Option) (*Program, er
 	if err != nil {
 		return nil, err
 	}
-	prog, err := compileProgram(program)
+	prog, err := compileProgramOpts(program, opts...)
 	if err != nil {
 		return nil, wrapRootPathError(absPath, err)
 	}
@@ -407,6 +407,19 @@ func applyCompileOptions(opts []Option) compileOptions {
 		}
 	}
 	return out
+}
+
+// compileProgramOpts applies compile options that affect the IR (such as an
+// injected input schema from WithInputSchema) before delegating to
+// compileProgram, which validates and builds all evaluation artifacts.
+func compileProgramOpts(program *ir.Program, opts ...Option) (*Program, error) {
+	co := applyCompileOptions(opts)
+	if co.inputSchema != nil {
+		if err := mergeInjectedInputSchema(program, co.inputSchema); err != nil {
+			return nil, err
+		}
+	}
+	return compileProgram(program)
 }
 
 func resolveProgramImportsForPath(program *ir.Program, path string, hasIncludes bool, opts ...Option) (*ir.Program, error) {

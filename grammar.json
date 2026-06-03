@@ -494,6 +494,22 @@
           "type": "CHOICE"
         },
         {
+          "content": {
+            "members": [
+              {
+                "name": "active_from_clause",
+                "type": "SYMBOL"
+              },
+              {
+                "name": "active_until_clause",
+                "type": "SYMBOL"
+              }
+            ],
+            "type": "CHOICE"
+          },
+          "type": "REPEAT"
+        },
+        {
           "members": [
             {
               "content": {
@@ -1356,6 +1372,14 @@
               {
                 "name": "rule_excludes",
                 "type": "SYMBOL"
+              },
+              {
+                "name": "active_from_clause",
+                "type": "SYMBOL"
+              },
+              {
+                "name": "active_until_clause",
+                "type": "SYMBOL"
               }
             ],
             "type": "CHOICE"
@@ -1552,6 +1576,40 @@
             }
           ],
           "type": "CHOICE"
+        }
+      ],
+      "type": "SEQ"
+    },
+    "active_from_clause": {
+      "members": [
+        {
+          "type": "STRING",
+          "value": "active_from"
+        },
+        {
+          "content": {
+            "name": "timestamp_literal",
+            "type": "SYMBOL"
+          },
+          "name": "value",
+          "type": "FIELD"
+        }
+      ],
+      "type": "SEQ"
+    },
+    "active_until_clause": {
+      "members": [
+        {
+          "type": "STRING",
+          "value": "active_until"
+        },
+        {
+          "content": {
+            "name": "timestamp_literal",
+            "type": "SYMBOL"
+          },
+          "name": "value",
+          "type": "FIELD"
         }
       ],
       "type": "SEQ"
@@ -2763,6 +2821,22 @@
             }
           ],
           "type": "CHOICE"
+        },
+        {
+          "content": {
+            "members": [
+              {
+                "name": "active_from_clause",
+                "type": "SYMBOL"
+              },
+              {
+                "name": "active_until_clause",
+                "type": "SYMBOL"
+              }
+            ],
+            "type": "CHOICE"
+          },
+          "type": "REPEAT"
         },
         {
           "members": [

@@ -62,8 +62,9 @@ func (p *Program) stringPool() *vm.StringPool {
 type Option func(*compileOptions)
 
 type compileOptions struct {
-	manifest *string
-	resolver IncludeResolver
+	manifest    *string
+	resolver    IncludeResolver
+	inputSchema *ir.InputSchema
 }
 
 // WithManifest sets the manifest path for module resolution.
@@ -74,6 +75,16 @@ func WithManifest(path string) Option {
 // WithResolver sets the include resolver for import resolution.
 func WithResolver(r IncludeResolver) Option {
 	return func(o *compileOptions) { o.resolver = r }
+}
+
+// WithInputSchema injects an externally-derived input schema — for example one
+// synthesized from a protobuf message descriptor via protoschema.FromMessage,
+// or from a Go struct — so that .arb field references are type-checked against
+// it at compile time, with zero schema duplication in the .arb source. It
+// merges with any in-source input{} block; conflicting types on the same path
+// are reported as a compile error.
+func WithInputSchema(schema *ir.InputSchema) Option {
+	return func(o *compileOptions) { o.inputSchema = schema }
 }
 
 // toCompileResult converts a Program to the legacy CompileResult type.

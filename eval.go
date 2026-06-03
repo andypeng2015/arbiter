@@ -33,7 +33,7 @@ func Compile(source []byte, opts ...Option) (*Program, error) {
 		}
 	}
 
-	return compileProgram(program)
+	return compileProgramOpts(program, opts...)
 }
 
 // CompileResult includes compiled rule/runtime artifacts for one .arb program.

@@ -114,6 +114,11 @@ type FieldType struct {
 type InputSchema struct {
 	Fields []SchemaField
 	Span   Span
+	// Closed reports whether references to undeclared top-level fields are an
+	// error. An in-source input{} block is open (false) for backward
+	// compatibility; a schema bound from an external source (e.g. a .proto via
+	// WithInputSchema) is closed (true) so typo'd field names are caught.
+	Closed bool
 }
 
 // Import is one top-level import declaration.

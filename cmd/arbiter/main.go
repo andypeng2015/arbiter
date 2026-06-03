@@ -38,6 +38,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"m31labs.dev/arbiter"
 	arbiterv1 "m31labs.dev/arbiter/api/arbiter/v1"
 	"m31labs.dev/arbiter/arbtest"
@@ -52,16 +60,10 @@ import (
 	"m31labs.dev/arbiter/internal/buildinfo"
 	"m31labs.dev/arbiter/internal/grpcutil"
 	"m31labs.dev/arbiter/internal/statusview"
+	"m31labs.dev/arbiter/ir"
 	"m31labs.dev/arbiter/observability"
 	"m31labs.dev/arbiter/overrides"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	grpcstatus "google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"m31labs.dev/arbiter/protoschema"
 )
 
 const (
@@ -119,9 +121,13 @@ func run(args []string) error {
 
 func runCheck(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter check <file.arb>")
+		return usageError("Usage: arbiter check <file.arb> [--proto set.binpb --message pkg.Message]")
 	}
-	return check(args[0])
+	opts, err := schemaOptions(args[1:])
+	if err != nil {
+		return err
+	}
+	return check(args[0], opts...)
 }
 
 func runCompile(args []string) error {
@@ -133,7 +139,7 @@ func runCompile(args []string) error {
 
 func runEval(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter eval <file.arb> --data '{...}'")
+		return usageError("Usage: arbiter eval <file.arb> --data '{...}' [--proto set.binpb --message pkg.Message]")
 	}
 	dataJSON := ""
 	for i := 1; i < len(args); i++ {
@@ -145,7 +151,57 @@ func runEval(args []string) error {
 	if dataJSON == "" {
 		return fmt.Errorf("--data flag is required")
 	}
-	return evalCmd(args[0], dataJSON)
+	opts, err := schemaOptions(args[1:])
+	if err != nil {
+		return err
+	}
+	return evalCmd(args[0], dataJSON, opts...)
+}
+
+// schemaOptions parses --proto <descriptor-set> and --message <fully.qualified.Name>
+// from the argument list. When both are present it loads the FileDescriptorSet
+// and returns a compile option binding .arb type-checking to that message, so
+// field references are checked against the .proto with zero schema duplication.
+func schemaOptions(args []string) ([]arbiter.Option, error) {
+	var protoPath, message string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--proto":
+			if i+1 < len(args) {
+				protoPath = args[i+1]
+				i++
+			}
+		case "--message":
+			if i+1 < len(args) {
+				message = args[i+1]
+				i++
+			}
+		}
+	}
+	if protoPath == "" && message == "" {
+		return nil, nil
+	}
+	if protoPath == "" || message == "" {
+		return nil, fmt.Errorf("--proto and --message must be used together")
+	}
+	var schema *ir.InputSchema
+	var err error
+	if strings.HasSuffix(protoPath, ".proto") {
+		// Raw .proto source — compiled in-process (no protoc toolchain needed).
+		schema, err = protoschema.FromProtoFile(protoPath, message)
+	} else {
+		// Compiled FileDescriptorSet (protoc/buf --descriptor_set_out / -o).
+		var data []byte
+		data, err = os.ReadFile(protoPath)
+		if err != nil {
+			return nil, fmt.Errorf("read descriptor set %s: %w", protoPath, err)
+		}
+		schema, err = protoschema.FromFileDescriptorSet(data, message)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return []arbiter.Option{arbiter.WithInputSchema(schema)}, nil
 }
 
 func runStrategy(args []string) error {
@@ -405,13 +461,13 @@ type serveConfig struct {
 }
 
 type remoteInspectConfig struct {
-	target        string
-	token         string
-	caFile        string
-	serverName    string
-	forceInsecure bool
-	jsonOut       bool
-	failOnIssues  bool
+	target                 string
+	token                  string
+	caFile                 string
+	serverName             string
+	forceInsecure          bool
+	jsonOut                bool
+	failOnIssues           bool
 	failOnContractMismatch bool
 }
 
@@ -645,7 +701,14 @@ func looksLikeDiagnostic(message string) bool {
 	return true
 }
 
-func check(path string) error {
+func check(path string, opts ...arbiter.Option) error {
+	// When a schema is bound (e.g. via --proto), run a schema-aware compile so
+	// field references are type-checked against it; field-name typos surface here.
+	if len(opts) > 0 {
+		if _, err := arbiter.CompileFile(path, opts...); err != nil {
+			return fmt.Errorf("check %s: %w", path, err)
+		}
+	}
 	unit, parsed, err := arbiter.LoadFileParsed(path)
 	if err != nil {
 		return fmt.Errorf("check %s: %w", path, err)
@@ -689,8 +752,8 @@ func compileCmd(path string) error {
 	return nil
 }
 
-func evalCmd(path, dataJSON string) error {
-	prog, err := arbiter.CompileFile(path)
+func evalCmd(path, dataJSON string, opts ...arbiter.Option) error {
+	prog, err := arbiter.CompileFile(path, opts...)
 	if err != nil {
 		return fmt.Errorf("compile %s: %w", path, err)
 	}

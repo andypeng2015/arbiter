@@ -32,7 +32,12 @@ func resolveInputPath(input *ir.InputSchema, path string) (*resolvedField, error
 		}
 	}
 	if field == nil {
-		// Not an input field — let existing logic handle it.
+		// Top-level field not declared. A closed schema (e.g. bound from a
+		// .proto) rejects it; an open in-source input{} block lets existing
+		// permissive logic handle it.
+		if input.Closed {
+			return nil, fmt.Errorf("%q not declared in input schema", path)
+		}
 		return nil, nil
 	}
 
@@ -62,6 +67,53 @@ func resolveInputPath(input *ir.InputSchema, path string) (*resolvedField, error
 	}
 
 	return &resolvedField{typ: current.Type, optional: optional}, nil
+}
+
+// mergeInjectedInputSchema folds an externally-supplied input schema (e.g.
+// synthesized from a .proto) into the program's input schema. If the program
+// has no input{} block, the injected schema becomes the input schema.
+// Otherwise the two are checked for conflicts on overlapping paths and unioned.
+func mergeInjectedInputSchema(program *ir.Program, injected *ir.InputSchema) error {
+	if injected == nil {
+		return nil
+	}
+	if program.Input == nil {
+		// Clone so we don't mutate the caller's schema (e.g. set Closed on it).
+		program.Input = &ir.InputSchema{Fields: injected.Fields, Span: injected.Span}
+	} else {
+		if err := checkInputSchemaConflicts(program.Input, injected); err != nil {
+			return err
+		}
+		program.Input.Fields = mergeSchemaFields(program.Input.Fields, injected.Fields)
+	}
+	// An explicitly bound schema is authoritative: undeclared top-level fields
+	// are now compile errors.
+	program.Input.Closed = true
+	return nil
+}
+
+// mergeSchemaFields unions two field lists by name, recursing into the children
+// of same-named object fields. Callers must have verified the lists are
+// type-compatible on overlapping paths (see checkInputSchemaConflicts).
+func mergeSchemaFields(base, add []ir.SchemaField) []ir.SchemaField {
+	out := append([]ir.SchemaField(nil), base...)
+	for _, af := range add {
+		idx := -1
+		for i := range out {
+			if out[i].Name == af.Name {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			out = append(out, af)
+			continue
+		}
+		if len(af.Children) > 0 || len(out[idx].Children) > 0 {
+			out[idx].Children = mergeSchemaFields(out[idx].Children, af.Children)
+		}
+	}
+	return out
 }
 
 // checkInputSchemaConflicts compares two InputSchema instances for type
