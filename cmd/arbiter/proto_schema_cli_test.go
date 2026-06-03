@@ -84,6 +84,32 @@ message Order { string id = 1; double total = 2; }`), 0o644); err != nil {
 	}
 }
 
+func TestCheckInLanguageInputFromProto(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "order.proto"), []byte(`syntax = "proto3";
+package acme;
+message Order { string id = 1; double total = 2; }`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	arbPath := filepath.Join(dir, "rules.arb")
+
+	if err := os.WriteFile(arbPath, []byte(`input from proto "order.proto" message "acme.Order"
+rule R { when { totl >= 1 } then F {} }`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runCheck([]string{arbPath}); err == nil || !strings.Contains(err.Error(), "totl") {
+		t.Fatalf("check should resolve in-language `input from proto` and reject 'totl', got: %v", err)
+	}
+
+	if err := os.WriteFile(arbPath, []byte(`input from proto "order.proto" message "acme.Order"
+rule R { when { total >= 1 } then F {} }`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runCheck([]string{arbPath}); err != nil {
+		t.Fatalf("valid in-language `input from proto` should pass check: %v", err)
+	}
+}
+
 func TestCheckProtoFlagsRequireBoth(t *testing.T) {
 	dir := t.TempDir()
 	arbPath := filepath.Join(dir, "rules.arb")

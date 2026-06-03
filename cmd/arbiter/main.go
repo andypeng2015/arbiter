@@ -701,17 +701,29 @@ func looksLikeDiagnostic(message string) bool {
 	return true
 }
 
-func check(path string, opts ...arbiter.Option) error {
-	// When a schema is bound (e.g. via --proto), run a schema-aware compile so
-	// field references are type-checked against it; field-name typos surface here.
+// needsSchemaResolve reports whether check must run the resolution-aware
+// compile: when a schema is supplied via flags (--proto), or the source uses
+// the in-language `input from proto` form.
+func needsSchemaResolve(parsed *arbiter.ParsedSource, opts []arbiter.Option) bool {
 	if len(opts) > 0 {
-		if _, err := arbiter.CompileFile(path, opts...); err != nil {
-			return fmt.Errorf("check %s: %w", path, err)
-		}
+		return true
 	}
+	prog, err := ir.Lower(parsed.Root, parsed.Source, parsed.Lang)
+	return err == nil && prog != nil && prog.InputRef != nil
+}
+
+func check(path string, opts ...arbiter.Option) error {
 	unit, parsed, err := arbiter.LoadFileParsed(path)
 	if err != nil {
 		return fmt.Errorf("check %s: %w", path, err)
+	}
+	// If the program binds an external schema — via flags (--proto) or the
+	// in-language `input from proto` form — run the resolution-aware compile so
+	// field references are type-checked against it; field-name typos surface here.
+	if needsSchemaResolve(parsed, opts) {
+		if _, err := arbiter.CompileFile(path, opts...); err != nil {
+			return fmt.Errorf("check %s: %w", path, err)
+		}
 	}
 	full, err := arbiter.CompileFullParsed(parsed)
 	if err != nil {
