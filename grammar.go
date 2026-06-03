@@ -238,6 +238,14 @@ func ArbiterGrammar() *Grammar {
 			Str("message"),
 			Field("message", Sym("string_literal")),
 		),
+		Seq(
+			Str("input"),
+			Str("from"),
+			Str("go"),
+			Field("go_path", Sym("string_literal")),
+			Str("type"),
+			Field("go_type", Sym("string_literal")),
+		),
 	))
 
 	g.Define("input_field", Seq(

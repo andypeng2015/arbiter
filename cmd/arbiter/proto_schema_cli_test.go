@@ -110,6 +110,30 @@ rule R { when { total >= 1 } then F {} }`), 0o644); err != nil {
 	}
 }
 
+func TestCheckBindsGoStruct(t *testing.T) {
+	dir := t.TempDir()
+	goPath := filepath.Join(dir, "order.go")
+	if err := os.WriteFile(goPath, []byte("package acme\n\ntype Order struct {\n\tID    string  `arb:\"id\"`\n\tTotal float64 `arb:\"total\"`\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	arbPath := filepath.Join(dir, "rules.arb")
+
+	if err := os.WriteFile(arbPath, []byte("rule R { when { totl >= 1 } then Flag {} }"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := runCheck([]string{arbPath, "--go", goPath, "--type", "Order"})
+	if err == nil || !strings.Contains(err.Error(), "totl") {
+		t.Fatalf("want compile error naming 'totl' against Go struct, got: %v", err)
+	}
+
+	if err := os.WriteFile(arbPath, []byte("rule R { when { total >= 1 } then Flag {} }"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runCheck([]string{arbPath, "--go", goPath, "--type", "Order"}); err != nil {
+		t.Fatalf("valid field against Go struct should pass: %v", err)
+	}
+}
+
 func TestCheckProtoFlagsRequireBoth(t *testing.T) {
 	dir := t.TempDir()
 	arbPath := filepath.Join(dir, "rules.arb")

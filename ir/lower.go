@@ -165,6 +165,21 @@ func (l *lowerer) lowerSourceFile(root *gotreesitter.Node) {
 					ref.Message = parseutil.StripQuotes(l.text(msgNode))
 				}
 				l.program.InputRef = ref
+			} else if goPathNode := child.ChildByFieldName("go_path", l.lang); goPathNode != nil {
+				// `input from go "<path>" type "<name>"`
+				if l.program.Input != nil || l.program.InputRef != nil {
+					l.errs = append(l.errs, fmt.Errorf("duplicate input declaration"))
+					break
+				}
+				ref := &InputRef{
+					Kind: "go",
+					Path: parseutil.StripQuotes(l.text(goPathNode)),
+					Span: spanForNode(child),
+				}
+				if tn := child.ChildByFieldName("go_type", l.lang); tn != nil {
+					ref.Message = parseutil.StripQuotes(l.text(tn))
+				}
+				l.program.InputRef = ref
 			} else if l.program.Input != nil {
 				l.errs = append(l.errs, fmt.Errorf("duplicate input declaration"))
 			} else {

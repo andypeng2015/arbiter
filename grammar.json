@@ -877,6 +877,43 @@
             }
           ],
           "type": "SEQ"
+        },
+        {
+          "members": [
+            {
+              "type": "STRING",
+              "value": "input"
+            },
+            {
+              "type": "STRING",
+              "value": "from"
+            },
+            {
+              "type": "STRING",
+              "value": "go"
+            },
+            {
+              "content": {
+                "name": "string_literal",
+                "type": "SYMBOL"
+              },
+              "name": "go_path",
+              "type": "FIELD"
+            },
+            {
+              "type": "STRING",
+              "value": "type"
+            },
+            {
+              "content": {
+                "name": "string_literal",
+                "type": "SYMBOL"
+              },
+              "name": "go_type",
+              "type": "FIELD"
+            }
+          ],
+          "type": "SEQ"
         }
       ],
       "type": "CHOICE"

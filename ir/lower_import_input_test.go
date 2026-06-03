@@ -134,6 +134,23 @@ func TestLowerInputFromProto(t *testing.T) {
 	}
 }
 
+func TestLowerInputFromGo(t *testing.T) {
+	program := lowerSource(t, `input from go "order.go" type "Order"`)
+
+	if program.InputRef == nil {
+		t.Fatal("program.InputRef = nil, want a go input ref")
+	}
+	if program.InputRef.Kind != "go" {
+		t.Fatalf("InputRef.Kind = %q, want go", program.InputRef.Kind)
+	}
+	if program.InputRef.Path != "order.go" {
+		t.Fatalf("InputRef.Path = %q, want order.go", program.InputRef.Path)
+	}
+	if program.InputRef.Message != "Order" {
+		t.Fatalf("InputRef.Message = %q, want Order", program.InputRef.Message)
+	}
+}
+
 func TestLowerInputOptionalField(t *testing.T) {
 	program := lowerSource(t, `input { user: { tier?: string } }`)
 

@@ -56,6 +56,7 @@ import (
 	explorepkg "m31labs.dev/arbiter/explore"
 	"m31labs.dev/arbiter/flags"
 	"m31labs.dev/arbiter/format"
+	"m31labs.dev/arbiter/gostruct"
 	"m31labs.dev/arbiter/grpcserver"
 	"m31labs.dev/arbiter/internal/buildinfo"
 	"m31labs.dev/arbiter/internal/grpcutil"
@@ -158,12 +159,14 @@ func runEval(args []string) error {
 	return evalCmd(args[0], dataJSON, opts...)
 }
 
-// schemaOptions parses --proto <descriptor-set> and --message <fully.qualified.Name>
-// from the argument list. When both are present it loads the FileDescriptorSet
-// and returns a compile option binding .arb type-checking to that message, so
-// field references are checked against the .proto with zero schema duplication.
+// schemaOptions parses external-schema binding flags and returns a compile
+// option that type-checks .arb field references against that schema, with zero
+// duplication in the .arb source:
+//
+//	--proto <user.proto|set.binpb> --message <pkg.Message>
+//	--go    <types.go>             --type    <StructName>
 func schemaOptions(args []string) ([]arbiter.Option, error) {
-	var protoPath, message string
+	var protoPath, message, goPath, goType string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--proto":
@@ -176,27 +179,48 @@ func schemaOptions(args []string) ([]arbiter.Option, error) {
 				message = args[i+1]
 				i++
 			}
+		case "--go":
+			if i+1 < len(args) {
+				goPath = args[i+1]
+				i++
+			}
+		case "--type":
+			if i+1 < len(args) {
+				goType = args[i+1]
+				i++
+			}
 		}
 	}
-	if protoPath == "" && message == "" {
-		return nil, nil
-	}
-	if protoPath == "" || message == "" {
-		return nil, fmt.Errorf("--proto and --message must be used together")
-	}
+
 	var schema *ir.InputSchema
 	var err error
-	if strings.HasSuffix(protoPath, ".proto") {
-		// Raw .proto source — compiled in-process (no protoc toolchain needed).
-		schema, err = protoschema.FromProtoFile(protoPath, message)
-	} else {
-		// Compiled FileDescriptorSet (protoc/buf --descriptor_set_out / -o).
-		var data []byte
-		data, err = os.ReadFile(protoPath)
-		if err != nil {
-			return nil, fmt.Errorf("read descriptor set %s: %w", protoPath, err)
+	switch {
+	case protoPath == "" && message == "" && goPath == "" && goType == "":
+		return nil, nil
+	case protoPath != "" || message != "":
+		if protoPath == "" || message == "" {
+			return nil, fmt.Errorf("--proto and --message must be used together")
 		}
-		schema, err = protoschema.FromFileDescriptorSet(data, message)
+		if goPath != "" || goType != "" {
+			return nil, fmt.Errorf("--proto and --go are mutually exclusive")
+		}
+		if strings.HasSuffix(protoPath, ".proto") {
+			// Raw .proto source — parsed in-process (no protoc toolchain needed).
+			schema, err = protoschema.FromProtoFile(protoPath, message)
+		} else {
+			// Compiled FileDescriptorSet (protoc/buf --descriptor_set_out / -o).
+			var data []byte
+			data, err = os.ReadFile(protoPath)
+			if err != nil {
+				return nil, fmt.Errorf("read descriptor set %s: %w", protoPath, err)
+			}
+			schema, err = protoschema.FromFileDescriptorSet(data, message)
+		}
+	default: // --go / --type
+		if goPath == "" || goType == "" {
+			return nil, fmt.Errorf("--go and --type must be used together")
+		}
+		schema, err = gostruct.FromStructFile(goPath, goType)
 	}
 	if err != nil {
 		return nil, err
