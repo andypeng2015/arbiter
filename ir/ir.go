@@ -109,6 +109,11 @@ type FieldType struct {
 	Base      string     // "string", "number", "decimal", "boolean", "timestamp", "list", "object"
 	Dimension string     // for number<D>, decimal<D>
 	Element   *FieldType // for list<T> — element type; nil for non-list types
+	// Open marks an object whose keys are not statically known (e.g. a protobuf
+	// map or an unresolved/imported message type). Access to any sub-path under
+	// an open object resolves to an unknown (permissive) type rather than a
+	// "field not declared" error, even under a closed input schema.
+	Open bool
 }
 
 // InputRef is an external input-schema reference declared in source as

@@ -60,6 +60,22 @@ func FromProtoSource(src []byte, message string) (*ir.InputSchema, error) {
 	return &ir.InputSchema{Fields: fields}, nil
 }
 
+// wktBase maps protobuf well-known message types to Arbiter base types,
+// short-circuiting recursion into their internal structure.
+var wktBase = map[string]string{
+	"google.protobuf.Timestamp":   "timestamp",
+	"google.protobuf.Duration":    "number",
+	"google.protobuf.StringValue": "string",
+	"google.protobuf.BytesValue":  "string",
+	"google.protobuf.BoolValue":   "boolean",
+	"google.protobuf.Int32Value":  "number",
+	"google.protobuf.Int64Value":  "number",
+	"google.protobuf.UInt32Value": "number",
+	"google.protobuf.UInt64Value": "number",
+	"google.protobuf.FloatValue":  "number",
+	"google.protobuf.DoubleValue": "number",
+}
+
 // protoScalarBase maps protobuf scalar type keywords to Arbiter base types.
 var protoScalarBase = map[string]string{
 	"double": "number", "float": "number",
@@ -143,9 +159,8 @@ func (w *protoWalker) fields(body *gotreesitter.Node, seen map[string]bool) ([]i
 			}
 		case "map_field":
 			if name := strings.TrimSpace(w.text(w.childByType(c, "identifier"))); name != "" {
-				// A map has dynamic keys; until Arbiter has a typed-map schema it
-				// is an opaque object.
-				out = append(out, ir.SchemaField{Name: name, Type: ir.FieldType{Base: "object"}})
+				// A map has dynamic keys — an open object (any sub-key allowed).
+				out = append(out, ir.SchemaField{Name: name, Type: ir.FieldType{Base: "object", Open: true}})
 			}
 		}
 	}
@@ -175,21 +190,25 @@ func (w *protoWalker) field(field *gotreesitter.Node, seen map[string]bool) (ir.
 // message types (with cycle protection) and treating enums as strings.
 func (w *protoWalker) fieldType(typeNode *gotreesitter.Node, seen map[string]bool) (ir.FieldType, []ir.SchemaField) {
 	if ref := w.childByType(typeNode, "message_or_enum_type"); ref != nil {
-		refName := simpleName(strings.TrimSpace(w.text(ref)))
+		full := strings.TrimSpace(w.text(ref))
+		if base, ok := wktBase[full]; ok {
+			return ir.FieldType{Base: base}, nil
+		}
+		refName := simpleName(full)
 		if w.enums[refName] {
 			return ir.FieldType{Base: "string"}, nil
 		}
 		if body, ok := w.messages[refName]; ok {
 			if seen[refName] {
-				return ir.FieldType{Base: "object"}, nil // cycle break
+				return ir.FieldType{Base: "object", Open: true}, nil // cycle break
 			}
 			seen[refName] = true
 			children, _ := w.fields(body, seen)
 			delete(seen, refName)
 			return ir.FieldType{Base: "object"}, children
 		}
-		// Imported / unknown type — opaque object.
-		return ir.FieldType{Base: "object"}, nil
+		// Imported / unknown type — open object (its fields aren't visible here).
+		return ir.FieldType{Base: "object", Open: true}, nil
 	}
 	// Scalar.
 	if base, ok := protoScalarBase[strings.TrimSpace(w.text(typeNode))]; ok {

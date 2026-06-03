@@ -44,6 +44,36 @@ message Order {
 	}
 }
 
+func TestFromProtoFileMapAndWellKnownTypes(t *testing.T) {
+	dir := t.TempDir()
+	path := writeProto(t, dir, "e.proto", `syntax = "proto3";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+package acme;
+message E {
+  map<string, string> labels = 1;
+  google.protobuf.Timestamp created = 2;
+  google.protobuf.Duration ttl = 3;
+  Other other = 4;
+}`)
+	schema, err := FromProtoFile(path, "acme.E")
+	if err != nil {
+		t.Fatalf("FromProtoFile: %v", err)
+	}
+	if f := findField(t, schema, "labels"); f.Type.Base != "object" || !f.Type.Open {
+		t.Errorf("labels (map) = %+v, want open object", f.Type)
+	}
+	if f := findField(t, schema, "created"); f.Type.Base != "timestamp" {
+		t.Errorf("created = %q, want timestamp", f.Type.Base)
+	}
+	if f := findField(t, schema, "ttl"); f.Type.Base != "number" {
+		t.Errorf("ttl (Duration) = %q, want number", f.Type.Base)
+	}
+	if f := findField(t, schema, "other"); f.Type.Base != "object" || !f.Type.Open {
+		t.Errorf("other (unresolved import) = %+v, want open object", f.Type)
+	}
+}
+
 func TestFromProtoFileUnknownMessage(t *testing.T) {
 	dir := t.TempDir()
 	path := writeProto(t, dir, "order.proto", `syntax = "proto3";

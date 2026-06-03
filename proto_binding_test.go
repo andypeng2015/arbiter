@@ -68,6 +68,29 @@ rule R {
 }
 
 // A conflicting type on the same path must be reported.
+func TestWithInputSchemaOpenObjectAllowsSubPaths(t *testing.T) {
+	// An open object (e.g. a protobuf map) permits any sub-key access even under
+	// a closed schema.
+	schema := &ir.InputSchema{Fields: []ir.SchemaField{
+		{Name: "labels", Type: ir.FieldType{Base: "object", Open: true}},
+	}}
+	src := []byte(`rule R { when { labels.env == "prod" } then A {} }`)
+	if _, err := Compile(src, WithInputSchema(schema)); err != nil {
+		t.Fatalf("sub-path access on an open object should be allowed, got: %v", err)
+	}
+}
+
+func TestWithInputSchemaOpaqueObjectRejectsSubPaths(t *testing.T) {
+	// A non-open object with no children is opaque; sub-key access is rejected.
+	schema := &ir.InputSchema{Fields: []ir.SchemaField{
+		{Name: "addr", Type: ir.FieldType{Base: "object"}},
+	}}
+	src := []byte(`rule R { when { addr.city == "x" } then A {} }`)
+	if _, err := Compile(src, WithInputSchema(schema)); err == nil {
+		t.Fatal("sub-path access on an opaque object should be rejected")
+	}
+}
+
 func TestWithInputSchemaConflictRejected(t *testing.T) {
 	src := []byte(`input { age: string }
 rule R { when { age >= 18 } then Allow {} }`)

@@ -87,10 +87,10 @@ type mappedType struct {
 
 // fieldType maps a single protobuf field to an Arbiter field type.
 func fieldType(fd protoreflect.FieldDescriptor, seen map[protoreflect.FullName]bool) (mappedType, error) {
-	// Maps are repeated under the hood — check before IsList. Until Arbiter has
-	// a typed-map schema, a map is an object whose keys aren't statically known.
+	// Maps are repeated under the hood — check before IsList. A map's keys aren't
+	// statically known, so it is an open object.
 	if fd.IsMap() {
-		return mappedType{typ: ir.FieldType{Base: "object"}}, nil
+		return mappedType{typ: ir.FieldType{Base: "object", Open: true}}, nil
 	}
 	if fd.IsList() {
 		elem, err := elementType(fd)
@@ -107,10 +107,14 @@ func singularType(fd protoreflect.FieldDescriptor, seen map[protoreflect.FullNam
 	switch fd.Kind() {
 	case protoreflect.MessageKind, protoreflect.GroupKind:
 		md := fd.Message()
+		// Well-known types map to a scalar rather than their internal structure.
+		if base, ok := wktBase[string(md.FullName())]; ok {
+			return mappedType{typ: ir.FieldType{Base: base}}, nil
+		}
 		// Cycle break: a message type already on the resolution path is emitted
-		// as an object with no children rather than recursing forever.
+		// as an open object rather than recursing forever.
 		if seen[md.FullName()] {
-			return mappedType{typ: ir.FieldType{Base: "object"}}, nil
+			return mappedType{typ: ir.FieldType{Base: "object", Open: true}}, nil
 		}
 		seen[md.FullName()] = true
 		children, err := messageFields(md, seen)

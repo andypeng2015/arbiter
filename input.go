@@ -46,6 +46,11 @@ func resolveInputPath(input *ir.InputSchema, path string) (*resolvedField, error
 	// Walk down the remaining path segments.
 	current := field
 	for _, part := range parts[1:] {
+		if current.Type.Open {
+			// Keys of an open object (protobuf map, unresolved message) are not
+			// statically known — any sub-path resolves to an unknown type.
+			return &resolvedField{typ: ir.FieldType{}, optional: true}, nil
+		}
 		if len(current.Children) == 0 {
 			// Leaf field — cannot dereference further.
 			return nil, fmt.Errorf("%q not declared in input schema (field %q is %s, not an object)", path, current.Name, current.Type.Base)
