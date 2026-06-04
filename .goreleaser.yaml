@@ -1,0 +1,61 @@
+version: 2
+
+project_name: arbiter
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: arbiter
+    main: ./cmd/arbiter
+    binary: arbiter
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags: ["-s -w"]
+  - id: arbiter-lsp
+    main: ./cmd/arbiter-lsp
+    binary: arbiter-lsp
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags: ["-s -w"]
+  - id: arbiter-runtime
+    main: ./cmd/arbiter-runtime
+    binary: arbiter-runtime
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags: ["-s -w"]
+  - id: arbiter-agent
+    main: ./cmd/arbiter-agent
+    binary: arbiter-agent
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags: ["-s -w"]
+
+archives:
+  - id: default
+    ids: [arbiter, arbiter-lsp, arbiter-runtime, arbiter-agent]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "snapshot-{{ .ShortCommit }}"
+
+homebrew_casks:
+  - name: arbiter
+    ids: [default]
+    repository:
+      owner: odvcencio
+      name: homebrew-tap
+    homepage: "https://arbiter.m31labs.dev/"
+    description: "Compiled, bytecode-evaluated decision language for Go."

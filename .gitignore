@@ -6,9 +6,11 @@
 /conformance.test
 /.gts/
 
-# Local specs and plans
-/docs/superpowers/plans/
-/docs/superpowers/specs/
+# Private working notes
+.claude/
+/docs/blog-outlines/
+/docs/plans/
+/docs/superpowers/
 
 # SDK build artifacts
 sdks/node/node_modules/
@@ -28,3 +30,4 @@ sdks/python/build/
 # OS
 .DS_Store
 .local/
+dist/
