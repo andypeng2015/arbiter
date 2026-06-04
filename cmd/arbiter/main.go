@@ -122,13 +122,19 @@ func run(args []string) error {
 
 func runCheck(args []string) error {
 	if len(args) < 1 {
-		return usageError("Usage: arbiter check <file.arb> [--proto set.binpb --message pkg.Message]")
+		return usageError("Usage: arbiter check <file.arb> [--strict] [--proto set.binpb --message pkg.Message]")
+	}
+	strict := false
+	for _, a := range args[1:] {
+		if a == "--strict" {
+			strict = true
+		}
 	}
 	opts, err := schemaOptions(args[1:])
 	if err != nil {
 		return err
 	}
-	return check(args[0], opts...)
+	return check(args[0], strict, opts...)
 }
 
 func runCompile(args []string) error {
@@ -736,19 +742,23 @@ func needsSchemaResolve(parsed *arbiter.ParsedSource, opts []arbiter.Option) boo
 	return err == nil && prog != nil && prog.InputRef != nil
 }
 
-func check(path string, opts ...arbiter.Option) error {
+func check(path string, strict bool, opts ...arbiter.Option) error {
 	unit, parsed, err := arbiter.LoadFileParsed(path)
 	if err != nil {
 		return fmt.Errorf("check %s: %w", path, err)
 	}
-	// If the program binds an external schema — via flags (--proto) or the
-	// in-language `input from proto` form — run the resolution-aware compile so
-	// field references are type-checked against it; field-name typos surface here.
-	if needsSchemaResolve(parsed, opts) {
-		if _, err := arbiter.CompileFile(path, opts...); err != nil {
-			return fmt.Errorf("check %s: %w", path, err)
+	// Resolution-aware compile: type-checks (including any bound schema from
+	// --proto / `input from proto`) and collects warnings (dead code, etc.).
+	prog, compileErr := arbiter.CompileFile(path, opts...)
+	if compileErr != nil {
+		// A bound schema makes the error authoritative; otherwise fall back to
+		// the parsed validation path (e.g. an import case CompileFile won't take).
+		if needsSchemaResolve(parsed, opts) {
+			return fmt.Errorf("check %s: %w", path, compileErr)
 		}
+		prog = nil
 	}
+
 	full, err := arbiter.CompileFullParsed(parsed)
 	if err != nil {
 		return fmt.Errorf("check %s: %w", path, arbiter.WrapFileError(unit, err))
@@ -762,6 +772,16 @@ func check(path string, opts ...arbiter.Option) error {
 	if full.Strategies.Count() == 0 && len(full.Workers) == 0 && len(full.Arbiters) == 0 {
 		if _, err := arbiter.TranspileParsed(parsed); err != nil {
 			return fmt.Errorf("check %s: %w", path, arbiter.WrapFileError(unit, err))
+		}
+	}
+
+	// Surface non-fatal warnings; --strict turns them into a CI failure.
+	if prog != nil {
+		for _, w := range prog.Warnings {
+			fmt.Fprintf(os.Stderr, "%s:%d:%d: warning: %s\n", path, w.Line, w.Col, w.Message)
+		}
+		if strict && len(prog.Warnings) > 0 {
+			return fmt.Errorf("check %s: %d warning(s) reported with --strict", path, len(prog.Warnings))
 		}
 	}
 

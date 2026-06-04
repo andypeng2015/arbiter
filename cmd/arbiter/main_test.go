@@ -237,7 +237,7 @@ rule BadRollout {
 }
 `)
 
-	err := check(mainPath)
+	err := check(mainPath, false)
 	if err == nil {
 		t.Fatal("expected check to fail")
 	}
