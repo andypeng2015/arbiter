@@ -65,6 +65,7 @@ import (
 	"m31labs.dev/arbiter/observability"
 	"m31labs.dev/arbiter/overrides"
 	"m31labs.dev/arbiter/protoschema"
+	"m31labs.dev/arbiter/vm"
 )
 
 const (
@@ -151,10 +152,16 @@ func runEval(args []string) error {
 		return usageError("Usage: arbiter eval <file.arb> --data '{...}' [--proto set.binpb --message pkg.Message]")
 	}
 	dataJSON := ""
+	explain := false
 	for i := 1; i < len(args); i++ {
-		if args[i] == "--data" && i+1 < len(args) {
-			dataJSON = args[i+1]
-			i++
+		switch args[i] {
+		case "--data":
+			if i+1 < len(args) {
+				dataJSON = args[i+1]
+				i++
+			}
+		case "--explain":
+			explain = true
 		}
 	}
 	if dataJSON == "" {
@@ -164,7 +171,7 @@ func runEval(args []string) error {
 	if err != nil {
 		return err
 	}
-	return evalCmd(args[0], dataJSON, opts...)
+	return evalCmd(args[0], dataJSON, explain, opts...)
 }
 
 // schemaOptions parses external-schema binding flags and returns a compile
@@ -823,40 +830,70 @@ func compileCmd(path string) error {
 	return nil
 }
 
-func evalCmd(path, dataJSON string, opts ...arbiter.Option) error {
+func evalCmd(path, dataJSON string, explain bool, opts ...arbiter.Option) error {
 	prog, err := arbiter.CompileFile(path, opts...)
 	if err != nil {
 		return fmt.Errorf("compile %s: %w", path, err)
+	}
+
+	printMatched := func(matched []vm.MatchedRule) {
+		if len(matched) == 0 {
+			fmt.Println("no rules matched")
+			return
+		}
+		for _, m := range matched {
+			tag := "matched"
+			if m.Fallback {
+				tag = "fallback"
+			}
+			fmt.Printf("[%s] %s -> %s", tag, m.Name, m.Action)
+			if len(m.Params) > 0 {
+				out, _ := json.Marshal(m.Params)
+				fmt.Printf(" %s", out)
+			}
+			fmt.Println()
+		}
+	}
+
+	if explain {
+		// Governed evaluation produces the arbitrace; render it as the audit tree.
+		var ctx map[string]any
+		if err := json.Unmarshal([]byte(dataJSON), &ctx); err != nil {
+			return fmt.Errorf("parse data: %w", err)
+		}
+		matched, trace, err := arbiter.EvalGoverned(prog, arbiter.DataFromMap(ctx, prog), prog.Segments, ctx)
+		if err != nil {
+			return fmt.Errorf("eval: %w", err)
+		}
+		printMatched(matched)
+		fmt.Println("arbitrace:")
+		for _, s := range trace.Steps {
+			disp := s.Disposition
+			if disp == "" {
+				if s.Result {
+					disp = "passed"
+				} else {
+					disp = "blocked"
+				}
+			}
+			line := fmt.Sprintf("  [%-8s] %s", disp, s.Check)
+			if s.Detail != "" {
+				line += " — " + s.Detail
+			}
+			fmt.Println(line)
+		}
+		return nil
 	}
 
 	dc, err := arbiter.DataFromJSON(dataJSON, prog)
 	if err != nil {
 		return fmt.Errorf("parse data: %w", err)
 	}
-
 	matched, err := arbiter.Eval(prog, dc)
 	if err != nil {
 		return fmt.Errorf("eval: %w", err)
 	}
-
-	if len(matched) == 0 {
-		fmt.Println("no rules matched")
-		return nil
-	}
-
-	for _, m := range matched {
-		tag := "matched"
-		if m.Fallback {
-			tag = "fallback"
-		}
-		fmt.Printf("[%s] %s -> %s", tag, m.Name, m.Action)
-		if len(m.Params) > 0 {
-			out, _ := json.Marshal(m.Params)
-			fmt.Printf(" %s", out)
-		}
-		fmt.Println()
-	}
-
+	printMatched(matched)
 	return nil
 }
 
