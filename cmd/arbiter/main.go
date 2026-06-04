@@ -786,11 +786,6 @@ func check(path string, strict bool, opts ...arbiter.Option) error {
 	if _, err := expert.CompileParsed(parsed, full); err != nil {
 		return fmt.Errorf("check %s: %w", path, arbiter.WrapFileError(unit, err))
 	}
-	if full.Strategies.Count() == 0 && len(full.Workers) == 0 && len(full.Arbiters) == 0 {
-		if _, err := arbiter.TranspileParsed(parsed); err != nil {
-			return fmt.Errorf("check %s: %w", path, arbiter.WrapFileError(unit, err))
-		}
-	}
 
 	// Surface non-fatal warnings; --strict turns them into a CI failure.
 	if prog != nil {

@@ -29,6 +29,10 @@ type RuleOutput struct {
 }
 
 // Transpile converts .arb source to Arishem-compatible JSON.
+//
+// Deprecated: the Arishem JSON emit direction is deprecated and will be removed
+// in v2.0.0 — Arbiter is the engine, not a transpiler to other engines. Use
+// `arbiter import` (decompile) as the migration on-ramp.
 func Transpile(source []byte) (string, error) {
 	parsed, err := ParseSource(source)
 	if err != nil {
@@ -38,6 +42,9 @@ func Transpile(source []byte) (string, error) {
 }
 
 // TranspileParsed converts a previously parsed .arb program to Arishem-compatible JSON.
+//
+// Deprecated: the Arishem JSON emit direction is deprecated and will be removed
+// in v2.0.0. Use `arbiter import` (decompile) as the migration on-ramp.
 func TranspileParsed(parsed *ParsedSource) (string, error) {
 	if parsed == nil {
 		return "", fmt.Errorf("nil parsed source")
@@ -64,6 +71,8 @@ func TranspileParsed(parsed *ParsedSource) (string, error) {
 }
 
 // TranspileFile resolves includes and transpiles a file-backed .arb program.
+//
+// Deprecated: Arishem JSON emit; will be removed in v2.0.0.
 func TranspileFile(path string) (string, error) {
 	unit, parsed, err := LoadFileParsed(path)
 	if err != nil {
@@ -77,6 +86,8 @@ func TranspileFile(path string) (string, error) {
 }
 
 // TranspileRule converts a single rule's condition to Arishem JSON (no wrapper).
+//
+// Deprecated: Arishem JSON emit; will be removed in v2.0.0.
 func TranspileRule(source []byte, ruleName string) (string, error) {
 	parsed, err := ParseSource(source)
 	if err != nil {
@@ -86,6 +97,8 @@ func TranspileRule(source []byte, ruleName string) (string, error) {
 }
 
 // TranspileRuleParsed converts one rule condition from a parsed .arb program.
+//
+// Deprecated: Arishem JSON emit; will be removed in v2.0.0.
 func TranspileRuleParsed(parsed *ParsedSource, ruleName string) (string, error) {
 	if parsed == nil {
 		return "", fmt.Errorf("nil parsed source")
@@ -108,6 +121,8 @@ func TranspileRuleParsed(parsed *ParsedSource, ruleName string) (string, error) 
 
 // TranspileRuleFile resolves includes and transpiles one rule from a file-backed
 // .arb program.
+//
+// Deprecated: Arishem JSON emit; will be removed in v2.0.0.
 func TranspileRuleFile(path, ruleName string) (string, error) {
 	unit, parsed, err := LoadFileParsed(path)
 	if err != nil {
