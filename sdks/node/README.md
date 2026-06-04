@@ -1,6 +1,29 @@
 # Arbiter Node SDK
 
-Node client for the Arbiter gRPC API with bearer-token metadata and bounded retries on transient unary failures.
+Two ways to evaluate:
+
+- **gRPC client** (`@arbiter/sdk-node`) — talks to a hosted control plane.
+- **Local eval** (`@arbiter/sdk-node/local`) — evaluates compiled `.arb` rules
+  in-process via WebAssembly, no server round-trip.
+
+The gRPC client carries bearer-token metadata and bounded retries on transient unary failures.
+
+## Local evaluation (in-process, no server)
+
+```bash
+npm run build:wasm   # builds wasm/{arbiter.wasm,wasm_exec.js,loader.js}
+```
+
+```js
+const arbiter = require("@arbiter/sdk-node/local");
+
+async function main() {
+  await arbiter.init();
+  arbiter.compile(`rule BigOrder { when { total >= 100 } then Flag { tier: "vip" } }`);
+  const matched = arbiter.evalGoverned(JSON.stringify({ total: 250 }));
+  console.log(matched); // [{ name: "BigOrder", action: "Flag", params: { tier: "vip" } }]
+}
+```
 
 ## Install
 

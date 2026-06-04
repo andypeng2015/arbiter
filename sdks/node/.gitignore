@@ -1,1 +1,4 @@
 node_modules/
+
+# WASM build artifacts (produced by build-wasm.sh)
+wasm/

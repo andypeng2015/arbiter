@@ -1,8 +1,15 @@
 {
   "name": "@arbiter/sdk-node",
   "version": "1.0.0",
-  "description": "Thin Node gRPC client for Arbiter",
+  "description": "Arbiter Node SDK — gRPC control-plane client plus in-process WASM local evaluation",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./local": "./src/local.js"
+  },
+  "scripts": {
+    "build:wasm": "./build-wasm.sh"
+  },
   "license": "MIT",
   "dependencies": {
     "@grpc/grpc-js": "^1.14.0",
