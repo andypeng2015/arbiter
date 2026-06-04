@@ -2239,19 +2239,6 @@ func runBundle(args []string) error {
 		return fmt.Errorf("bundle %s: %w", path, err)
 	}
 
-	// Sign the bundle if --sign was provided.
-	if signKeyPath != "" {
-		privKey, err := loadPrivateKey(signKeyPath)
-		if err != nil {
-			return fmt.Errorf("load signing key: %w", err)
-		}
-		blob, err = bundle.Sign(blob, privKey)
-		if err != nil {
-			return fmt.Errorf("sign bundle: %w", err)
-		}
-		fmt.Fprintln(os.Stderr, "[sign] bundle signed with Ed25519")
-	}
-
 	if outPath == "" {
 		outPath = strings.TrimSuffix(path, ".arb") + ".arbb"
 	}
@@ -2259,6 +2246,24 @@ func runBundle(args []string) error {
 		return fmt.Errorf("write %s: %w", outPath, err)
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s (%d rules, %d bytes, obfuscated)\n", outPath, len(prog.Ruleset.Rules), len(blob))
+
+	// Sign into a detached sidecar (<bundle>.sig); the ARB1 bytes stay pristine.
+	if signKeyPath != "" {
+		privKey, err := loadPrivateKey(signKeyPath)
+		if err != nil {
+			return fmt.Errorf("load signing key: %w", err)
+		}
+		manifest := bundle.SignManifest(blob, privKey, filepath.Base(signKeyPath), buildinfo.Version)
+		sidecar, err := manifest.MarshalSidecar()
+		if err != nil {
+			return fmt.Errorf("encode signature manifest: %w", err)
+		}
+		sigPath := outPath + ".sig"
+		if err := os.WriteFile(sigPath, sidecar, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", sigPath, err)
+		}
+		fmt.Fprintf(os.Stderr, "[sign] wrote %s (Ed25519 detached signature)\n", sigPath)
+	}
 	return nil
 }
 
@@ -2268,19 +2273,27 @@ func verifyBundle(bundlePath, pubKeyPath string) error {
 	if pubKeyPath == "" {
 		return fmt.Errorf("--pub flag is required for --verify")
 	}
-	data, err := os.ReadFile(bundlePath)
+	blob, err := os.ReadFile(bundlePath)
 	if err != nil {
 		return fmt.Errorf("read bundle %s: %w", bundlePath, err)
+	}
+	sigPath := bundlePath + ".sig"
+	sidecar, err := os.ReadFile(sigPath)
+	if err != nil {
+		return fmt.Errorf("read signature %s: %w", sigPath, err)
+	}
+	manifest, err := bundle.ParseSidecar(sidecar)
+	if err != nil {
+		return err
 	}
 	pubKey, err := loadPublicKey(pubKeyPath)
 	if err != nil {
 		return fmt.Errorf("load public key: %w", err)
 	}
-	payload, err := bundle.Verify(data, pubKey)
-	if err != nil {
+	if err := manifest.VerifyBlob(blob, pubKey); err != nil {
 		return fmt.Errorf("verify %s: %w", bundlePath, err)
 	}
-	fmt.Fprintf(os.Stderr, "verified %s: signature valid (%d byte payload)\n", bundlePath, len(payload))
+	fmt.Fprintf(os.Stderr, "verified %s: signature valid (signer %q, %d bytes)\n", bundlePath, manifest.Signer, len(blob))
 	return nil
 }
 
