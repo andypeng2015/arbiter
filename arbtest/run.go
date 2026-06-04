@@ -89,7 +89,57 @@ func RunFile(path string, opts Options) (*FileResult, error) {
 		}
 	}
 
+	result.Coverage = computeCoverage(full, result.Cases)
 	return result, nil
+}
+
+// coveredRuleNames returns the rules a test case exercises: those it matched
+// plus those named in a rule expectation (so negative tests count).
+func coveredRuleNames(test TestCase, matched []vm.MatchedRule) []string {
+	set := make(map[string]bool)
+	for _, m := range matched {
+		set[m.Name] = true
+	}
+	for _, e := range test.Expectations {
+		if e.Kind == ExpectRule {
+			set[e.Target] = true
+		}
+	}
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// computeCoverage reports which of the bundle's rules were exercised, preserving
+// rule declaration order in the Covered/Uncovered lists.
+func computeCoverage(full *arbiter.CompileResult, cases []CaseResult) Coverage {
+	covered := make(map[string]bool)
+	for _, c := range cases {
+		for _, rn := range c.CoveredRules {
+			covered[rn] = true
+		}
+	}
+	var cov Coverage
+	if full == nil || full.Ruleset == nil {
+		return cov
+	}
+	strs := full.Ruleset.Constants.Strings()
+	for _, rh := range full.Ruleset.Rules {
+		if int(rh.NameIdx) >= len(strs) {
+			continue
+		}
+		name := strs[rh.NameIdx]
+		cov.Total++
+		if covered[name] {
+			cov.Covered = append(cov.Covered, name)
+		} else {
+			cov.Uncovered = append(cov.Uncovered, name)
+		}
+	}
+	return cov
 }
 
 func runTestCase(test TestCase, full *arbiter.CompileResult, flagSet *flags.Flags, flagsLoaded bool) CaseResult {
@@ -108,6 +158,7 @@ func runTestCase(test TestCase, full *arbiter.CompileResult, flagSet *flags.Flag
 		result.Error = err.Error()
 		return result
 	}
+	result.CoveredRules = coveredRuleNames(test, matched)
 
 	for _, expectation := range test.Expectations {
 		if expectation.Kind == ExpectFlag && !flagsLoaded {

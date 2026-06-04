@@ -367,7 +367,7 @@ test "shipping applies" {
 
 	_ = bundlePath
 	out := captureStdout(t, func() {
-		if err := testCmd(testPath, true); err != nil {
+		if err := testCmd(testPath, true, false, -1); err != nil {
 			t.Fatalf("testCmd: %v", err)
 		}
 	})

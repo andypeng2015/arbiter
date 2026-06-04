@@ -99,12 +99,13 @@ type Options struct {
 
 // FileResult is the execution result for one .test.arb file.
 type FileResult struct {
-	File    string
-	Bundle  string
-	Cases   []CaseResult
-	Passed  int
-	Failed  int
-	Verbose bool
+	File     string
+	Bundle   string
+	Cases    []CaseResult
+	Passed   int
+	Failed   int
+	Verbose  bool
+	Coverage Coverage
 }
 
 // CaseResult is the result of one test or scenario.
@@ -114,4 +115,22 @@ type CaseResult struct {
 	Passed  bool
 	Details []string
 	Error   string
+	// CoveredRules names the rules this case exercises — those it matched plus
+	// those named in a rule expectation (so negative tests count too).
+	CoveredRules []string
+}
+
+// Coverage reports which of a bundle's rules were exercised by its tests.
+type Coverage struct {
+	Total     int
+	Covered   []string // rule names exercised by at least one test (sorted)
+	Uncovered []string // rule names no test exercises (sorted)
+}
+
+// Percent is the fraction of rules covered, 0–100. An empty ruleset is 100%.
+func (c Coverage) Percent() float64 {
+	if c.Total == 0 {
+		return 100
+	}
+	return float64(len(c.Covered)) / float64(c.Total) * 100
 }

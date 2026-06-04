@@ -355,19 +355,34 @@ func runExpert(args []string) error {
 func runTest(args []string) error {
 	path := ""
 	verbose := false
-	for _, arg := range args {
-		switch arg {
+	coverage := false
+	threshold := -1.0
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
 		case "--verbose":
 			verbose = true
+		case "--coverage":
+			coverage = true
+		case "--threshold":
+			coverage = true
+			if i+1 >= len(args) {
+				return usageError("--threshold requires a number between 0 and 100")
+			}
+			v, err := strconv.ParseFloat(args[i+1], 64)
+			if err != nil {
+				return usageError("--threshold requires a number between 0 and 100")
+			}
+			threshold = v
+			i++
 		default:
-			if path == "" {
-				path = arg
+			if !strings.HasPrefix(args[i], "-") && path == "" {
+				path = args[i]
 				continue
 			}
-			return usageError("Usage: arbiter test [file.test.arb] [--verbose]\n\nWrite a .test.arb file next to your .arb bundle to test rules, flags, and scenarios against expected outcomes.")
+			return usageError("Usage: arbiter test [file.test.arb] [--verbose] [--coverage] [--threshold N]\n\nWrite a .test.arb file next to your .arb bundle to test rules, flags, and scenarios against expected outcomes.")
 		}
 	}
-	return testCmd(path, verbose)
+	return testCmd(path, verbose, coverage, threshold)
 }
 
 func runImport(args []string) error {
@@ -922,7 +937,7 @@ func expertCmd(path, envelopeJSON, factsJSON string) error {
 	return nil
 }
 
-func testCmd(path string, verbose bool) error {
+func testCmd(path string, verbose, coverage bool, threshold float64) error {
 	paths := []string(nil)
 	if path == "" {
 		files, err := filepath.Glob("*.test.arb")
@@ -939,6 +954,9 @@ func testCmd(path string, verbose bool) error {
 
 	totalPassed := 0
 	totalFailed := 0
+	totalRules := 0
+	coveredRules := 0
+	var uncovered []string
 	for _, item := range paths {
 		result, err := arbtest.RunFile(item, arbtest.Options{Verbose: verbose})
 		if err != nil {
@@ -947,9 +965,29 @@ func testCmd(path string, verbose bool) error {
 		printTestResult(result)
 		totalPassed += result.Passed
 		totalFailed += result.Failed
+		totalRules += result.Coverage.Total
+		coveredRules += len(result.Coverage.Covered)
+		for _, u := range result.Coverage.Uncovered {
+			uncovered = append(uncovered, fmt.Sprintf("%s: %s", result.Bundle, u))
+		}
 	}
 
 	fmt.Printf("test summary: %d passed, %d failed\n", totalPassed, totalFailed)
+
+	if coverage {
+		pct := 100.0
+		if totalRules > 0 {
+			pct = float64(coveredRules) / float64(totalRules) * 100
+		}
+		fmt.Printf("coverage: %d/%d rules (%.1f%%)\n", coveredRules, totalRules, pct)
+		for _, u := range uncovered {
+			fmt.Printf("  uncovered rule %s\n", u)
+		}
+		if threshold >= 0 && pct < threshold {
+			return fmt.Errorf("coverage %.1f%% is below threshold %.1f%%", pct, threshold)
+		}
+	}
+
 	if totalFailed > 0 {
 		return fmt.Errorf("%d test cases failed", totalFailed)
 	}
