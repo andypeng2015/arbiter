@@ -785,6 +785,9 @@ func compileCmd(path string) error {
 	fmt.Printf("  instructions: %d bytes\n", len(rs.Instructions))
 	fmt.Printf("  strings:      %d\n", rs.Constants.StringCount())
 	fmt.Printf("  numbers:      %d\n", rs.Constants.NumberCount())
+	if cost, rule := rs.WorstCaseCost(0); rule != "" {
+		fmt.Printf("  worst-case cost: %d instr (rule %s)\n", cost, rule)
+	}
 	return nil
 }
 
