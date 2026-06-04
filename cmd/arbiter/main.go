@@ -68,7 +68,7 @@ import (
 )
 
 const (
-	commandList = "check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, runtime-status, agent-status, control-status, status-issues, serve"
+	commandList = "init, check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, runtime-status, agent-status, control-status, status-issues, serve"
 	rootUsage   = "Usage: arbiter <command> <file>\nCommands: " + commandList
 )
 
@@ -77,6 +77,7 @@ type usageError string
 func (e usageError) Error() string { return string(e) }
 
 var commandHandlers = map[string]func([]string) error{
+	"init":                 runInit,
 	"check":                runCheck,
 	"compile":              runCompile,
 	"fmt":                  runFmt,
