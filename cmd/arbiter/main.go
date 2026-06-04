@@ -68,7 +68,7 @@ import (
 )
 
 const (
-	commandList = "init, check, compile, eval, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, runtime-status, agent-status, control-status, status-issues, serve"
+	commandList = "init, check, compile, eval, repl, fmt, strategy, diff, replay, expert, test, explore, import, runtime-capabilities, runtime-status, agent-status, control-status, status-issues, serve"
 	rootUsage   = "Usage: arbiter <command> <file>\nCommands: " + commandList
 )
 
@@ -83,6 +83,7 @@ var commandHandlers = map[string]func([]string) error{
 	"fmt":                  runFmt,
 	"bundle":               runBundle,
 	"eval":                 runEval,
+	"repl":                 runRepl,
 	"strategy":             runStrategy,
 	"diff":                 runDiff,
 	"replay":               runReplay,
