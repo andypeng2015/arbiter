@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arbiter Playground</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body {
+        font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        margin: 0; padding: 1.25rem; max-width: 1100px; margin-inline: auto;
+      }
+      h1 { font-size: 1.1rem; margin: 0 0 .25rem; }
+      .sub { opacity: .7; margin: 0 0 1rem; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      label { display: block; font-weight: 600; margin-bottom: .25rem; }
+      textarea {
+        width: 100%; height: 14rem; padding: .5rem; font: inherit;
+        border: 1px solid #8884; border-radius: 6px; resize: vertical; background: #8881;
+      }
+      button {
+        margin: 1rem 0; padding: .5rem 1rem; font: inherit; font-weight: 600;
+        border: 0; border-radius: 6px; background: #3b82f6; color: #fff; cursor: pointer;
+      }
+      button:disabled { opacity: .5; cursor: progress; }
+      pre {
+        white-space: pre-wrap; padding: .75rem; border-radius: 6px; background: #8881;
+        border: 1px solid #8884; min-height: 4rem;
+      }
+      .err { color: #ef4444; }
+      .ok { color: #22c55e; }
+    </style>
+  </head>
+  <body>
+    <h1>Arbiter Playground</h1>
+    <p class="sub">Compiled decision rules, evaluated in your browser via WebAssembly. Nothing leaves the page.</p>
+
+    <div class="grid">
+      <div>
+        <label for="src">rules.arb</label>
+        <textarea id="src" spellcheck="false">
+rule FreeShipping {
+    when { cart_total >= 35 and country == "US" }
+    then ApplyShipping { cost: 0, method: "standard" }
+}</textarea>
+      </div>
+      <div>
+        <label for="ctx">context (JSON)</label>
+        <textarea id="ctx" spellcheck="false">{ "cart_total": 50, "country": "US" }</textarea>
+      </div>
+    </div>
+
+    <button id="run" disabled>Loading WASM…</button>
+    <label>result</label>
+    <pre id="out">—</pre>
+
+    <script src="wasm_exec.js"></script>
+    <script src="loader.js"></script>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const out = $("out"), run = $("run");
+
+      function show(text, cls) {
+        out.textContent = text;
+        out.className = cls || "";
+      }
+
+      arbiter
+        .init("arbiter.wasm")
+        .then(() => {
+          run.disabled = false;
+          run.textContent = "Evaluate";
+        })
+        .catch((e) => show("failed to load WASM: " + e, "err"));
+
+      run.addEventListener("click", () => {
+        const compiled = arbiter.compile($("src").value);
+        if (compiled && compiled.error) {
+          show("compile error: " + compiled.error, "err");
+          return;
+        }
+        const result = arbiter.evalGoverned($("ctx").value);
+        if (result && result.error) {
+          show("eval error: " + result.error, "err");
+          return;
+        }
+        if (!Array.isArray(result) || result.length === 0) {
+          show("no rules matched", "");
+          return;
+        }
+        const lines = result.map(
+          (m) => `[matched] ${m.name} -> ${m.action} ${JSON.stringify(m.params || {})}`,
+        );
+        show(lines.join("\n"), "ok");
+      });
+    </script>
+  </body>
+</html>

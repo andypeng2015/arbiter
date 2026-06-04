@@ -31,3 +31,8 @@ sdks/python/build/
 .DS_Store
 .local/
 dist/
+
+# Playground build artifacts
+editors/playground/arbiter.wasm
+editors/playground/wasm_exec.js
+editors/playground/loader.js

@@ -36,7 +36,13 @@
     const go = new Go();
     let wasm;
 
-    if (typeof fetch === "function") {
+    // Node (incl. v21+, which has a global fetch that cannot load local file
+    // paths) reads the module from disk; browsers stream it over fetch.
+    const isNode =
+      typeof process !== "undefined" &&
+      process.versions != null &&
+      process.versions.node != null;
+    if (!isNode && typeof fetch === "function") {
       const resp = await fetch(wasmPath);
       const result = await WebAssembly.instantiateStreaming(resp, go.importObject);
       wasm = result.instance;
