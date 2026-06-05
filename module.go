@@ -249,6 +249,14 @@ func prefixDeclarations(prog *ir.Program, namespace string) {
 				prog.Flags[i].Requires[j] = prefix + prog.Flags[i].Requires[j]
 			}
 		}
+		// Prefix unqualified segment references in flag targeting rules so they
+		// keep resolving after the merge namespaces the segment declarations.
+		for j := range prog.Flags[i].Rules {
+			seg := prog.Flags[i].Rules[j].Segment
+			if seg != "" && !strings.Contains(seg, ".") {
+				prog.Flags[i].Rules[j].Segment = prefix + seg
+			}
+		}
 	}
 	for i := range prog.Features {
 		prog.Features[i].Name = prefix + prog.Features[i].Name
