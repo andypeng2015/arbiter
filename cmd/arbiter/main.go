@@ -856,45 +856,39 @@ func evalCmd(path, dataJSON string, explain bool, opts ...arbiter.Option) error 
 		}
 	}
 
-	if explain {
-		// Governed evaluation produces the arbitrace; render it as the audit tree.
-		var ctx map[string]any
-		if err := json.Unmarshal([]byte(dataJSON), &ctx); err != nil {
-			return fmt.Errorf("parse data: %w", err)
-		}
-		matched, trace, err := arbiter.EvalGoverned(prog, arbiter.DataFromMap(ctx, prog), prog.Segments, ctx)
-		if err != nil {
-			return fmt.Errorf("eval: %w", err)
-		}
-		printMatched(matched)
-		fmt.Println("arbitrace:")
-		for _, s := range trace.Steps {
-			disp := s.Disposition
-			if disp == "" {
-				if s.Result {
-					disp = "passed"
-				} else {
-					disp = "blocked"
-				}
-			}
-			line := fmt.Sprintf("  [%-8s] %s", disp, s.Check)
-			if s.Detail != "" {
-				line += " — " + s.Detail
-			}
-			fmt.Println(line)
-		}
-		return nil
-	}
-
-	dc, err := arbiter.DataFromJSON(dataJSON, prog)
-	if err != nil {
+	var ctx map[string]any
+	if err := json.Unmarshal([]byte(dataJSON), &ctx); err != nil {
 		return fmt.Errorf("parse data: %w", err)
 	}
-	matched, err := arbiter.Eval(prog, dc)
+	// Evaluate with full governance so the CLI reflects the same semantics as
+	// the server, the SDK, and `arbiter test`, all of which use EvalGoverned.
+	// Plain (ungoverned) Eval would silently ignore segment/prereq gates and
+	// report matches that production would block.
+	matched, trace, err := arbiter.EvalGoverned(prog, arbiter.DataFromMap(ctx, prog), prog.Segments, ctx)
 	if err != nil {
 		return fmt.Errorf("eval: %w", err)
 	}
 	printMatched(matched)
+	if !explain {
+		return nil
+	}
+	// --explain additionally renders the arbitrace as an audit tree.
+	fmt.Println("arbitrace:")
+	for _, s := range trace.Steps {
+		disp := s.Disposition
+		if disp == "" {
+			if s.Result {
+				disp = "passed"
+			} else {
+				disp = "blocked"
+			}
+		}
+		line := fmt.Sprintf("  [%-8s] %s", disp, s.Check)
+		if s.Detail != "" {
+			line += " — " + s.Detail
+		}
+		fmt.Println(line)
+	}
 	return nil
 }
 
