@@ -632,19 +632,6 @@ func (f *Flags) effectiveRuleRollout(flagKey string, ruleIndex int, rule FlagRul
 	}
 }
 
-func compileInlineSegment(conditionSource string) (*govern.CompiledSegment, error) {
-	syntheticSource := fmt.Sprintf("rule __inline { when { %s } then Match {} }", conditionSource)
-	prog, err := arbiter.Compile([]byte(syntheticSource))
-	if err != nil {
-		return nil, fmt.Errorf("compile inline condition: %w", err)
-	}
-	return &govern.CompiledSegment{
-		Name:    "inline",
-		Source:  conditionSource,
-		Ruleset: prog.Ruleset,
-	}, nil
-}
-
 func buildHTTPContext(r *http.Request) map[string]any {
 	ctx := make(map[string]any)
 	for key, values := range r.URL.Query() {
