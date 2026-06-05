@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package arbiter.v1;
 
-option go_package = "github.com/odvcencio/arbiter/api/arbiter/v1;arbiterv1";
+option go_package = "m31labs.dev/arbiter/api/arbiter/v1;arbiterv1";
 
 import "arbiter/v1/service.proto";
 import "google/protobuf/timestamp.proto";

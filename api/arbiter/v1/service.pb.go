@@ -7428,7 +7428,7 @@ const file_arbiter_v1_service_proto_rawDesc = "" +
 	"\x15GetStatusIssueCatalog\x12(.arbiter.v1.GetStatusIssueCatalogRequest\x1a).arbiter.v1.GetStatusIssueCatalogResponse2\xdd\x01\n" +
 	"\x0eControlService\x12]\n" +
 	"\x10GetControlStatus\x12#.arbiter.v1.GetControlStatusRequest\x1a$.arbiter.v1.GetControlStatusResponse\x12l\n" +
-	"\x15GetStatusIssueCatalog\x12(.arbiter.v1.GetStatusIssueCatalogRequest\x1a).arbiter.v1.GetStatusIssueCatalogResponseB7Z5github.com/odvcencio/arbiter/api/arbiter/v1;arbiterv1b\x06proto3"
+	"\x15GetStatusIssueCatalog\x12(.arbiter.v1.GetStatusIssueCatalogRequest\x1a).arbiter.v1.GetStatusIssueCatalogResponseB.Z,m31labs.dev/arbiter/api/arbiter/v1;arbiterv1b\x06proto3"
 
 var (
 	file_arbiter_v1_service_proto_rawDescOnce sync.Once

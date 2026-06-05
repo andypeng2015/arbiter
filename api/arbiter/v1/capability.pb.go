@@ -889,7 +889,7 @@ const file_arbiter_v1_capability_proto_rawDesc = "" +
 	"\n" +
 	"LoadSource\x12\x1d.arbiter.v1.LoadSourceRequest\x1a\x1e.arbiter.v1.LoadSourceResponse\x12W\n" +
 	"\x0eDeliverOutcome\x12!.arbiter.v1.DeliverOutcomeRequest\x1a\".arbiter.v1.DeliverOutcomeResponse\x12T\n" +
-	"\rExecuteWorker\x12 .arbiter.v1.ExecuteWorkerRequest\x1a!.arbiter.v1.ExecuteWorkerResponseB7Z5github.com/odvcencio/arbiter/api/arbiter/v1;arbiterv1b\x06proto3"
+	"\rExecuteWorker\x12 .arbiter.v1.ExecuteWorkerRequest\x1a!.arbiter.v1.ExecuteWorkerResponseB.Z,m31labs.dev/arbiter/api/arbiter/v1;arbiterv1b\x06proto3"
 
 var (
 	file_arbiter_v1_capability_proto_rawDescOnce sync.Once
