@@ -376,6 +376,28 @@ rule MainRule {
 	}
 }
 
+// TestModuleImportedOutcomeSchemaValidates guards that outcome (and fact)
+// schemas live in a single global namespace across modules, so an imported
+// schema still validates the rule actions that reference it by bare name. If
+// the schema name were namespace-prefixed while the action name was not, the
+// lookup would miss and validation would silently skip.
+func TestModuleImportedOutcomeSchemaValidates(t *testing.T) {
+	dir := setupModuleProject(t)
+	writeModuleFile(t, dir, "shared.arb", `outcome Access { tier: string }
+`)
+	main := writeModuleFile(t, dir, "main.arb", `import "shared"
+rule R { when { true } then Access { tier: "ok", bogus: 1 } }
+`)
+
+	_, err := CompileFullFile(main)
+	if err == nil {
+		t.Fatal("expected validation error for unknown field \"bogus\" against imported outcome schema; got nil (schema namespaced away?)")
+	}
+	if !strings.Contains(err.Error(), "bogus") {
+		t.Fatalf("expected error to mention unknown field \"bogus\", got: %v", err)
+	}
+}
+
 func TestModuleImportWithAlias(t *testing.T) {
 	dir := setupModuleProject(t)
 	writeModuleFile(t, dir, "fraud/scoring.arb", `rule FraudCheck {

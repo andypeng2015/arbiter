@@ -261,12 +261,14 @@ func prefixDeclarations(prog *ir.Program, namespace string) {
 	for i := range prog.Features {
 		prog.Features[i].Name = prefix + prog.Features[i].Name
 	}
-	for i := range prog.FactSchemas {
-		prog.FactSchemas[i].Name = prefix + prog.FactSchemas[i].Name
-	}
-	for i := range prog.OutcomeSchemas {
-		prog.OutcomeSchemas[i].Name = prefix + prog.OutcomeSchemas[i].Name
-	}
+	// Fact and outcome schemas are intentionally NOT namespaced. They name
+	// cross-boundary runtime identities — workers, sources, and consumers
+	// produce and read facts/outcomes by these type names, and the references
+	// to them (expert rule targets, rule action names, worker input/output,
+	// `facts.X` paths) are written unqualified. Keeping the declarations in a
+	// single global namespace (like tables) lets those references resolve so
+	// field validation/coercion still applies after an import. Cross-module
+	// name collisions are the accepted trade-off of a shared type namespace.
 	for i := range prog.Strategies {
 		prog.Strategies[i].Name = prefix + prog.Strategies[i].Name
 	}
