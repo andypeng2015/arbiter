@@ -271,6 +271,14 @@ func prefixDeclarations(prog *ir.Program, namespace string) {
 	// name collisions are the accepted trade-off of a shared type namespace.
 	for i := range prog.Strategies {
 		prog.Strategies[i].Name = prefix + prog.Strategies[i].Name
+		// Prefix unqualified segment references in strategy candidates so they
+		// keep resolving after the merge namespaces the segment declarations.
+		for j := range prog.Strategies[i].Candidates {
+			seg := prog.Strategies[i].Candidates[j].Segment
+			if seg != "" && !strings.Contains(seg, ".") {
+				prog.Strategies[i].Candidates[j].Segment = prefix + seg
+			}
+		}
 	}
 	for i := range prog.Workers {
 		prog.Workers[i].Name = prefix + prog.Workers[i].Name

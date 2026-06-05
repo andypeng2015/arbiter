@@ -398,6 +398,40 @@ rule R { when { true } then Access { tier: "ok", bogus: 1 } }
 	}
 }
 
+// TestModuleImportedStrategyCandidateSegmentResolves guards that a strategy
+// candidate's segment reference still resolves after the module merge
+// namespaces the segment declaration. A premium user must select the
+// segment-gated candidate rather than falling through to the else arm.
+func TestModuleImportedStrategyCandidateSegmentResolves(t *testing.T) {
+	dir := setupModuleProject(t)
+	writeModuleFile(t, dir, "route.arb", `segment Premium { user.tier == "premium" }
+outcome Route { lane: string }
+strategy Pick returns Route {
+	when segment Premium { true } then Fast { lane: "fast" }
+	else Slow { lane: "slow" }
+}
+`)
+	main := writeModuleFile(t, dir, "main.arb", `import "route"
+`)
+
+	result, err := CompileFullFile(main)
+	if err != nil {
+		t.Fatalf("CompileFullFile: %v", err)
+	}
+	// The imported strategy is namespaced as route.Pick. A premium user must hit
+	// the segment-gated Fast arm; a dangling candidate segment reference would
+	// skip it and fall through to Slow.
+	res, err := result.Strategies.Evaluate("route.Pick", map[string]any{
+		"user": map[string]any{"tier": "premium"},
+	})
+	if err != nil {
+		t.Fatalf("Evaluate: %v", err)
+	}
+	if res.Params["lane"] != "fast" {
+		t.Fatalf("premium user should select Fast arm; got lane=%v (candidate segment ref dangled?)", res.Params["lane"])
+	}
+}
+
 func TestModuleImportWithAlias(t *testing.T) {
 	dir := setupModuleProject(t)
 	writeModuleFile(t, dir, "fraud/scoring.arb", `rule FraudCheck {
