@@ -49,6 +49,34 @@ rule R { when { order.amount == "notanumber" } then Flag {} }
 	}
 }
 
+func TestCheckPassesCrossModuleTemplate(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "arbiter.toml"),
+		[]byte("[project]\nname = \"t\"\nversion = \"0.1.0\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "lib", "p.arb"),
+		[]byte("template HighRisk(s, c) = s >= c\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	main := filepath.Join(dir, "main.arb")
+	if err := os.WriteFile(main, []byte(`import "lib/p"
+input { risk: { score: number } }
+outcome Deny { reason: string }
+rule Block { when { HighRisk(risk.score, 80) } then Deny { reason: "x" } }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// check's modality validation must be import-aware so a cross-module template
+	// call is not mistaken for an unknown builtin.
+	if err := runCheck([]string{main, "--strict"}); err != nil {
+		t.Fatalf("check --strict should pass a cross-module template; got: %v", err)
+	}
+}
+
 func TestCheckStrictPassesCleanProgram(t *testing.T) {
 	dir := t.TempDir()
 	arbPath := filepath.Join(dir, "r.arb")

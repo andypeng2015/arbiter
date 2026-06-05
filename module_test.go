@@ -496,6 +496,41 @@ rule Transcode {
 	}
 }
 
+// TestModuleCrossModuleTemplate verifies a template defined in an imported
+// module can be used (by bare name — templates share a global namespace) from
+// the importing module.
+func TestModuleCrossModuleTemplate(t *testing.T) {
+	dir := setupModuleProject(t)
+	writeModuleFile(t, dir, "risk.arb", `template HighRisk(score, cap) = score >= cap
+`)
+	main := writeModuleFile(t, dir, "main.arb", `import "risk"
+input { tx: { score: number } }
+outcome Deny { reason: string }
+rule Block { when { HighRisk(tx.score, 80) } then Deny { reason: "x" } }
+`)
+
+	result, err := CompileFullFile(main)
+	if err != nil {
+		t.Fatalf("CompileFullFile: %v", err)
+	}
+	prog := &Program{Ruleset: result.Ruleset, Segments: result.Segments}
+
+	hi, err := Eval(prog, DataFromMap(map[string]any{"tx": map[string]any{"score": 90.0}}, prog))
+	if err != nil {
+		t.Fatalf("Eval hi: %v", err)
+	}
+	if len(hi) != 1 {
+		t.Fatalf("score 90 >= 80 via imported template should match; got %d", len(hi))
+	}
+	lo, err := Eval(prog, DataFromMap(map[string]any{"tx": map[string]any{"score": 50.0}}, prog))
+	if err != nil {
+		t.Fatalf("Eval lo: %v", err)
+	}
+	if len(lo) != 0 {
+		t.Fatalf("score 50 >= 80 via imported template should not match; got %d", len(lo))
+	}
+}
+
 func TestModuleImportWithAlias(t *testing.T) {
 	dir := setupModuleProject(t)
 	writeModuleFile(t, dir, "fraud/scoring.arb", `rule FraudCheck {

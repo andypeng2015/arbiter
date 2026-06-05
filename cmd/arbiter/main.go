@@ -770,7 +770,10 @@ func check(path string, strict bool, opts ...arbiter.Option) error {
 		return fmt.Errorf("check %s: %w", path, err)
 	}
 
-	full, err := arbiter.CompileFullParsed(parsed)
+	// Import-aware compile for the modality checks below: resolves imports and
+	// inlines templates so cross-module flag/expert/template references are seen
+	// (CompileFullParsed would be import-blind and reject them).
+	full, err := arbiter.CompileFullFile(path)
 	if err != nil {
 		return fmt.Errorf("check %s: %w", path, arbiter.WrapFileError(unit, err))
 	}

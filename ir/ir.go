@@ -12,6 +12,7 @@ type Program struct {
 	Input          *InputSchema
 	InputRef       *InputRef
 	Consts         []Const
+	Templates      []Template
 	Features       []Feature
 	FactSchemas    []FactSchema
 	OutcomeSchemas []OutcomeSchema
@@ -64,6 +65,16 @@ type Const struct {
 	Name  string
 	Span  Span
 	Value ExprID
+}
+
+// Template is a parameterized expression macro. Its body is lowered once with
+// parameters represented as ExprParamRef placeholders; each call site is
+// resolved by cloning the body and substituting arguments for the placeholders.
+type Template struct {
+	Name   string
+	Params []string
+	Body   ExprID
+	Span   Span
 }
 
 // Feature is one top-level feature declaration.
@@ -433,6 +444,7 @@ const (
 	ExprConstRef  ExprKind = "const_ref"
 	ExprLocalRef  ExprKind = "local_ref"
 	ExprSecretRef ExprKind = "secret_ref"
+	ExprParamRef  ExprKind = "param_ref" // template parameter placeholder, substituted at inline time
 
 	ExprBinary      ExprKind = "binary"
 	ExprUnary       ExprKind = "unary"

@@ -516,6 +516,9 @@ func wrapRootPathError(path string, err error) error {
 
 // compileProgram compiles a pre-lowered IR program through the standard pipeline.
 func compileProgram(program *ir.Program) (*Program, error) {
+	if err := ir.InlineTemplates(program); err != nil {
+		return nil, err
+	}
 	warnings, err := validateProgram(program)
 	if err != nil {
 		return nil, err

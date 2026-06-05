@@ -407,6 +407,9 @@ func offsetExprIDs(prog *ir.Program, offset ir.ExprID) {
 			}
 		}
 	}
+	for i := range prog.Templates {
+		off(&prog.Templates[i].Body)
+	}
 }
 
 // mergeModules merges all module IRs into a single program, with imported
@@ -432,6 +435,7 @@ func mergeModules(tree *moduleTree) (*ir.Program, error) {
 		exprOffset += ir.ExprID(len(mod.Exprs))
 
 		merged.Consts = append(merged.Consts, mod.Consts...)
+		merged.Templates = append(merged.Templates, mod.Templates...)
 		merged.Tags = append(merged.Tags, mod.Tags...)
 		merged.Features = append(merged.Features, mod.Features...)
 		merged.FactSchemas = append(merged.FactSchemas, mod.FactSchemas...)
@@ -450,6 +454,7 @@ func mergeModules(tree *moduleTree) (*ir.Program, error) {
 	// Add root declarations last (with expr offset).
 	offsetExprIDs(tree.root, exprOffset)
 	merged.Consts = append(merged.Consts, tree.root.Consts...)
+	merged.Templates = append(merged.Templates, tree.root.Templates...)
 	merged.Tags = append(merged.Tags, tree.root.Tags...)
 	merged.Features = append(merged.Features, tree.root.Features...)
 	merged.FactSchemas = append(merged.FactSchemas, tree.root.FactSchemas...)
