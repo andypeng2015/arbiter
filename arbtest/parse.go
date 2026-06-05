@@ -426,7 +426,8 @@ func (p *parser) parseStrategyExpectation() (Expectation, error) {
 	if err := p.consumeKeyword("strategy"); err != nil {
 		return Expectation{}, err
 	}
-	target, err := p.parseIdentifier()
+	// parsePath so imported strategies can be referenced by namespaced name.
+	target, err := p.parsePath()
 	if err != nil {
 		return Expectation{}, err
 	}
@@ -457,7 +458,9 @@ func (p *parser) parseRuleExpectation() (Expectation, error) {
 	if err := p.consumeKeyword("rule"); err != nil {
 		return Expectation{}, err
 	}
-	target, err := p.parseIdentifier()
+	// parsePath (not parseIdentifier) so imported rules can be referenced by
+	// their namespaced name, e.g. `expect rule pricing.AdultUS matched`.
+	target, err := p.parsePath()
 	if err != nil {
 		return Expectation{}, err
 	}
@@ -508,7 +511,8 @@ func (p *parser) parseFlagExpectation() (Expectation, error) {
 	if err := p.consumeKeyword("flag"); err != nil {
 		return Expectation{}, err
 	}
-	target, err := p.parseIdentifier()
+	// parsePath so imported flags can be referenced by namespaced name.
+	target, err := p.parsePath()
 	if err != nil {
 		return Expectation{}, err
 	}

@@ -87,6 +87,99 @@ test "unknown country falls through to global" {
 	}
 }
 
+func TestRunFileImportedNamespacedRule(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "arbiter.toml"),
+		[]byte("[project]\nname = \"t\"\nversion = \"0.1.0\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "lib", "rules.arb"), []byte(`input { user: { age: number } }
+outcome Access { tier: string }
+rule AdultUS { when { user.age >= 18 } then Access { tier: "full" } }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.arb"), []byte("import \"lib/rules\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testPath := filepath.Join(dir, "main.test.arb")
+	if err := os.WriteFile(testPath, []byte(`test "adult matches imported rule" {
+	given { user.age: 21 }
+	expect rule rules.AdultUS matched
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A test must be able to reference an imported rule by its namespaced name.
+	result, err := arbtest.RunFile(testPath, arbtest.Options{})
+	if err != nil {
+		t.Fatalf("RunFile: %v", err)
+	}
+	if result.Failed != 0 || result.Passed != 1 {
+		for _, c := range result.Cases {
+			if !c.Passed {
+				t.Errorf("[FAIL] %s: %s", c.Name, c.Error)
+			}
+		}
+		t.Fatalf("expected 1 passed / 0 failed for namespaced imported rule; got %d passed / %d failed", result.Passed, result.Failed)
+	}
+}
+
+func TestRunFileImportedNamespacedStrategyAndFlag(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "arbiter.toml"),
+		[]byte("[project]\nname = \"t\"\nversion = \"0.1.0\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "lib", "policy.arb"), []byte(`input { user: { country: string, plan: string } }
+outcome Route { target: string }
+strategy Pick returns Route {
+	when { user.country == "US" } then Dom { target: "us" }
+	else Glob { target: "global" }
+}
+flag promo type boolean default false {
+	when { user.plan == "pro" } then true
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.arb"), []byte("import \"lib/policy\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testPath := filepath.Join(dir, "main.test.arb")
+	if err := os.WriteFile(testPath, []byte(`test "namespaced strategy and flag" {
+	given {
+		user.country: "US"
+		user.plan: "pro"
+	}
+	expect strategy policy.Pick selected Dom
+	expect flag policy.promo == "true"
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := arbtest.RunFile(testPath, arbtest.Options{})
+	if err != nil {
+		t.Fatalf("RunFile: %v", err)
+	}
+	if result.Failed != 0 || result.Passed != 1 {
+		for _, c := range result.Cases {
+			if !c.Passed {
+				t.Errorf("[FAIL] %s: %s", c.Name, c.Error)
+			}
+		}
+		t.Fatalf("expected 1 passed / 0 failed for namespaced strategy+flag; got %d passed / %d failed", result.Passed, result.Failed)
+	}
+}
+
 func TestRunFile(t *testing.T) {
 	dir := t.TempDir()
 	bundlePath := filepath.Join(dir, "bundle.arb")

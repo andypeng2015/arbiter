@@ -53,7 +53,10 @@ func LoadFile(path string) (*Flags, error) {
 	if err != nil {
 		return nil, err
 	}
-	full, err := arbiter.CompileFullParsed(parsed)
+	// CompileFullFile (not CompileFullParsed) so imports resolve: a flag bundle
+	// may import flags/segments from other modules, which must be merged before
+	// the flag definitions are lowered.
+	full, err := arbiter.CompileFullFile(path)
 	if err != nil {
 		return nil, arbiter.WrapFileError(unit, err)
 	}
