@@ -304,6 +304,78 @@ rule MainRule {
 	}
 }
 
+// TestModuleIntraModuleConstRefResolves guards against const references inside
+// an imported module silently resolving to null after the module's const
+// declarations are namespace-prefixed during merge.
+func TestModuleIntraModuleConstRefResolves(t *testing.T) {
+	dir := setupModuleProject(t)
+	writeModuleFile(t, dir, "shared.arb", `const LIMIT = 500
+rule SharedRule {
+	when { user.score >= LIMIT }
+	then Shared { source: "module" }
+}
+`)
+	main := writeModuleFile(t, dir, "main.arb", `import "shared"
+rule MainRule { when { user.score >= 100000 } then Main { source: "root" } }
+`)
+
+	result, err := CompileFullFile(main)
+	if err != nil {
+		t.Fatalf("CompileFullFile: %v", err)
+	}
+	prog := &Program{Ruleset: result.Ruleset, Segments: result.Segments}
+
+	// score 400 < LIMIT 500 → SharedRule must NOT match. If the const ref
+	// dangles to null (the bug), 400 >= null evaluates true and it matches.
+	ctx := map[string]any{"user": map[string]any{"score": 400.0}}
+	matched, err := Eval(prog, DataFromMap(ctx, prog))
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if len(matched) != 0 {
+		t.Fatalf("score 400 < LIMIT 500 must not match; got %d (intra-module const resolved to null?)", len(matched))
+	}
+}
+
+// TestModuleCrossModuleConstRefResolves guards against a qualified const
+// reference (namespace.NAME) into an imported module resolving to null instead
+// of the imported constant's value.
+func TestModuleCrossModuleConstRefResolves(t *testing.T) {
+	dir := setupModuleProject(t)
+	writeModuleFile(t, dir, "shared.arb", `const LIMIT = 500
+`)
+	main := writeModuleFile(t, dir, "main.arb", `import "shared"
+rule MainRule {
+	when { user.score >= shared.LIMIT }
+	then Main { source: "root" }
+}
+`)
+
+	result, err := CompileFullFile(main)
+	if err != nil {
+		t.Fatalf("CompileFullFile: %v", err)
+	}
+	prog := &Program{Ruleset: result.Ruleset, Segments: result.Segments}
+
+	// Below the imported limit → must not match.
+	low, err := Eval(prog, DataFromMap(map[string]any{"user": map[string]any{"score": 400.0}}, prog))
+	if err != nil {
+		t.Fatalf("Eval low: %v", err)
+	}
+	if len(low) != 0 {
+		t.Fatalf("score 400 < shared.LIMIT 500 must not match; got %d (qualified const resolved to null?)", len(low))
+	}
+
+	// At/above the imported limit → must match.
+	high, err := Eval(prog, DataFromMap(map[string]any{"user": map[string]any{"score": 600.0}}, prog))
+	if err != nil {
+		t.Fatalf("Eval high: %v", err)
+	}
+	if len(high) != 1 {
+		t.Fatalf("score 600 >= shared.LIMIT 500 must match exactly once; got %d", len(high))
+	}
+}
+
 func TestModuleImportWithAlias(t *testing.T) {
 	dir := setupModuleProject(t)
 	writeModuleFile(t, dir, "fraud/scoring.arb", `rule FraudCheck {

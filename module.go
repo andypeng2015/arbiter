@@ -188,8 +188,21 @@ func (t *moduleTree) resolve(imports []ir.Import, fromPath string, seen map[stri
 func prefixDeclarations(prog *ir.Program, namespace string) {
 	prefix := namespace + "."
 
+	// Capture this module's const names before prefixing so const references
+	// inside the module can be rewritten to their prefixed names below.
+	localConsts := make(map[string]bool, len(prog.Consts))
+	for i := range prog.Consts {
+		localConsts[prog.Consts[i].Name] = true
+	}
 	for i := range prog.Consts {
 		prog.Consts[i].Name = prefix + prog.Consts[i].Name
+	}
+	// Rewrite unqualified const references within this module to the prefixed
+	// const names so they keep resolving after the merge namespaces the decls.
+	for i := range prog.Exprs {
+		if prog.Exprs[i].Kind == ir.ExprConstRef && localConsts[prog.Exprs[i].Name] {
+			prog.Exprs[i].Name = prefix + prog.Exprs[i].Name
+		}
 	}
 	for i := range prog.Rules {
 		prog.Rules[i].Name = prefix + prog.Rules[i].Name
@@ -415,5 +428,29 @@ func mergeModules(tree *moduleTree) (*ir.Program, error) {
 	merged.Input = tree.root.Input
 
 	merged.RebuildIndexes()
+	resolveQualifiedConstRefs(merged)
 	return merged, nil
+}
+
+// resolveQualifiedConstRefs rewrites variable references whose dotted path
+// matches a (namespace-prefixed) constant declaration into constant references.
+// A qualified cross-module access like `shared.LIMIT` lowers to a var ref
+// because the importing file cannot see the imported module's consts at lower
+// time; after the merge the prefixed const exists, so the ref can be linked to
+// it (and subsequently inlined by FoldConstants) instead of evaluating to a
+// missing context variable.
+func resolveQualifiedConstRefs(prog *ir.Program) {
+	if prog == nil || len(prog.Consts) == 0 {
+		return
+	}
+	for i := range prog.Exprs {
+		e := &prog.Exprs[i]
+		if e.Kind != ir.ExprVarRef {
+			continue
+		}
+		if _, ok := prog.ConstByName(e.Path); ok {
+			e.Kind = ir.ExprConstRef
+			e.Name = e.Path
+		}
+	}
 }

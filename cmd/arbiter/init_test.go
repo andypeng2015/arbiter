@@ -27,6 +27,22 @@ func TestInitScaffold(t *testing.T) {
 	}
 }
 
+func TestInitModuleScaffold(t *testing.T) {
+	dir := t.TempDir()
+	if err := runInit([]string{dir, "--module"}); err != nil {
+		t.Fatalf("init --module: %v", err)
+	}
+	for _, f := range []string{"arbiter.toml", "lib/limits.arb", "main.arb"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Fatalf("%s not created: %v", f, err)
+		}
+	}
+	// The modular scaffold must compile with imports resolved and be warning-clean.
+	if err := check(filepath.Join(dir, "main.arb"), true); err != nil {
+		t.Fatalf("modular scaffold should pass check --strict: %v", err)
+	}
+}
+
 func TestInitRefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	if err := runInit([]string{dir}); err != nil {
