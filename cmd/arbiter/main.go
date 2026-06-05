@@ -756,32 +756,18 @@ func looksLikeDiagnostic(message string) bool {
 	return true
 }
 
-// needsSchemaResolve reports whether check must run the resolution-aware
-// compile: when a schema is supplied via flags (--proto), or the source uses
-// the in-language `input from proto` form.
-func needsSchemaResolve(parsed *arbiter.ParsedSource, opts []arbiter.Option) bool {
-	if len(opts) > 0 {
-		return true
-	}
-	prog, err := ir.Lower(parsed.Root, parsed.Source, parsed.Lang)
-	return err == nil && prog != nil && prog.InputRef != nil
-}
-
 func check(path string, strict bool, opts ...arbiter.Option) error {
 	unit, parsed, err := arbiter.LoadFileParsed(path)
 	if err != nil {
 		return fmt.Errorf("check %s: %w", path, err)
 	}
-	// Resolution-aware compile: type-checks (including any bound schema from
-	// --proto / `input from proto`) and collects warnings (dead code, etc.).
-	prog, compileErr := arbiter.CompileFile(path, opts...)
-	if compileErr != nil {
-		// A bound schema makes the error authoritative; otherwise fall back to
-		// the parsed validation path (e.g. an import case CompileFile won't take).
-		if needsSchemaResolve(parsed, opts) {
-			return fmt.Errorf("check %s: %w", path, compileErr)
-		}
-		prog = nil
+	// Resolution-aware compile: resolves imports, binds any schema (--proto /
+	// `input from proto`), type-checks, and collects warnings (dead code, etc.).
+	// It sees the fully merged, import-resolved program, so its error is
+	// authoritative — do not fall back to an import-blind validation pass.
+	prog, err := arbiter.CompileFile(path, opts...)
+	if err != nil {
+		return fmt.Errorf("check %s: %w", path, err)
 	}
 
 	full, err := arbiter.CompileFullParsed(parsed)
@@ -796,13 +782,11 @@ func check(path string, strict bool, opts ...arbiter.Option) error {
 	}
 
 	// Surface non-fatal warnings; --strict turns them into a CI failure.
-	if prog != nil {
-		for _, w := range prog.Warnings {
-			fmt.Fprintf(os.Stderr, "%s:%d:%d: warning: %s\n", path, w.Line, w.Col, w.Message)
-		}
-		if strict && len(prog.Warnings) > 0 {
-			return fmt.Errorf("check %s: %d warning(s) reported with --strict", path, len(prog.Warnings))
-		}
+	for _, w := range prog.Warnings {
+		fmt.Fprintf(os.Stderr, "%s:%d:%d: warning: %s\n", path, w.Line, w.Col, w.Message)
+	}
+	if strict && len(prog.Warnings) > 0 {
+		return fmt.Errorf("check %s: %d warning(s) reported with --strict", path, len(prog.Warnings))
 	}
 
 	fmt.Fprintf(os.Stderr, "%s: ok\n", path)
