@@ -441,13 +441,43 @@ func mergeModules(tree *moduleTree) (*ir.Program, error) {
 	merged.Arbiters = append(merged.Arbiters, tree.root.Arbiters...)
 	merged.Exprs = append(merged.Exprs, tree.root.Exprs...)
 
-	// Carry over root's imports and input (informational).
+	// Carry over root's imports, and union the input schemas. The conflict
+	// check above guarantees overlapping paths are type-compatible, so an
+	// imported module's input fields are merged into the program's input
+	// contract rather than dropped — keeping module-declared fields type-checked.
 	merged.Imports = tree.root.Imports
-	merged.Input = tree.root.Input
+	merged.Input = mergeInputSchemas(tree.root.Input, tree.order, tree.modules)
 
 	merged.RebuildIndexes()
 	resolveQualifiedConstRefs(merged)
 	return merged, nil
+}
+
+// mergeInputSchemas unions the root input schema with each imported module's
+// input schema. Overlapping paths have already been verified type-compatible by
+// checkInputSchemaConflicts. The root's Closed flag is preserved. Returns nil
+// when neither the root nor any module declares an input block.
+func mergeInputSchemas(root *ir.InputSchema, order []string, modules map[string]*ir.Program) *ir.InputSchema {
+	var fields []ir.SchemaField
+	closed := false
+	have := false
+	if root != nil {
+		fields = root.Fields
+		closed = root.Closed
+		have = true
+	}
+	for _, ns := range order {
+		mod := modules[ns]
+		if mod == nil || mod.Input == nil {
+			continue
+		}
+		fields = mergeSchemaFields(fields, mod.Input.Fields)
+		have = true
+	}
+	if !have {
+		return nil
+	}
+	return &ir.InputSchema{Fields: fields, Closed: closed}
 }
 
 // resolveQualifiedConstRefs rewrites variable references whose dotted path

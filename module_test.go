@@ -432,6 +432,26 @@ strategy Pick returns Route {
 	}
 }
 
+// TestModuleImportedInputSchemaMerges guards that an imported module's input
+// schema is unioned into the program's input contract instead of being dropped
+// after the conflict check, so fields it declares are still type-checked.
+func TestModuleImportedInputSchemaMerges(t *testing.T) {
+	dir := setupModuleProject(t)
+	writeModuleFile(t, dir, "order.arb", `input { order: { amount: number } }
+`)
+	main := writeModuleFile(t, dir, "main.arb", `import "order"
+rule R { when { order.amount == "notanumber" } then Flag {} }
+`)
+
+	_, err := CompileFullFile(main)
+	if err == nil {
+		t.Fatal("expected type mismatch on imported number field vs string literal; got nil (imported input schema dropped?)")
+	}
+	if !strings.Contains(err.Error(), "type mismatch") {
+		t.Fatalf("expected a type-mismatch error, got: %v", err)
+	}
+}
+
 func TestModuleImportWithAlias(t *testing.T) {
 	dir := setupModuleProject(t)
 	writeModuleFile(t, dir, "fraud/scoring.arb", `rule FraudCheck {
