@@ -26,9 +26,12 @@ func Lower(root *gotreesitter.Node, source []byte, lang *gotreesitter.Language) 
 		lang:       lang,
 		program:    &Program{},
 		constNames: make(map[string]struct{}),
+		templates:  make(map[string]*templateDef),
+		tplStack:   make(map[string]bool),
 	}
 
 	l.collectConstNames(root)
+	l.collectTemplates(root)
 	l.lowerSourceFile(root)
 	if len(l.errs) > 0 {
 		return nil, errors.Join(l.errs...)
@@ -43,7 +46,18 @@ type lowerer struct {
 
 	program    *Program
 	constNames map[string]struct{}
+	templates  map[string]*templateDef
+	tplParams  map[string]ExprID // active parameter→argument bindings while inlining a template body
+	tplStack   map[string]bool   // templates currently being inlined (recursion guard)
 	errs       []error
+}
+
+// templateDef is a collected (but not yet lowered) template declaration. Its
+// body CST node is re-lowered at each call site with parameters bound to the
+// call's arguments, so the template inlines like a macro.
+type templateDef struct {
+	params []string
+	body   *gotreesitter.Node
 }
 
 type scope struct {
@@ -85,6 +99,34 @@ func (l *lowerer) collectConstNames(root *gotreesitter.Node) {
 			continue
 		}
 		l.constNames[l.text(nameNode)] = struct{}{}
+	}
+}
+
+// collectTemplates records each template declaration's parameters and body node
+// up front, so call sites can be inlined regardless of declaration order.
+func (l *lowerer) collectTemplates(root *gotreesitter.Node) {
+	for i := 0; i < int(root.NamedChildCount()); i++ {
+		child := root.NamedChild(i)
+		if child.Type(l.lang) != "template_declaration" {
+			continue
+		}
+		nameNode := child.ChildByFieldName("name", l.lang)
+		bodyNode := child.ChildByFieldName("value", l.lang)
+		if nameNode == nil || bodyNode == nil {
+			continue
+		}
+		name := l.text(nameNode)
+		if _, exists := l.templates[name]; exists {
+			l.errs = append(l.errs, fmt.Errorf("duplicate template %q", name))
+			continue
+		}
+		var params []string
+		for j := 0; j < int(child.ChildCount()); j++ {
+			if child.FieldNameForChild(j, l.lang) == "param" {
+				params = append(params, l.text(child.Child(j)))
+			}
+		}
+		l.templates[name] = &templateDef{params: params, body: bodyNode}
 	}
 }
 
@@ -1360,6 +1402,11 @@ func (l *lowerer) lowerExpr(n *gotreesitter.Node, scope *scope) ExprID {
 		})
 	case "identifier":
 		name := l.text(n)
+		// Inside a template body, a bare parameter resolves to the argument
+		// expression bound for this call site.
+		if id, ok := l.tplParams[name]; ok {
+			return id
+		}
 		switch {
 		case scope != nil && scope.contains(name):
 			return l.addExpr(Expr{
@@ -1482,21 +1529,54 @@ func (l *lowerer) lowerExpr(n *gotreesitter.Node, scope *scope) ExprID {
 }
 
 func (l *lowerer) lowerCallExpr(n *gotreesitter.Node, scope *scope) ExprID {
-	expr := Expr{
-		Kind: ExprBuiltinCall,
-		Span: spanForNode(n),
-	}
+	funcName := ""
 	if fnNode := n.ChildByFieldName("function", l.lang); fnNode != nil {
-		expr.FuncName = l.text(fnNode)
+		funcName = l.text(fnNode)
 	}
+	var args []ExprID
 	for i := 0; i < int(n.NamedChildCount()); i++ {
 		child := n.NamedChild(i)
-		if child.Type(l.lang) == "identifier" && l.text(child) == expr.FuncName {
+		if child.Type(l.lang) == "identifier" && l.text(child) == funcName {
 			continue
 		}
-		expr.Args = append(expr.Args, l.lowerExpr(child, scope))
+		args = append(args, l.lowerExpr(child, scope))
 	}
-	return l.addExpr(expr)
+	if tpl, ok := l.templates[funcName]; ok {
+		return l.inlineTemplate(funcName, tpl, args, scope, spanForNode(n))
+	}
+	return l.addExpr(Expr{
+		Kind:     ExprBuiltinCall,
+		Span:     spanForNode(n),
+		FuncName: funcName,
+		Args:     args,
+	})
+}
+
+// inlineTemplate re-lowers a template's body with each parameter bound to the
+// corresponding argument expression, returning the root of the inlined body.
+// Arguments are lowered in the caller's context before this is called.
+func (l *lowerer) inlineTemplate(name string, tpl *templateDef, args []ExprID, scope *scope, span Span) ExprID {
+	if len(args) != len(tpl.params) {
+		l.errs = append(l.errs, fmt.Errorf("template %q expects %d argument(s), got %d", name, len(tpl.params), len(args)))
+		return l.addExpr(Expr{Kind: ExprNullLit, Span: span})
+	}
+	if l.tplStack[name] {
+		l.errs = append(l.errs, fmt.Errorf("recursive template %q is not allowed", name))
+		return l.addExpr(Expr{Kind: ExprNullLit, Span: span})
+	}
+	// Replace (not merge) the parameter bindings: the body references only this
+	// template's parameters; arguments were already resolved in the prior context.
+	prevParams := l.tplParams
+	bindings := make(map[string]ExprID, len(tpl.params))
+	for i, p := range tpl.params {
+		bindings[p] = args[i]
+	}
+	l.tplParams = bindings
+	l.tplStack[name] = true
+	body := l.lowerExpr(tpl.body, scope)
+	delete(l.tplStack, name)
+	l.tplParams = prevParams
+	return body
 }
 
 func (l *lowerer) lowerBinary(n *gotreesitter.Node, scope *scope, op BinaryOpKind) ExprID {

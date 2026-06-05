@@ -52,6 +52,7 @@ func ArbiterGrammar() *Grammar {
 		Sym("strategy_declaration"),
 		Sym("worker_declaration"),
 		Sym("const_declaration"),
+		Sym("template_declaration"),
 		Sym("arbiter_declaration"),
 		Sym("rule_declaration"),
 		Sym("expert_rule_declaration"),
@@ -274,6 +275,19 @@ func ArbiterGrammar() *Grammar {
 	g.Define("const_declaration", Seq(
 		Str("const"),
 		Field("name", Sym("identifier")),
+		Str("="),
+		Field("value", Sym("_expr")),
+	))
+
+	// A template is a parameterized expression macro, inlined at each call site
+	// with arguments substituted for parameters: `template Name(a, b) = <expr>`.
+	g.Define("template_declaration", Seq(
+		Str("template"),
+		Field("name", Sym("identifier")),
+		Str("("),
+		Optional(CommaSep1(Field("param", Sym("identifier")))),
+		Optional(Str(",")),
+		Str(")"),
 		Str("="),
 		Field("value", Sym("_expr")),
 	))

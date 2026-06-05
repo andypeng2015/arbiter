@@ -52,6 +52,10 @@
           "type": "SYMBOL"
         },
         {
+          "name": "template_declaration",
+          "type": "SYMBOL"
+        },
+        {
           "name": "arbiter_declaration",
           "type": "SYMBOL"
         },
@@ -1055,6 +1059,96 @@
           },
           "name": "name",
           "type": "FIELD"
+        },
+        {
+          "type": "STRING",
+          "value": "="
+        },
+        {
+          "content": {
+            "name": "_expr",
+            "type": "SYMBOL"
+          },
+          "name": "value",
+          "type": "FIELD"
+        }
+      ],
+      "type": "SEQ"
+    },
+    "template_declaration": {
+      "members": [
+        {
+          "type": "STRING",
+          "value": "template"
+        },
+        {
+          "content": {
+            "name": "identifier",
+            "type": "SYMBOL"
+          },
+          "name": "name",
+          "type": "FIELD"
+        },
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "members": [
+            {
+              "members": [
+                {
+                  "content": {
+                    "name": "identifier",
+                    "type": "SYMBOL"
+                  },
+                  "name": "param",
+                  "type": "FIELD"
+                },
+                {
+                  "content": {
+                    "members": [
+                      {
+                        "type": "STRING",
+                        "value": ","
+                      },
+                      {
+                        "content": {
+                          "name": "identifier",
+                          "type": "SYMBOL"
+                        },
+                        "name": "param",
+                        "type": "FIELD"
+                      }
+                    ],
+                    "type": "SEQ"
+                  },
+                  "type": "REPEAT"
+                }
+              ],
+              "type": "SEQ"
+            },
+            {
+              "type": "BLANK"
+            }
+          ],
+          "type": "CHOICE"
+        },
+        {
+          "members": [
+            {
+              "type": "STRING",
+              "value": ","
+            },
+            {
+              "type": "BLANK"
+            }
+          ],
+          "type": "CHOICE"
+        },
+        {
+          "type": "STRING",
+          "value": ")"
         },
         {
           "type": "STRING",
