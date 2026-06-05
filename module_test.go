@@ -452,6 +452,50 @@ rule R { when { order.amount == "notanumber" } then Flag {} }
 	}
 }
 
+// TestModuleRootLookupWhereOffset guards against offsetExprIDs failing to shift
+// the Where/ElseVals ExprIDs of a lookup expression. The root module is offset
+// by the imported modules' expression count, so a root-level lookup-with-where
+// would otherwise point its where-clause at the wrong expression after merge.
+func TestModuleRootLookupWhereOffset(t *testing.T) {
+	dir := setupModuleProject(t)
+	writeModuleFile(t, dir, "pad.arb", `segment Filler { 1 > 2 }
+segment Filler2 { 3 > 4 }
+`)
+	main := writeModuleFile(t, dir, "main.arb", `import "pad"
+input { job: { height: number } }
+table ladder {
+    height: number | bitrate: string
+    1080 | "6500k"
+    720 | "3800k"
+    480 | "1200k"
+}
+outcome Profile { bitrate: string }
+rule Transcode {
+    when { job.height >= 480 }
+    then Profile {
+        let row = lookup ladder where height <= job.height order by height desc else { height: 0, bitrate: "800k" }
+        bitrate: row.bitrate,
+    }
+}
+`)
+
+	result, err := CompileFullFile(main)
+	if err != nil {
+		t.Fatalf("CompileFullFile: %v", err)
+	}
+	prog := &Program{Ruleset: result.Ruleset, Segments: result.Segments}
+	matched, err := Eval(prog, DataFromMap(map[string]any{"job": map[string]any{"height": 900.0}}, prog))
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if len(matched) != 1 {
+		t.Fatalf("expected Transcode to match; got %d", len(matched))
+	}
+	if matched[0].Params["bitrate"] != "3800k" {
+		t.Fatalf("height 900 should look up the 720 row (bitrate 3800k); got %v", matched[0].Params["bitrate"])
+	}
+}
+
 func TestModuleImportWithAlias(t *testing.T) {
 	dir := setupModuleProject(t)
 	writeModuleFile(t, dir, "fraud/scoring.arb", `rule FraudCheck {

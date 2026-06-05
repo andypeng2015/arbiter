@@ -318,6 +318,14 @@ func offsetExprIDs(prog *ir.Program, offset ir.ExprID) {
 		for j := range e.Args {
 			off(&e.Args[j])
 		}
+		// Lookup expression sub-references (ExprLookup). Where uses 0 as a
+		// "no where clause" sentinel, so only shift it when present.
+		if e.Where != 0 {
+			off(&e.Where)
+		}
+		for j := range e.ElseVals {
+			off(&e.ElseVals[j])
+		}
 	}
 
 	// Offset declaration-level ExprID fields.
@@ -333,10 +341,16 @@ func offsetExprIDs(prog *ir.Program, offset ir.ExprID) {
 		for j := range r.Lets {
 			off(&r.Lets[j].Value)
 		}
+		for j := range r.Action.Lets {
+			off(&r.Action.Lets[j].Value)
+		}
 		for j := range r.Action.Params {
 			off(&r.Action.Params[j].Value)
 		}
 		if r.Fallback != nil {
+			for j := range r.Fallback.Lets {
+				off(&r.Fallback.Lets[j].Value)
+			}
 			for j := range r.Fallback.Params {
 				off(&r.Fallback.Params[j].Value)
 			}
@@ -386,6 +400,13 @@ func offsetExprIDs(prog *ir.Program, offset ir.ExprID) {
 			off(&prog.Arbiters[i].Clauses[j].Filter)
 		}
 	}
+	for i := range prog.Tables {
+		for j := range prog.Tables[i].Rows {
+			for k := range prog.Tables[i].Rows[j].Values {
+				off(&prog.Tables[i].Rows[j].Values[k])
+			}
+		}
+	}
 }
 
 // mergeModules merges all module IRs into a single program, with imported
@@ -422,6 +443,7 @@ func mergeModules(tree *moduleTree) (*ir.Program, error) {
 		merged.Flags = append(merged.Flags, mod.Flags...)
 		merged.Expert = append(merged.Expert, mod.Expert...)
 		merged.Arbiters = append(merged.Arbiters, mod.Arbiters...)
+		merged.Tables = append(merged.Tables, mod.Tables...)
 		merged.Exprs = append(merged.Exprs, mod.Exprs...)
 	}
 
@@ -439,6 +461,7 @@ func mergeModules(tree *moduleTree) (*ir.Program, error) {
 	merged.Flags = append(merged.Flags, tree.root.Flags...)
 	merged.Expert = append(merged.Expert, tree.root.Expert...)
 	merged.Arbiters = append(merged.Arbiters, tree.root.Arbiters...)
+	merged.Tables = append(merged.Tables, tree.root.Tables...)
 	merged.Exprs = append(merged.Exprs, tree.root.Exprs...)
 
 	// Carry over root's imports, and union the input schemas. The conflict
