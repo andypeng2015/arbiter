@@ -310,6 +310,12 @@ func valueAsEvalTime(v Value) (time.Time, bool) {
 }
 
 func (vm *VM) evalCondition(instrs []byte, off, length uint32, dc DataContext) bool {
+	// Empty condition = unconditional (segment-only rules); segment gating happens
+	// before condition eval. All eval paths share this chokepoint.
+	if length == 0 {
+		return true
+	}
+
 	end := off + length
 	ip := off
 	steps := 0

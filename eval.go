@@ -296,13 +296,19 @@ func evalGovernedWithPool(rs *compiler.CompiledRuleset, dc vm.DataContext, sp *v
 			}
 		}
 
-		condOK, err := evaluator.EvalRuleCondition(rule, dc)
-		if err != nil {
-			return nil, trace, fmt.Errorf("rule %s: %w", ruleName, err)
+		// Evaluate the rule condition. Empty condition (ConditionLen==0) means
+		// unconditional — EvalRuleCondition returns true for segment-only rules.
+		condOK, condErr := evaluator.EvalRuleCondition(rule, dc)
+		if condErr != nil {
+			return nil, trace, fmt.Errorf("rule %s: %w", ruleName, condErr)
 		}
 		conditionDetail := conditionSources[ruleName]
 		if conditionDetail == "" {
-			conditionDetail = "compiled rule condition"
+			if rule.HasCondition() {
+				conditionDetail = "compiled rule condition"
+			} else {
+				conditionDetail = "no inline condition (segment-only rule)"
+			}
 		}
 		trace.AppendScoped(govern.ArbitracePhaseMatch, govern.ArbitraceScopeRule, ruleName, govern.ArbitraceKindCondition, "", "", condOK, conditionDetail)
 		if !condOK {

@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [1.8.1] — 2026-06-10
+
+### Added
+
+- **Segment-only rule form** — `when segment NAME` (no `{ ... }` block) is now valid syntax. Previously this was a parse error; the only accepted form was `when segment NAME { expr }`. Use it when the segment gate is the entire condition and no inline predicate is needed.
+
+### Fixed
+
+- **Engine-wide empty-condition consistency** — a rule with no inline condition is now uniformly treated as unconditional (always-passes) across all eval entrypoints: `EvalGoverned`, `Eval`, `EvalDebug`, expert inference, and strategy paths. Previously the behaviour was inconsistent: on some eval paths an empty-condition rule silently never fired rather than firing unconditionally, meaning segment-only rules could be parsed (where the grammar allowed them) but would not produce outcomes at runtime.
+- **Regression tests** — `TestBundleRoundTripConditionGating` pins the bundle round-trip fail-open path: a rule with a real condition must still be gated by it after `Marshal`/`Unmarshal`. `TestCompileJSONConditionGating` pins the `CompileJSON` (Arishem loader) path. `TestSegmentOnlyRuleCrossPaths` and `TestSegmentShapeMatrix` verify that `when segment NAME` fires under `EvalGoverned`, `Eval`, and `EvalDebug` regardless of rule order or neighbours.
+
+### Notes
+
+- Investigated a field report of two inline-condition rules starving a following segment rule. Not reproducible at v1.8.0 with correct `.arb` syntax; the actually-broken case was the segment-only form (`when segment NAME` without braces), which was a parse error before this release.
+
+## [1.8.0]
+
+- (stub — see git log for full content)
+
 ## v1.5.0
 
 ### Runtime Capability Plugins

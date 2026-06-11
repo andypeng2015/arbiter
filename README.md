@@ -1,5 +1,13 @@
 # arbiter
 
+## What's new in v1.8.1
+
+**Segment-only rule syntax** — `when segment NAME` (no inline condition block) is now a valid rule form. Previously this was a parse error; the only supported form was `when segment NAME { expr }`. Use it when the segment gate alone decides the outcome and no additional inline condition is needed.
+
+**Engine-wide empty-condition consistency** — a rule with no inline condition is now uniformly treated as unconditional across every eval entrypoint: `EvalGoverned`, `Eval`, `EvalDebug`, expert, and strategy paths. Previously this was inconsistent: some paths evaluated such rules as never-firing rather than always-firing.
+
+---
+
 A compact language for governed outcomes.
 
 Every decision your software makes — approve this transaction, show this variant, block this request, compute this tax bracket — is a governed outcome. Arbiter gives those decisions a language, compiles them to bytecode, and evaluates simple precompiled rules in the low hundreds of nanoseconds.
@@ -141,6 +149,25 @@ rule EnhancedRiskCheck priority 1 {
     then Flag { level: "hold" }
 }
 ```
+
+#### Segment-only rule form
+
+When the segment gate is the entire condition — no additional inline expression needed — omit the `{ ... }` block entirely:
+
+```arb
+segment vip_tier {
+    user.lifetime_spend > 10000
+}
+
+rule VIPBenefit {
+    when segment vip_tier
+    then ApplyBenefit {
+        type: "free_shipping",
+    }
+}
+```
+
+Semantics: an absent (or empty) condition means **unconditional** — the segment gate alone decides whether the rule fires. This is distinct from `when segment NAME { expr }`, which ANDs the segment with an inline predicate. Prior to v1.8.1, the no-brace form was a parse error; on some older eval paths a rule with no condition silently never fired instead of firing unconditionally.
 
 ### Segments
 

@@ -59,6 +59,12 @@ type RuleHeader struct {
 	HasSegment          bool
 }
 
+// HasCondition reports whether this rule has an inline condition.
+// A rule with ConditionLen==0 is segment-only; its condition is unconditionally satisfied.
+func (rh RuleHeader) HasCondition() bool {
+	return rh.ConditionLen > 0
+}
+
 // RuleMatchesTags reports whether the rule contains all requested tags.
 func (rs *CompiledRuleset) RuleMatchesTags(rule RuleHeader, tags []string) bool {
 	if len(tags) == 0 {

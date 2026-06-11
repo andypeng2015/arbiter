@@ -461,17 +461,29 @@ func ArbiterGrammar() *Grammar {
 		Field("duration", Sym("temporal_duration_literal")),
 	))
 
-	// when always requires braces: when { expr }
-	g.Define("when_block", Seq(
-		Str("when"),
-		Optional(Seq(
+	// when_block allows three forms:
+	//   when { expr }                      — inline condition only
+	//   when segment foo { expr }          — segment + inline condition
+	//   when segment foo                   — segment-only (no inline expr required)
+	g.Define("when_block", Choice(
+		// Segment-only form: when segment <name>  (no braces)
+		Seq(
+			Str("when"),
 			Str("segment"),
 			Field("segment", Sym("qualified_name")),
-		)),
-		Str("{"),
-		Repeat(Sym("let_binding")),
-		Field("expr", Sym("_expr")),
-		Str("}"),
+		),
+		// Inline form (with optional segment): when [segment <name>] { expr }
+		Seq(
+			Str("when"),
+			Optional(Seq(
+				Str("segment"),
+				Field("segment", Sym("qualified_name")),
+			)),
+			Str("{"),
+			Repeat(Sym("let_binding")),
+			Field("expr", Sym("_expr")),
+			Str("}"),
+		),
 	))
 
 	g.Define("expert_when_block", Seq(
